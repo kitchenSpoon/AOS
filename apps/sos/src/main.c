@@ -72,10 +72,8 @@ struct {
 } tty_test_process;
 
 
-/*
- * A dummy starting syscall
- */
-#define SOS_SYSCALL0 0
+#define SOS_SYSCALL_PRINT 0
+#define MAX_SERIAL_SEND 100
 
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
@@ -99,14 +97,28 @@ void handle_syscall(seL4_Word badge, int num_args) {
 
     /* Process system call */
     switch (syscall_number) {
-    case SOS_SYSCALL0:
-        dprintf(0, "syscall: thread made syscall 0!\n");
+    case SOS_SYSCALL_PRINT:
+    {
+        int len = num_args;
+        char data[seL4_MsgMaxLength];
+        for (int i=0; i<len; i++) {
+            data[i] = (char)seL4_GetMR(i+1);
+        }
 
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, 0);
+        struct serial* serial = serial_init(); //serial_init does the cacheing
+
+        size_t tot_sent = 0;
+        int tries = 0;
+        while (tot_sent < len && tries < MAX_SERIAL_SEND) {
+            tot_sent += serial_send(serial, data+tot_sent, len-tot_sent);
+            tries++;
+        }
+
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(tot_sent, 0, 0, 0);
         seL4_Send(reply_cap, reply);
 
         break;
+    }
 
     default:
         printf("Unknown syscall %d\n", syscall_number);
@@ -384,9 +396,10 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     err = dma_init(dma_addr, DMA_SIZE_BITS);
     conditional_panic(err, "Failed to intiialise DMA memory\n");
 
-    /* Initialiase other system compenents here */
+    /* Initialise other system components here */
 
     _sos_ipc_init(ipc_ep, async_ep);
+
 }
 
 static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {

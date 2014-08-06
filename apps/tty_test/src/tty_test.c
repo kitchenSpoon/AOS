@@ -43,7 +43,11 @@ int main(void){
     ttyout_init();
 
     do {
-        printf("task:\tHello world, I'm\ttty_test!\n");
+        for (int i=0; i<100; i++) {
+            printf("trying %d time\n", i);
+            printf("task:\tHello world, I'm\ttty_test!\n");
+            printf("10000000002000000000300000000040000000005000000000600000000070000000008000000000900000000011000000001200000000130000000014000000001500000000160000000017000000001800000000\n");
+        }
         thread_block();
         // sleep(1);	// Implement this as a syscall
     } while(1);

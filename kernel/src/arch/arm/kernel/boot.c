@@ -408,6 +408,11 @@ try_init_kernel(
         return false;
     }
 
+    /* Before creating the initial thread (which also switches to it)
+     * we clean the cache so that any page table information written
+     * as a result of calling create_frames_of_region */
+    cleanInvalidateL1Caches();
+
     /* create the initial thread */
     if (!create_initial_thread(
                 root_cnode_cap,

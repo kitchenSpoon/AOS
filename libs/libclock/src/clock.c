@@ -2,6 +2,21 @@
 #include <string.h>
 #include <clock/clock.h>
 
+/* Time in miliseconds that an interrupt will be fired */
+#define CLOCK_INTERRUPT_TIME 4 
+/* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
+#define CLOCK_ASSUMED_SPEED 66
+/* Constant to be loaded into Clock control register when it gets initialized */
+#define CLOCK_COMPARE_INTERVAL  (CLOCK_INTERRUPT_TIME*CLOCK_ASSUMEDSPEED*1000)
+
+/* The interrupts counter, count # of irps since the call of timer_start() */
+uint64_t jiffy;
+
+typedef struct {
+
+} timer_register_t;
+
+
 int start_timer(seL4_CPtr interrupte_ep){
     //register handler with kernel
     seL4_IRQHandler_SetEndpoint(interrupte_ep);
@@ -42,7 +57,12 @@ int remove_timer(uint32_t id) {
 }
 
 int timer_interrupt(void) {
-    return !CLOCK_R_OK; // fail for now
+    // Could there by concurrency issue here?
+    jiffy++;
+    /* Change clock_cmp_reg here */
+    /* Check the queue/data structure that contains the registered timers */
+    //TODO:
+    return CLOCK_R_OK;
 }
 
 timestamp_t time_stamp(void) {
@@ -53,5 +73,3 @@ timestamp_t time_stamp(void) {
      */
     return -1; // nothing for now
 }
-
-

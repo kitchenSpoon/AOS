@@ -10,6 +10,8 @@
 #define CLOCK_COMPARE_INTERVAL  (CLOCK_INTERRUPT_TIME*CLOCK_ASSUMEDSPEED*1000)
 
 /* The interrupts counter, count # of irps since the call of timer_start() */
+//change this to
+//timestamp_t jiffy; ?
 uint64_t jiffy;
 
 typedef struct {
@@ -24,12 +26,14 @@ int start_timer(seL4_CPtr interrupte_ep){
     //map device
     //if mapdevice fails, it panics
     vaddr * epit1_cr = map_device((*paddr)0x20D_0000, 4); 
-    epit_cr = 0b000000_01_10_0_0_0_0_0_1_000000000001_1_1_0_1;
+    epit_cr = 0b000000_01_10_0_0_0_0_0_1_000000000001_1_1_0_1; //this is wrong, need to remove underscore
     //vaddr * epit1_sr = map_device((*paddr)0x20D_0004, 4); 
     vaddr * epit1_lr = map_device((*paddr)0x20D_0008, 4); 
-    epit_lr = 330;
+    //epit_lr = 330;
+    epit_lr = CLOCK_COMPARE_INTERVAL;
     vaddr * epit1_cmpr = map_device((*paddr)0x20D_000C, 4); 
-    epit_cmpr = 330;
+    //epit_cmpr = 330;
+    epit_cmpr = CLOCK_COMPARE_INTERVAL;
     //vaddr * epit1_cnr = map_device((*paddr)0x20D_0010, 4); 
     
     return CLOCK_R_OK;
@@ -61,6 +65,7 @@ int timer_interrupt(void) {
     jiffy++;
     /* Change clock_cmp_reg here */
     /* Check the queue/data structure that contains the registered timers */
+    // who is calling this function?
     //TODO:
     return CLOCK_R_OK;
 }

@@ -423,6 +423,11 @@ int main(void) {
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
+
+    //place this in sosinit?
+    //start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_EP_BADGE));
+    //register_timer();
+    
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

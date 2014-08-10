@@ -27,6 +27,7 @@
 
 
 #include "ttyout.h"
+#include <clock/clock.h>
 
 // Block a thread forever
 // we do this by making an unimplemented system call.
@@ -38,15 +39,22 @@ thread_block(void){
     seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
 }
 
+static void
+cb(uint32_t id, void* data) {
+    printf("timer %d called backed!!!\n", id);
+    //printf("mess sent was: %s\n", (char*)data);
+    printf("current timestamp is: %lld\n", (long long)time_stamp());
+}
+
 int main(void){
     /* initialise communication */
     ttyout_init();
 
     do {
-        for (int i=0; i<100; i++) {
-            printf("trying %d time\n", i);
-            printf("task:\tHello world, I'm\ttty_test!\n");
-            printf("10000000002000000000300000000040000000005000000000600000000070000000008000000000900000000011000000001200000000130000000014000000001500000000160000000017000000001800000000\n");
+        printf("task:\tHello world, I'm\ttty_test!\n");
+        int t = 5;
+        while (t--) {
+            register_timer(100, cb, NULL);
         }
         thread_block();
         // sleep(1);	// Implement this as a syscall

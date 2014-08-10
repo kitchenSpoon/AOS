@@ -20,12 +20,10 @@ typedef struct {
 } timer_t;
 
 /* The interrupts counter, count # of irps since the call of timer_start() */
-//change this to
-//timestamp_t jiffy; ?
-uint64_t jiffy;
+static uint64_t jiffy;
 
-timer_t timers[CLOCK_N_TIMERS];
-bool initialised;
+static timer_t timers[CLOCK_N_TIMERS];
+static bool initialised;
 
 seL4_CPtr irq_handler;
 #define EPIT1_IRQ_NUM 88
@@ -118,13 +116,8 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
 int remove_timer(uint32_t id) {
     if (!initialised) return CLOCK_R_UINT;
 
-    if (timers[id].registered) {
-        timers[id].registered = false;
-        return CLOCK_R_OK;
-    }
-    
-    /* How do they define successful? */
-    return CLOCK_R_FAIL;
+    timers[id].registered = false;
+    return CLOCK_R_OK;
 }
 
 int timer_interrupt(void) {
@@ -133,8 +126,7 @@ int timer_interrupt(void) {
     // Could there by concurrency issue here?
     jiffy += 1;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
-        if (!timers[i].registered) continue;
-        if (timers[i].endtime <= time_stamp()) {
+        if (timers[i].registered && timers[i].endtime <= time_stamp()) {
             timers[i].callback(i, timers[i].data);
             timers[i].registered = false;
         }
@@ -158,8 +150,7 @@ timestamp_t time_stamp(void) {
      * accurate information (as jiffy could be less accurate than 1 ms), can
      * query time from the current clock counter and add in.
      */
+
     seL4_Word * epit1_cnr = map_device((void*)0x20D0010, 4); 
     return CLOCK_INTERRUPT_TIME * jiffy + (*epit1_cnr);
 }
-
-

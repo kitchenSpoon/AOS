@@ -425,8 +425,7 @@ int main(void) {
 
 
     //place this in sosinit?
-    //start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_EP_BADGE));
-    //register_timer();
+    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_EP_BADGE));
     
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

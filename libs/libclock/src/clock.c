@@ -40,7 +40,39 @@ int start_timer(seL4_CPtr interrupt_ep) {
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
         timers[i].registered = false;
     }
+
+    //register handler with kernel
+    seL4_IRQHandler_SetEndpoint(interrupte_ep);
+
+    //map device
+    //if mapdevice fails, it panics
+    vaddr * epit1_cr = map_device((*paddr)0x20D_0000, 4); 
+    epit_cr = 0b000000_01_10_0_0_0_0_0_1_000000000001_1_1_0_1; //this is wrong, need to remove underscore
+    //vaddr * epit1_sr = map_device((*paddr)0x20D_0004, 4); 
+    vaddr * epit1_lr = map_device((*paddr)0x20D_0008, 4); 
+    //epit_lr = 330;
+    epit_lr = CLOCK_COMPARE_INTERVAL;
+    vaddr * epit1_cmpr = map_device((*paddr)0x20D_000C, 4); 
+    //epit_cmpr = 330;
+    epit_cmpr = CLOCK_COMPARE_INTERVAL;
+    //vaddr * epit1_cnr = map_device((*paddr)0x20D_0010, 4); 
+
     initialised = true;
+    return CLOCK_R_OK;
+}
+
+
+int stop_timer(void){
+    //map device
+    //write value to device register
+    vaddr * epit1_cr = map_device((*paddr)0x20D_0000, 4); 
+    epit_cr = 0b000000_01_10_0_0_0_0_0_1_000000000001_1_1_0_0;
+    //unmap device?
+
+    //remove handler with kernel
+    seL4_IRQHandler_Clear(interrupte_ep);
+
+    initialised = false;
     return CLOCK_R_OK;
 }
 
@@ -94,9 +126,4 @@ timestamp_t time_stamp(void) {
      * query time from the current clock counter and add in.
      */
     return CLOCK_INTERRUPT_TIME * jiffy;
-}
-
-int stop_timer(void) {
-    initialised = false;
-    return CLOCK_R_OK;
 }

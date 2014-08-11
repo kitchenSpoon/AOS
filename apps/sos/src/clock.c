@@ -16,7 +16,6 @@
 #define CLOCK_SPEED_PRESCALED (CLOCK_SPEED / CLOCK_PRESCALER)
 /* Constant to be loaded into Clock control register when it gets initialized */
 #define CLOCK_COMPARE_INTERVAL (CLOCK_INT_TIME*(CLOCK_SPEED_PRESCALED)*1000)
-#define CLOCK_N_TIMERS 64
 
 #define EPIT1_IRQ_NUM       88
 #define EPIT1_BASE_PADDR    0x020D0000
@@ -25,6 +24,7 @@
 #define EPIT1_CR_MASK       0x0142000D
 #define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
 
+#define CLOCK_N_TIMERS 64
 typedef struct {
     timestamp_t endtime;
     timer_callback_t callback;
@@ -94,7 +94,8 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 int stop_timer(void){
     /* Map device and turn it off */
-    clkReg->cr = 0b00000001100000110000000000011100;
+    //clkReg->cr = 0b00000001100000110000000000011100;
+    clkReg->cr = 0;
 
     int err = 0;
     /* Remove handler with kernel */
@@ -171,10 +172,7 @@ timestamp_t time_stamp(void) {
      * accurate information (as jiffy could be less accurate than 1 ms), can
      * query time from the current clock counter and add in.
      */
-
-    return CLOCK_INT_TIME * jiffy;
-    /*
-    clock_register_t * clkReg = map_device((void*)EPIT1_BASE_PADDR, 4000); 
-    return CLOCK_INT_TIME * jiffy + (clkReg->cnr);
-    */
+    int cnr_diff = CLOCK_COMPARE_INTERVAL - clkReg->cnr;
+    int offset = (long long)CLOCK_INT_TIME*cnr_diff / CLOCK_COMPARE_INTERVAL;
+    return CLOCK_INT_TIME * jiffy + offset;
 }

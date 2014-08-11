@@ -146,8 +146,10 @@ void syscall_loop(seL4_CPtr ep) {
             if (badge & IRQ_BADGE_NETWORK) {
                 network_irq();
             } else if (badge & IRQ_BADGE_TIMER) {
-                //TODO: check return value
-                timer_interrupt();
+                int ret = timer_interrupt();
+                if (ret != CLOCK_R_OK) {
+                    //TODO: What now??
+                }
 	    }
         }else if(label == seL4_VMFault){
             /* Page fault */
@@ -403,7 +405,6 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     /* Initialise other system components here */
 
     _sos_ipc_init(ipc_ep, async_ep);
-
 }
 
 static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
@@ -414,7 +415,7 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
 
 static void
 cb(uint32_t id, void* data) {
-	dprintf(0, "call back from %d\n", id);
+	dprintf(0, "call back from %d at %lld\n", id, (long long)time_stamp());
 }
 /*
  * Main entry point - called by crt.
@@ -431,13 +432,13 @@ int main(void) {
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
-
-    //place this in sosinit?
+    /* Initialize timer driver */
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
 
-    //register_timer(1000, cb, NULL);
-    //register_timer(10000, cb, NULL);
-    //register_timer(30000, cb, NULL);
+    // Test code for timer driver
+    register_timer(1000, cb, NULL);
+    register_timer(10000, cb, NULL);
+    register_timer(30000, cb, NULL);
     
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

@@ -2,6 +2,7 @@
 #include <string.h>
 #include <cspace/cspace.h>
 #include <mapping.h>
+
 #define verbose 5
 #include <sys/debug.h>
 
@@ -17,12 +18,25 @@
 /* Constant to be loaded into Clock control register when it gets initialized */
 #define CLOCK_COMPARE_INTERVAL (CLOCK_INT_TIME*(CLOCK_SPEED_PRESCALED)*1000)
 
+
+#define EPIT_CLKSRC        (0b01 << 24) // Clock source - 0b01 == peripheral clock
+#define EPIT_OM            (0b00 << 22) // Output mode - 0b00 == no output
+#define EPIT_STOPEN        BIT(21)      // Stop enable
+#define EPIT_WAITEN        BIT(19)      // Wait enable
+#define EPIT_DBGEN         BIT(18)      // Debug enable
+#define EPIT_IOVW          BIT(17)      // Counter overwrite when set load reg
+#define EPIT_SWR           BIT(16)      // Software reset
+#define EPIT_PRESCALAR     ((CLOCK_PRESCALER-1) << 4) // Prescalar
+#define EPIT_RLD           BIT(3)       // Reload control -
+                                        // 1 == reload from load register
+#define EPIT_OCIEN         BIT(2)       // Compare interrupt enable
+#define EPIT_ENMOD         BIT(1)       // Enable mode
+#define EPIT_EN            BIT(0)       // Enable bit
+
+
 #define EPIT1_IRQ_NUM       88
 #define EPIT1_BASE_PADDR    0x020D0000
 #define EPIT1_SIZE          (4*5)
-// EPIT1_CR_BASE_MASK 0b000000_01_01_0_0_0_0_1_0_000000000000_1101;
-#define EPIT1_CR_MASK       0x0142000D
-#define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
 
 #define CLOCK_N_TIMERS 64
 typedef struct {
@@ -83,7 +97,15 @@ int start_timer(seL4_CPtr interrupt_ep) {
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
     clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
-    clkReg->cr = EPIT1_CR;
+    clkReg->cr = 0;
+    clkReg->cr |= EPIT_CLKSRC;
+    clkReg->cr |= EPIT_OM;
+    clkReg->cr |= EPIT_IOVW;
+    clkReg->cr |= EPIT_PRESCALAR;
+    clkReg->cr |= EPIT_RLD;
+    clkReg->cr |= EPIT_OCIEN;
+    clkReg->cr |= EPIT_EN;
+    
     clkReg->lr = CLOCK_COMPARE_INTERVAL;
     clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
 
@@ -94,7 +116,6 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 int stop_timer(void){
     /* Map device and turn it off */
-    //clkReg->cr = 0b00000001100000110000000000011100;
     clkReg->cr = 0;
 
     int err = 0;

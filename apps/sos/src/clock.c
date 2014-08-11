@@ -8,13 +8,23 @@
 #include "clock.h"
 
 /* Time in miliseconds that an interrupt will be fired */
-#define CLOCK_INTERRUPT_TIME 100
+#define CLOCK_INT_TIME 100
 /* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
-#define CLOCK_ASSUMED_SPEED 66
+#define CLOCK_SPEED 66
+/* Clock prescaler should be divisible by CLOCK_SPEED */
+#define CLOCK_PRESCALER 1
+#define CLOCK_SPEED_PRESCALED (CLOCK_SPEED / CLOCK_PRESCALER)
 /* Constant to be loaded into Clock control register when it gets initialized */
-#define CLOCK_COMPARE_INTERVAL  (CLOCK_INTERRUPT_TIME*CLOCK_ASSUMED_SPEED*1000)
-
+#define CLOCK_COMPARE_INTERVAL (CLOCK_INT_TIME*(CLOCK_SPEED_PRESCALED)*1000)
 #define CLOCK_N_TIMERS 64
+
+#define EPIT1_IRQ_NUM       88
+#define EPIT1_BASE_PADDR    0x020D0000
+#define EPIT1_SIZE          (4*5)
+// EPIT1_CR_BASE_MASK 0b000000_01_01_0_0_0_0_1_0_000000000000_1101;
+#define EPIT1_CR_MASK       0x0142000D
+#define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
+
 typedef struct {
     timestamp_t endtime;
     timer_callback_t callback;
@@ -22,14 +32,22 @@ typedef struct {
     bool registered;
 } timer_t;
 
+typedef struct {
+    seL4_Word cr;
+    seL4_Word sr;
+    seL4_Word lr;
+    seL4_Word cmpr;
+    seL4_Word cnr;
+} clock_register_t;
+
 /* The interrupts counter, count # of irps since the call of timer_start() */
 static uint64_t jiffy;
 
 static timer_t timers[CLOCK_N_TIMERS];
 static bool initialised;
 
-seL4_CPtr irq_handler;
-#define EPIT1_IRQ_NUM 88
+static seL4_CPtr irq_handler;
+static clock_register_t * clkReg;
 
 
 /*
@@ -39,15 +57,6 @@ static timestamp_t ms2timestamp(uint64_t ms) {
     timestamp_t time = (timestamp_t)ms;
     return time;
 }
-
-typedef struct clockRegister{
-    seL4_Word cr;
-    seL4_Word sr;
-    seL4_Word lr;
-    seL4_Word cmpr;
-    seL4_Word cnr;
-	    
-} clock_register_t;
 
 int start_timer(seL4_CPtr interrupt_ep) {
     if (initialised) {
@@ -60,8 +69,8 @@ int start_timer(seL4_CPtr interrupt_ep) {
     }
 
     /* Create IRQ Handler */
-    irq_handler  = cspace_irq_control_get_cap(cur_cspace, seL4_CapIRQControl, EPIT1_IRQ_NUM);
-    assert(irq_handler);
+    irq_handler = cspace_irq_control_get_cap(cur_cspace, seL4_CapIRQControl, EPIT1_IRQ_NUM);
+    assert(irq_handler != CSPACE_NULL);
 
     int err = 0;
     /* Assign it to an endpoint*/
@@ -73,10 +82,10 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
-    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
-    clkReg->cr = 0b00000001010000110000000000001101;
-    clkReg->lr = CLOCK_INTERRUPT_TIME;
-    clkReg->cmpr = CLOCK_INTERRUPT_TIME;
+    clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
+    clkReg->cr = EPIT1_CR;
+    clkReg->lr = CLOCK_COMPARE_INTERVAL;
+    clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
 
     initialised = true;
     return CLOCK_R_OK;
@@ -85,7 +94,6 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 int stop_timer(void){
     /* Map device and turn it off */
-    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
     clkReg->cr = 0b00000001100000110000000000011100;
 
     int err = 0;
@@ -146,13 +154,11 @@ int timer_interrupt(void) {
         }
     }
 
-    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
     clkReg->sr = 1;
     
     int err = 0;
-    err = seL4_IRQHandler_Ack(irq_handler); 
+    err = seL4_IRQHandler_Ack(irq_handler);
     assert(!err);
-
 
     return CLOCK_R_OK;
 }
@@ -166,9 +172,9 @@ timestamp_t time_stamp(void) {
      * query time from the current clock counter and add in.
      */
 
-    return CLOCK_INTERRUPT_TIME * jiffy;
+    return CLOCK_INT_TIME * jiffy;
     /*
-    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
-    return CLOCK_INTERRUPT_TIME * jiffy + (clkReg->cnr);
+    clock_register_t * clkReg = map_device((void*)EPIT1_BASE_PADDR, 4000); 
+    return CLOCK_INT_TIME * jiffy + (clkReg->cnr);
     */
 }

@@ -26,6 +26,7 @@
 #include "ut_manager/ut.h"
 #include "vmem_layout.h"
 #include "mapping.h"
+#include "clock.h"
 
 #include <autoconf.h>
 
@@ -408,6 +409,10 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     return badged_cap;
 }
 
+static void
+cb(uint32_t id, void* data) {
+	dprintf(0, "call back from %d\n", id);
+}
 /*
  * Main entry point - called by crt.
  */
@@ -426,6 +431,10 @@ int main(void) {
 
     //place this in sosinit?
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_EP_BADGE));
+
+    //register_timer(1000, cb, NULL);
+    //register_timer(2000, cb, NULL);
+    //register_timer(3000, cb, NULL);
     
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

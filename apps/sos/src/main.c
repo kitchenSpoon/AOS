@@ -150,7 +150,7 @@ void syscall_loop(seL4_CPtr ep) {
                 if (ret != CLOCK_R_OK) {
                     //TODO: What now??
                 }
-	    }
+            }
         }else if(label == seL4_VMFault){
             /* Page fault */
             dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
@@ -438,8 +438,19 @@ int main(void) {
     // Test code for timer driver
     register_timer(1000, cb, NULL);
     register_timer(10000, cb, NULL);
+    
+    int test = register_timer(20000, cb, NULL);
+    remove_timer(test);
+
+    register_timer(25000, cb, NULL);
+    
+    stop_timer();
     register_timer(30000, cb, NULL);
     
+    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
+    register_timer(10000, cb, NULL);
+
+
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

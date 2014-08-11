@@ -119,7 +119,7 @@ int stop_timer(void){
     clkReg->cr = 0;
 
     int err = 0;
-    /* Remove handler with kernel */
+    /* Remove handler within kernel */
     err = seL4_IRQHandler_Clear(irq_handler);
     assert(!err);
 
@@ -138,12 +138,12 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     int id;
     for (id=0; id<CLOCK_N_TIMERS; id++) {
         if (timers[id].registered == false) {
-	    timestamp_t curtime = time_stamp();   
+            timestamp_t curtime = time_stamp();   
             timers[id].endtime = curtime + ms2timestamp(delay);
             timers[id].callback = callback;
             timers[id].data = data;
             timers[id].registered = true;
-	    dprintf(0, "id= %d, curtime = %lld, endtime = %lld\n", id, (uint64_t)curtime, (uint64_t)timers[id].endtime);
+            dprintf(0, "id= %d, curtime = %lld, endtime = %lld\n", id, (uint64_t)curtime, (uint64_t)timers[id].endtime);
             break;
         }
     }

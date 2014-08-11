@@ -45,6 +45,7 @@
 /* All badged IRQs set high bet, then we use uniq bits to
  * distinguish interrupt sources */
 #define IRQ_BADGE_NETWORK (1 << 0)
+#define IRQ_BADGE_TIMER (1 << 1)
 
 #define TTY_NAME             CONFIG_SOS_STARTUP_APP
 #define TTY_PRIORITY         (0)
@@ -144,8 +145,10 @@ void syscall_loop(seL4_CPtr ep) {
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
                 network_irq();
-            }
-
+            } else if (badge & IRQ_BADGE_TIMER) {
+	    }
+	    dprintf(0, "kaboom\n");
+	    timer_interrupt();
         }else if(label == seL4_VMFault){
             /* Page fault */
             dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
@@ -430,11 +433,11 @@ int main(void) {
 
 
     //place this in sosinit?
-    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_EP_BADGE));
+    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
 
-    //register_timer(1000, cb, NULL);
-    //register_timer(2000, cb, NULL);
-    //register_timer(3000, cb, NULL);
+    register_timer(1000, cb, NULL);
+    register_timer(10000, cb, NULL);
+    register_timer(30000, cb, NULL);
     
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

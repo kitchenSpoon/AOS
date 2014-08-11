@@ -2,10 +2,13 @@
 #include <string.h>
 #include <cspace/cspace.h>
 #include <mapping.h>
+#define verbose 5
+#include <sys/debug.h>
 
 #include "clock.h"
+
 /* Time in miliseconds that an interrupt will be fired */
-#define CLOCK_INTERRUPT_TIME 4
+#define CLOCK_INTERRUPT_TIME 100
 /* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
 #define CLOCK_ASSUMED_SPEED 66
 /* Constant to be loaded into Clock control register when it gets initialized */
@@ -37,6 +40,15 @@ static timestamp_t ms2timestamp(uint64_t ms) {
     return time;
 }
 
+typedef struct clockRegister{
+    seL4_Word cr;
+    seL4_Word sr;
+    seL4_Word lr;
+    seL4_Word cmpr;
+    seL4_Word cnr;
+	    
+} clock_register_t;
+
 int start_timer(seL4_CPtr interrupt_ep) {
     if (initialised) {
         stop_timer();
@@ -56,16 +68,15 @@ int start_timer(seL4_CPtr interrupt_ep) {
     err = seL4_IRQHandler_SetEndpoint(irq_handler, interrupt_ep);
     assert(!err);
 
+    err = seL4_IRQHandler_Ack(irq_handler);
+    assert(!err);
+
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
-    seL4_Word * epit1_cr = map_device((void*)0x020D0000, 4); 
-    (*epit1_cr) = 0b00000001100000110000000000011101;
-    
-    seL4_Word * epit1_lr = map_device((void*)0x020D0008, 4); 
-    (*epit1_lr) = 100000;
-    
-    seL4_Word * epit1_cmpr = map_device((void*)0x020D000C, 4); 
-    (*epit1_cmpr) = 100000;
+    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
+    clkReg->cr = 0b00000001010000110000000000001101;
+    clkReg->lr = CLOCK_INTERRUPT_TIME;
+    clkReg->cmpr = CLOCK_INTERRUPT_TIME;
 
     initialised = true;
     return CLOCK_R_OK;
@@ -74,8 +85,8 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 int stop_timer(void){
     /* Map device and turn it off */
-    seL4_Word * epit1_cr = map_device((void*)0x020D0000, 4); 
-    (*epit1_cr) = 0b00000001100000110000000000011101;
+    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
+    clkReg->cr = 0b00000001100000110000000000011100;
 
     int err = 0;
     /* Remove handler with kernel */
@@ -93,13 +104,16 @@ int stop_timer(void){
 uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     if (!initialised) return CLOCK_R_UINT;
 
+    dprintf(0, "registered timer called with delay=%lld\n", delay);
     int id;
     for (id=0; id<CLOCK_N_TIMERS; id++) {
-        if (timers[id].registered = false) {
-            timers[id].endtime = time_stamp() + ms2timestamp(delay);
+        if (timers[id].registered == false) {
+	    timestamp_t curtime = time_stamp();   
+            timers[id].endtime = curtime + ms2timestamp(delay);
             timers[id].callback = callback;
             timers[id].data = data;
             timers[id].registered = true;
+	    dprintf(0, "id= %d, curtime = %lld, endtime = %lld\n", id, (uint64_t)curtime, (uint64_t)timers[id].endtime);
             break;
         }
     }
@@ -122,6 +136,7 @@ int remove_timer(uint32_t id) {
 int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
 
+    dprintf(0, "timer interrupt at %lld\n", time_stamp());
     // Could there by concurrency issue here?
     jiffy += 1;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
@@ -131,12 +146,13 @@ int timer_interrupt(void) {
         }
     }
 
-    seL4_Word * epit1_sr = map_device((void*)0x020D0004, 4); 
-    (*epit1_sr) = 1;
+    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
+    clkReg->sr = 1;
     
     int err = 0;
     err = seL4_IRQHandler_Ack(irq_handler); 
     assert(!err);
+
 
     return CLOCK_R_OK;
 }
@@ -150,6 +166,9 @@ timestamp_t time_stamp(void) {
      * query time from the current clock counter and add in.
      */
 
-    seL4_Word * epit1_cnr = map_device((void*)0x020D0010, 4); 
-    return CLOCK_INTERRUPT_TIME * jiffy + (*epit1_cnr);
+    return CLOCK_INTERRUPT_TIME * jiffy;
+    /*
+    clock_register_t * clkReg = map_device((void*)0x020D0000, 4000); 
+    return CLOCK_INTERRUPT_TIME * jiffy + (clkReg->cnr);
+    */
 }

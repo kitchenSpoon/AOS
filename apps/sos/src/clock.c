@@ -143,6 +143,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     
     clkReg->lr = CLOCK_COMPARE_INTERVAL;
     clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
+    clkReg->sr = 1;
 
     dprintf(0, "clkReg->cr = 0x%x, clkReg->lr = %d, clkReg->cmpr = %d\n",
                 clkReg->cr, clkReg->lr, clkReg->cmpr);

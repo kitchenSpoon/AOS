@@ -429,7 +429,7 @@ timer_init(seL4_CPtr interrupt_ep) {
     //result = register_timer(20000, cb, NULL);
     //remove_timer(test);
 
-    //stop_timer();
+    stop_timer();
     //result = start_timer(interrupt_ep);
     //conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
     register_timer(25000, cb, NULL);

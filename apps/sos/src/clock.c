@@ -2,6 +2,7 @@
 #include <string.h>
 #include <cspace/cspace.h>
 #include <mapping.h>
+#include <sys/panic.h>
 
 #define verbose 5
 #include <sys/debug.h>
@@ -18,25 +19,28 @@
 /* Constant to be loaded into Clock control register when it gets initialized */
 #define CLOCK_COMPARE_INTERVAL (CLOCK_INT_TIME*(CLOCK_SPEED_PRESCALED)*1000)
 
+#define BIT(n) (1ul<<(n))
 
 #define EPIT_CLKSRC        (0b01 << 24) // Clock source - 0b01 == peripheral clock
 #define EPIT_OM            (0b00 << 22) // Output mode - 0b00 == no output
+#define EPIT_OM_SHIFT      (22)         // Output mode shift
 #define EPIT_STOPEN        BIT(21)      // Stop enable
 #define EPIT_WAITEN        BIT(19)      // Wait enable
 #define EPIT_DBGEN         BIT(18)      // Debug enable
 #define EPIT_IOVW          BIT(17)      // Counter overwrite when set load reg
 #define EPIT_SWR           BIT(16)      // Software reset
+#define EPIT_PRESCALAR_SHIFT 4
 #define EPIT_PRESCALAR     ((CLOCK_PRESCALER-1) << 4) // Prescalar
 #define EPIT_RLD           BIT(3)       // Reload control -
                                         // 1 == reload from load register
 #define EPIT_OCIEN         BIT(2)       // Compare interrupt enable
-#define EPIT_ENMOD         BIT(1)       // Enable mode
+#define EPIT_ENMOD         BIT(1)       // Enable mode - 0b01 == Counter restart when re-enabled
 #define EPIT_EN            BIT(0)       // Enable bit
 
 
 #define EPIT1_IRQ_NUM       88
 #define EPIT1_BASE_PADDR    0x020D0000
-#define EPIT1_SIZE          (4*5)
+#define EPIT1_SIZE          (0x4000)
 
 #define CLOCK_N_TIMERS 64
 typedef struct {
@@ -47,11 +51,11 @@ typedef struct {
 } timer_t;
 
 typedef struct {
-    seL4_Word cr;
-    seL4_Word sr;
-    seL4_Word lr;
-    seL4_Word cmpr;
-    seL4_Word cnr;
+    uint32_t cr;
+    uint32_t sr;
+    uint32_t lr;
+    uint32_t cmpr;
+    uint32_t cnr;
 } clock_register_t;
 
 /* The interrupts counter, count # of irps since the call of timer_start() */
@@ -61,7 +65,7 @@ static timer_t timers[CLOCK_N_TIMERS];
 static bool initialised;
 
 static seL4_CPtr irq_handler;
-static clock_register_t * clkReg;
+static clock_register_t *clkReg;
 
 
 /*
@@ -72,10 +76,30 @@ static timestamp_t ms2timestamp(uint64_t ms) {
     return time;
 }
 
+static seL4_CPtr
+enable_irq(int irq, seL4_CPtr aep) {
+    seL4_CPtr cap;
+    int err;
+    /* Create an IRQ handler */
+    cap = cspace_irq_control_get_cap(cur_cspace, seL4_CapIRQControl, irq);
+    conditional_panic(!cap, "Failed to acquire and IRQ control cap");
+    /* Assign to an end point */
+    err = seL4_IRQHandler_SetEndpoint(cap, aep);
+    conditional_panic(err, "Failed to set interrupt endpoint");
+    /* Ack the handler before continuing */
+    err = seL4_IRQHandler_Ack(cap);
+    conditional_panic(err, "Failure to acknowledge pending interrupts");
+    return cap;
+}
+
 int start_timer(seL4_CPtr interrupt_ep) {
+    dprintf(0, "initialised = %d\n", initialised);
     if (initialised) {
+        dprintf(0, "Reseting timer...\n");
         stop_timer();
     }
+
+    dprintf(0, "Initializing timer...\n");
     /* Initialize callback array */
     jiffy = 0;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
@@ -83,20 +107,30 @@ int start_timer(seL4_CPtr interrupt_ep) {
     }
 
     /* Create IRQ Handler */
-    irq_handler = cspace_irq_control_get_cap(cur_cspace, seL4_CapIRQControl, EPIT1_IRQ_NUM);
-    assert(irq_handler != CSPACE_NULL);
-
-    int err = 0;
-    /* Assign it to an endpoint*/
-    err = seL4_IRQHandler_SetEndpoint(irq_handler, interrupt_ep);
-    assert(!err);
-
-    err = seL4_IRQHandler_Ack(irq_handler);
-    assert(!err);
+    irq_handler = enable_irq(EPIT1_IRQ_NUM, interrupt_ep);
 
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
     clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
+
+    /*
+    clkReg->cr &= ~EPIT_EN;
+
+    clkReg->cr &= ~(0xfff << EPIT_PRESCALAR_SHIFT);
+    //clkReg->cr |= EPIT_PRESCALAR;
+    clkReg->cr |= EPIT_RLD;
+
+    clkReg->cr &= ~(0b11 << EPIT_OM_SHIFT); //clear EPIT output
+    clkReg->cr &= ~EPIT_OCIEN;
+    clkReg->cr |= EPIT_CLKSRC;
+    clkReg->sr = 1;
+    clkReg->cr |= EPIT_ENMOD;
+    clkReg->cr |= EPIT_EN;
+    clkReg->cr |= EPIT_OCIEN;
+
+    clkReg->lr = CLOCK_COMPARE_INTERVAL;
+    clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
+    */
     clkReg->cr = 0;
     clkReg->cr |= EPIT_CLKSRC;
     clkReg->cr |= EPIT_OM;
@@ -104,10 +138,14 @@ int start_timer(seL4_CPtr interrupt_ep) {
     clkReg->cr |= EPIT_PRESCALAR;
     clkReg->cr |= EPIT_RLD;
     clkReg->cr |= EPIT_OCIEN;
+    clkReg->cr |= EPIT_ENMOD;
     clkReg->cr |= EPIT_EN;
     
     clkReg->lr = CLOCK_COMPARE_INTERVAL;
     clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
+
+    dprintf(0, "clkReg->cr = 0x%x, clkReg->lr = %d, clkReg->cmpr = %d\n",
+                clkReg->cr, clkReg->lr, clkReg->cmpr);
 
     initialised = true;
     return CLOCK_R_OK;
@@ -115,6 +153,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 
 int stop_timer(void){
+    if (!initialised) return CLOCK_R_UINT;
     /* Map device and turn it off */
     clkReg->cr = 0;
 
@@ -124,7 +163,7 @@ int stop_timer(void){
     assert(!err);
 
     /* Free the irq_handler cap within cspace */
-    cspace_err_t cspace_err = cspace_free_slot(cur_cspace, irq_handler);
+    cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, irq_handler);
     assert(cspace_err == CSPACE_NOERROR);
 
     initialised = false;

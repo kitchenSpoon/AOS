@@ -415,8 +415,26 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
 
 static void
 cb(uint32_t id, void* data) {
-	dprintf(0, "call back from %d at %lld\n", id, (long long)time_stamp());
+    dprintf(0, "call back from %d at %lld\n", id, (long long)time_stamp());
 }
+
+static void
+timer_init(seL4_CPtr interrupt_ep) {
+    int result = start_timer(interrupt_ep);
+    conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
+    // Test code for timer driver
+    register_timer(1000, cb, NULL);
+    register_timer(10000, cb, NULL);
+    
+    //result = register_timer(20000, cb, NULL);
+    //remove_timer(test);
+
+    //stop_timer();
+    //result = start_timer(interrupt_ep);
+    //conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
+    register_timer(25000, cb, NULL);
+}
+
 /*
  * Main entry point - called by crt.
  */
@@ -433,23 +451,7 @@ int main(void) {
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     /* Initialize timer driver */
-    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
-
-    // Test code for timer driver
-    register_timer(1000, cb, NULL);
-    register_timer(10000, cb, NULL);
-    
-    int test = register_timer(20000, cb, NULL);
-    remove_timer(test);
-
-    register_timer(25000, cb, NULL);
-    
-    stop_timer();
-    register_timer(30000, cb, NULL);
-    
-    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
-    register_timer(10000, cb, NULL);
-
+    timer_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

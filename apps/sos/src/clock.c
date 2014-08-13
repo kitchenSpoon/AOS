@@ -44,6 +44,7 @@
 
 #define CLOCK_N_TIMERS 64
 typedef struct {
+    uint32_t id;
     timestamp_t endtime;
     timer_callback_t callback;
     void* data;
@@ -61,6 +62,7 @@ typedef struct {
 /* The interrupts counter, count # of irps since the call of timer_start() */
 static uint64_t jiffy;
 
+static int ntimers;
 static timer_t timers[CLOCK_N_TIMERS];
 static bool initialised;
 
@@ -74,6 +76,14 @@ static clock_register_t *clkReg;
 static timestamp_t ms2timestamp(uint64_t ms) {
     timestamp_t time = (timestamp_t)ms;
     return time;
+}
+
+/* Swap tiemrs in timers array */
+static void
+tswap(timer_t *timers, const int i, const int j) {
+    timer_t tmp = timers[i];
+    timers[i] = timers[j];
+    timers[j] = tmp;
 }
 
 static seL4_CPtr
@@ -103,6 +113,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     /* Initialize callback array */
     jiffy = 0;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
+        timers[i].id = i;
         timers[i].registered = false;
     }
 
@@ -140,7 +151,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     clkReg->cr |= EPIT_OCIEN;
     clkReg->cr |= EPIT_ENMOD;
     clkReg->cr |= EPIT_EN;
-    
+
     clkReg->lr = CLOCK_COMPARE_INTERVAL;
     clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
     clkReg->sr = 1;
@@ -173,53 +184,88 @@ int stop_timer(void){
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     if (!initialised) return CLOCK_R_UINT;
-
+    assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
+    if (ntimers == CLOCK_N_TIMERS) {
+        return 0;
+    }
     dprintf(0, "registered timer called with delay=%lld\n", delay);
-    int id;
-    for (id=0; id<CLOCK_N_TIMERS; id++) {
-        if (timers[id].registered == false) {
-            timestamp_t curtime = time_stamp();   
-            timers[id].endtime = curtime + ms2timestamp(delay);
-            timers[id].callback = callback;
-            timers[id].data = data;
-            timers[id].registered = true;
-            dprintf(0, "id= %d, curtime = %lld, endtime = %lld\n", id, (uint64_t)curtime, (uint64_t)timers[id].endtime);
+
+    /* Put the new timer into the last slot */
+    timestamp_t cur_time = time_stamp();
+    timers[ntimers].endtime = cur_time + ms2timestamp(delay);
+    timers[ntimers].callback = callback;
+    timers[ntimers].data = data;
+    timers[ntimers].registered = true;
+    int id = timers[ntimers].id;
+    printf("id=%d, curtime=%lld,  endtime=%lld\n",
+            id, cur_time, timers[ntimers].endtime);
+    ntimers += 1;
+
+    /* Re-arrange the timers array to ensure the order */
+    for (int i=ntimers-1; i>0; i--) {
+        if (timers[i].endtime < timers[i-1].endtime) {
+            tswap(timers, i, i-1);
+        } else {
             break;
         }
     }
 
-    //no available slot for addtional timers
-    if (id == CLOCK_N_TIMERS) {
-        return 0;
-    }
-
+    assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return id;
 }
 
 int remove_timer(uint32_t id) {
     if (!initialised) return CLOCK_R_UINT;
+    assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
 
-    timers[id].registered = false;
+    /* Find the index of the timer */
+    int i;
+    for (i=0; i<ntimers; i++) {
+        if (timers[i].id == id) break;
+    }
+    if (i == ntimers) {
+        return CLOCK_R_FAIL;
+    }
+
+    timers[i].registered = false;
+
+    /* Remove this timer from timers queue */
+    timer_t tmp = timers[i];
+    ntimers -= 1;
+    for (; i<ntimers-2; i++) {
+        timers[i] = timers[i+1];
+    }
+    timers[ntimers] = tmp;
+
+    assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return CLOCK_R_OK;
 }
 
 int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
+    timestamp_t cur_time = time_stamp();
+    dprintf(0, "timer interrupt at %lld\n", cur_time);
 
-    dprintf(0, "timer interrupt at %lld\n", time_stamp());
-    // Could there by concurrency issue here?
     jiffy += 1;
-    for (int i=0; i<CLOCK_N_TIMERS; i++) {
-        if (timers[i].registered && timers[i].endtime <= time_stamp()) {
-            timers[i].callback(i, timers[i].data);
+    int i;
+    for (i=0; i<ntimers; i++) {
+        if (timers[i].registered && timers[i].endtime <= cur_time) {
+            timers[i].callback(timers[i].id, timers[i].data);
             timers[i].registered = false;
+        } else {
+            break;
         }
     }
+    if (i > 0) {
+        for (int j = i; j<ntimers; j++) {
+            timers[j-i] = timers[j];
+        }
+        ntimers -= i;
+    }
 
+    /* Clear status bit and ack the interrupt */
     clkReg->sr = 1;
-    
-    int err = 0;
-    err = seL4_IRQHandler_Ack(irq_handler);
+    int err = seL4_IRQHandler_Ack(irq_handler);
     assert(!err);
 
     return CLOCK_R_OK;

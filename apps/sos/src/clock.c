@@ -112,6 +112,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     dprintf(0, "Initializing timer...\n");
     /* Initialize callback array */
     jiffy = 0;
+    ntimers = 0;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
         timers[i].id = i;
         timers[i].registered = false;
@@ -243,10 +244,10 @@ int remove_timer(uint32_t id) {
 
 int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
+    jiffy += 1;
+
     timestamp_t cur_time = time_stamp();
     dprintf(0, "timer interrupt at %lld\n", cur_time);
-
-    jiffy += 1;
     int i;
     for (i=0; i<ntimers; i++) {
         if (timers[i].registered && timers[i].endtime <= cur_time) {

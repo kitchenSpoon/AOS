@@ -422,17 +422,21 @@ static void
 timer_init(seL4_CPtr interrupt_ep) {
     int result = start_timer(interrupt_ep);
     conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
-    // Test code for timer driver
-    register_timer(1000, cb, NULL);
+
+
+    // Test code
     register_timer(10000, cb, NULL);
-    
-    //result = register_timer(20000, cb, NULL);
-    //remove_timer(test);
 
     stop_timer();
-    //result = start_timer(interrupt_ep);
-    //conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
-    register_timer(25000, cb, NULL);
+    result = start_timer(interrupt_ep);
+    conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
+    register_timer(1000, cb, NULL);
+    register_timer(1000, cb, NULL);
+    register_timer(1000, cb, NULL);
+    register_timer(5000, cb, NULL);
+
+    result = register_timer(5000, cb, NULL);
+    remove_timer(result);
 }
 
 /*

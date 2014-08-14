@@ -132,7 +132,8 @@ void handle_syscall(seL4_Word badge, int num_args) {
 }
 
 void syscall_loop(seL4_CPtr ep) {
-
+    
+    int timer_interrupt_counter = 0;
     while (1) {
         seL4_Word badge;
         seL4_Word label;
@@ -149,6 +150,12 @@ void syscall_loop(seL4_CPtr ep) {
                 int ret = timer_interrupt();
                 if (ret != CLOCK_R_OK) {
                     //TODO: What now??
+                }
+
+                timer_interrupt_counter++;
+                if(timer_interrupt_counter == 10){
+                    dprintf(0, "time since start timer : %lld\n", time_stamp());
+                    timer_interrupt_counter = 0;
                 }
             }
         }else if(label == seL4_VMFault){
@@ -438,19 +445,35 @@ int main(void) {
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
-    // Test code
-    register_timer(10000, cb, NULL);
+    /* Test code */
+    register_timer(10000000, cb, NULL);
 
+    /* Stop and start timer*/
     stop_timer();
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
 
-    register_timer(1000, cb, NULL);
-    register_timer(1000, cb, NULL);
-    register_timer(10000, cb, NULL);
-    register_timer(5000, cb, NULL);
-    result = register_timer(500, cb, NULL);
+    /* Multiple timeout with the same time*/
+    register_timer(1000000, cb, NULL);
+    register_timer(1000000, cb, NULL);
+    register_timer(1000000, cb, NULL);
+
+    register_timer(10000000, cb, NULL);
+
+    /* Timeouts that are close together */
+    register_timer(5000000, cb, NULL);
+    register_timer(5010000, cb, NULL);
+    
+    /* Removing timeouts */
+    result = register_timer(500000, cb, NULL);
     remove_timer(result);
+   
+    /* Invalid removal of timeouts*/
+    result = remove_timer(66);
+    assert(result == CLOCK_R_FAIL);
+    result = remove_timer(-1);
+    assert(result == CLOCK_R_FAIL);
+    
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

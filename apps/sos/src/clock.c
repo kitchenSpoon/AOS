@@ -10,7 +10,7 @@
 #include "clock.h"
 
 /* Time in miliseconds that an interrupt will be fired */
-#define CLOCK_INT_MILISEC 100
+#define CLOCK_INT_MILISEC 10
 #define CLOCK_INT_MICROSEC (CLOCK_INT_MILISEC*1000)
 /* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
 #define CLOCK_SPEED 66
@@ -152,7 +152,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
 
     /* Put the new timer into the last slot */
     timestamp_t cur_time = time_stamp();
-    timers[ntimers].endtime = cur_time + ms2timestamp(delay);
+    timers[ntimers].endtime = cur_time + delay;
     timers[ntimers].callback = callback;
     timers[ntimers].data = data;
     timers[ntimers].registered = true;
@@ -177,7 +177,7 @@ int remove_timer(uint32_t id) {
     if (!initialised) return CLOCK_R_UINT;
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
 
-    if (id <= 0 || id >= CLOCK_N_TIMERS) return CLOCK_R_FAIL;
+    if (id <= 0 || id > CLOCK_N_TIMERS) return CLOCK_R_FAIL;
 
     /* Find the index of the timer */
     int i;
@@ -205,7 +205,7 @@ int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
 
     timestamp_t cur_time = time_stamp();
-    printf("timer interrupt at %lld\n", cur_time);
+    //printf("timer interrupt at %lld\n", cur_time);
     int i;
     for (i=0; i<ntimers; i++) {
         if (timers[i].registered && timers[i].endtime <= cur_time) {
@@ -240,5 +240,6 @@ timestamp_t time_stamp(void) {
      */
     uint64_t cnr_diff = CLOCK_LOAD_VALUE - clkReg->cnr;
     uint64_t offset = (uint64_t)CLOCK_INT_MICROSEC*cnr_diff / CLOCK_LOAD_VALUE;
+    /* If our clock's counter overflow bit(clkReg->sr) is set we increase the value we return */
     return CLOCK_INT_MICROSEC * (jiffy + clkReg->sr) + offset; 
 }

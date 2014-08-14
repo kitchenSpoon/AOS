@@ -68,7 +68,7 @@ static timer_t timers[CLOCK_N_TIMERS];
 static bool initialised;
 
 static seL4_CPtr irq_handler;
-static clock_register_t *clkReg;
+static clock_register_t *epit1;
 
 static uint64_t
 cal_load_value(void) {
@@ -98,6 +98,28 @@ enable_irq(int irq, seL4_CPtr aep) {
     return cap;
 }
 
+
+/* Check when the next timeout will happen
+ * if the next timeout is less than the resolution
+ * of our main timer interval, we use a second variable
+ * timer for finer resolution.
+ *
+ * If the next timeout is not within the main timer's 
+ * resolution , we will stop running till there is.
+ * */
+static int
+update_var_timer(timestamp_t cur_time) {
+
+   if(timers[0].registered && timers[0].endtime <= cur_time + CLOCK_INT_MILISEC){
+     uint32_t counter = cur_time + CLOCK_INT_MILISEC - timers[0].endtime;
+     epit2->cr |= EPIT_CR_EN;
+     epit2->lr = counter;
+   } else {
+     /* stop var_timer */
+     epit2->cr &= ~EPIT_CR_EN;
+   }
+}
+
 int start_timer(seL4_CPtr interrupt_ep) {
     if (initialised) {
         stop_timer();
@@ -116,14 +138,14 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
-    clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
+    epit1 = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
     //TODO: setup 2nd timer
-    clkReg->cr |= EPIT_CR_SWR;
+    epit1->cr |= EPIT_CR_SWR;
     printf("Resetting timer...\n");
-    while (clkReg->cr & EPIT_CR_SWR);
+    while (epit1->cr & EPIT_CR_SWR);
     printf("Done\n");
 
-    //clkReg->cr = 0;
+    //epit1->cr = 0;
     uint32_t tmp = 0;
     tmp |= EPIT_CR_CLKSRC;
     tmp |= EPIT_CR_PRESCALER;
@@ -132,13 +154,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
     tmp |= EPIT_CR_ENMOD;
     tmp |= EPIT_CR_OCIEN;
 
-    clkReg->cr = tmp;
-    clkReg->cmpr = 0;
+    epit1->cr = tmp;
+    epit1->cmpr = 0;
 
-    clkReg->cr |= EPIT_CR_EN;
-    clkReg->lr = CLOCK_LOAD_VALUE;
+    epit1->cr |= EPIT_CR_EN;
+    epit1->lr = CLOCK_LOAD_VALUE;
 
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", epit1->cr, epit1->lr, epit1->cmpr, epit1->cnr);
 
     initialised = true;
     return CLOCK_R_OK;
@@ -148,7 +170,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
 int stop_timer(void){
     if (!initialised) return CLOCK_R_UINT;
     /* Map device and turn it off */
-    clkReg->cr &= ~(0x1);
+    epit1->cr &= ~(0x1);
 
     int err = 0;
     /* Remove handler within kernel */
@@ -191,7 +213,8 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
             break;
         }
     }
-    // TODO: enable 2nd timer
+
+    update_var_timer(cur_time);
 
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return id;
@@ -221,7 +244,7 @@ int remove_timer(uint32_t id) {
     timers[ntimers-1].registered = false;
     ntimers -= 1;
 
-    //TODO: update/disable 2nd timer?
+    update_var_timer(time_stamp());
 
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return CLOCK_R_OK;
@@ -231,7 +254,7 @@ int remove_timer(uint32_t id) {
  * Check if there is a timeout. If there is, perform a callback
  * @Return: true if there is at least 1 timeout, false otherwise
  */
-static bool
+static void
 check_timeout(timestamp_t cur_time) {
     int i;
     for (i=0; i<ntimers; i++) {
@@ -248,20 +271,19 @@ check_timeout(timestamp_t cur_time) {
         }
         ntimers -= i;
     }
-    return (i > 0);
 }
+
 int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
 
     timestamp_t cur_time = time_stamp();
     printf("timer interrupt at %lld\n", cur_time);
 
-    bool timeout = check_timeout(cur_time);
-    if (timeout) {
-        //TODO: enable 2nd timer?
-    }
+    check_timeout(cur_time);
+    update_var_timer(cur_time);
+
     jiffy += 1;
-    clkReg->sr = 1;
+    epit1->sr = 1;
     int err = seL4_IRQHandler_Ack(irq_handler);
     assert(!err);
 
@@ -276,7 +298,7 @@ timestamp_t time_stamp(void) {
      * of the clock's counter EPIT_CNR. We also take care of the case when an
      * overflow has happened but haven't got acknowledged
      */
-    uint64_t cnr_diff = CLOCK_LOAD_VALUE - clkReg->cnr;
+    uint64_t cnr_diff = CLOCK_LOAD_VALUE - epit1->cnr;
     uint64_t offset = (uint64_t)CLOCK_INT_MICROSEC*cnr_diff / CLOCK_LOAD_VALUE;
-    return CLOCK_INT_MICROSEC * (jiffy + clkReg->sr) + offset; 
+    return CLOCK_INT_MICROSEC * (jiffy + epit1->sr) + offset; 
 }

@@ -10,7 +10,7 @@
 #include "clock.h"
 
 /* Time in miliseconds that an interrupt will be fired */
-#define CLOCK_INT_TIME 100
+#define CLOCK_INT_TIME 10
 /* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
 #define CLOCK_SPEED 66
 /* Clock prescaler should be divisible by CLOCK_SPEED */
@@ -25,6 +25,9 @@
 // EPIT1_CR_BASE_MASK 0b000000_01_01_0_0_0_0_1_0_000000000000_1101;
 #define EPIT1_CR_MASK       0x0142000D
 #define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
+
+#define EPIT_EN             1
+#define EPIT_SWR            16
 //EPIT1_CR_CLR 0b0000_0001_1000_0011_0000_0000_0001_1100;
 #define EPIT1_CR_CLR        0x0183001C
 
@@ -106,14 +109,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
     clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
+    clkReg->cr |= (1u << EPIT_SWR);
+    printf(" ");
+    while (clkReg->cr & (1u << EPIT_SWR));
+    printf("\n");
     clkReg->cr = EPIT1_CR;
     clkReg->lr = CLOCK_LOAD_VALUE;
     clkReg->cmpr = 0;
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
     printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
 
     initialised = true;
@@ -154,8 +156,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     timers[ntimers].data = data;
     timers[ntimers].registered = true;
     int id = timers[ntimers].id;
-    printf("id=%d, curtime=%lld,  endtime=%lld\n",
-            id, cur_time, timers[ntimers].endtime);
+    printf("id=%d, curtime=%lld,  endtime=%lld\n", id, cur_time, timers[ntimers].endtime);
     ntimers += 1;
 
     /* Re-arrange the timers array to ensure the order */
@@ -203,7 +204,6 @@ int timer_interrupt(void) {
 
     timestamp_t cur_time = time_stamp();
     printf("timer interrupt at %lld\n", cur_time);
-/*
     int i;
     for (i=0; i<ntimers; i++) {
         if (timers[i].registered && timers[i].endtime <= cur_time) {
@@ -225,7 +225,6 @@ int timer_interrupt(void) {
         }
         ntimers -= i;
     }
-*/
 
     jiffy += 1;
     clkReg->sr = 1;

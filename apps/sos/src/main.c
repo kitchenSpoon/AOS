@@ -144,7 +144,8 @@ void syscall_loop(seL4_CPtr ep) {
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
                 network_irq();
-            } else if (badge & IRQ_BADGE_TIMER) {
+            }
+            if (badge & IRQ_BADGE_TIMER) {
                 int ret = timer_interrupt();
                 if (ret != CLOCK_R_OK) {
                     //TODO: What now??
@@ -421,6 +422,7 @@ cb(uint32_t id, void* data) {
  * Main entry point - called by crt.
  */
 int main(void) {
+    int result;
 
     dprintf(0, "\nSOS Starting...\n");
 
@@ -433,15 +435,15 @@ int main(void) {
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     /* Initialize timer driver */
-    start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
+    result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
+    conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
     // Test code
     register_timer(10000, cb, NULL);
 
-    //stop_timer();
-    int result;
-    // = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
-    //conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
+    stop_timer();
+    result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
+    conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
     register_timer(1000, cb, NULL);
     register_timer(1000, cb, NULL);
     register_timer(1000, cb, NULL);

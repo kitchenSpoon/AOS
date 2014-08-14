@@ -17,34 +17,20 @@
 #define CLOCK_PRESCALER 1
 #define CLOCK_SPEED_PRESCALED (CLOCK_SPEED / CLOCK_PRESCALER)
 /* Constant to be loaded into Clock control register when it gets initialized */
-#define CLOCK_COMPARE_INTERVAL (CLOCK_INT_TIME*(CLOCK_SPEED_PRESCALED)*1000)
-
-#define BIT(n) (1ul<<(n))
-
-#define EPIT_CLKSRC        (0b01 << 24) // Clock source - 0b01 == peripheral clock
-#define EPIT_OM            (0b00 << 22) // Output mode - 0b00 == no output
-#define EPIT_OM_SHIFT      (22)         // Output mode shift
-#define EPIT_STOPEN        BIT(21)      // Stop enable
-#define EPIT_WAITEN        BIT(19)      // Wait enable
-#define EPIT_DBGEN         BIT(18)      // Debug enable
-#define EPIT_IOVW          BIT(17)      // Counter overwrite when set load reg
-#define EPIT_SWR           BIT(16)      // Software reset
-#define EPIT_PRESCALAR_SHIFT 4
-#define EPIT_PRESCALAR     ((CLOCK_PRESCALER-1) << 4) // Prescalar
-#define EPIT_RLD           BIT(3)       // Reload control -
-                                        // 1 == reload from load register
-#define EPIT_OCIEN         BIT(2)       // Compare interrupt enable
-#define EPIT_ENMOD         BIT(1)       // Enable mode - 0b01 == Counter restart when re-enabled
-#define EPIT_EN            BIT(0)       // Enable bit
-
+#define CLOCK_LOAD_VALUE (CLOCK_INT_TIME*(CLOCK_SPEED_PRESCALED)*1000)
 
 #define EPIT1_IRQ_NUM       88
 #define EPIT1_BASE_PADDR    0x020D0000
-#define EPIT1_SIZE          (0x4000)
+#define EPIT1_SIZE          0x4000
+// EPIT1_CR_BASE_MASK 0b000000_01_01_0_0_0_0_1_0_000000000000_1101;
+#define EPIT1_CR_MASK       0x0142000F
+#define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
+//EPIT1_CR_CLR 0b0000_0001_1000_0011_0000_0000_0001_1100;
+#define EPIT1_CR_CLR        0x0183001C
 
 #define CLOCK_N_TIMERS 64
 typedef struct {
-    uint32_t id;
+    int id;
     timestamp_t endtime;
     timer_callback_t callback;
     void* data;
@@ -77,8 +63,7 @@ static timestamp_t ms2timestamp(uint64_t ms) {
     timestamp_t time = (timestamp_t)ms;
     return time;
 }
-
-/* Swap tiemrs in timers array */
+/* Swap timers in timers array */
 static void
 tswap(timer_t *timers, const int i, const int j) {
     timer_t tmp = timers[i];
@@ -86,33 +71,14 @@ tswap(timer_t *timers, const int i, const int j) {
     timers[j] = tmp;
 }
 
-static seL4_CPtr
-enable_irq(int irq, seL4_CPtr aep) {
-    seL4_CPtr cap;
-    int err;
-    /* Create an IRQ handler */
-    cap = cspace_irq_control_get_cap(cur_cspace, seL4_CapIRQControl, irq);
-    conditional_panic(!cap, "Failed to acquire and IRQ control cap");
-    /* Assign to an end point */
-    err = seL4_IRQHandler_SetEndpoint(cap, aep);
-    conditional_panic(err, "Failed to set interrupt endpoint");
-    /* Ack the handler before continuing */
-    err = seL4_IRQHandler_Ack(cap);
-    conditional_panic(err, "Failure to acknowledge pending interrupts");
-    return cap;
-}
-
 int start_timer(seL4_CPtr interrupt_ep) {
-    dprintf(0, "initialised = %d\n", initialised);
     if (initialised) {
-        dprintf(0, "Reseting timer...\n");
         stop_timer();
     }
 
-    dprintf(0, "Initializing timer...\n");
     /* Initialize callback array */
-    jiffy = 0;
     ntimers = 0;
+    jiffy = 0;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
         timers[i].id = i;
         timers[i].registered = false;
@@ -124,41 +90,9 @@ int start_timer(seL4_CPtr interrupt_ep) {
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
     clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
-
-    /*
-    clkReg->cr &= ~EPIT_EN;
-
-    clkReg->cr &= ~(0xfff << EPIT_PRESCALAR_SHIFT);
-    //clkReg->cr |= EPIT_PRESCALAR;
-    clkReg->cr |= EPIT_RLD;
-
-    clkReg->cr &= ~(0b11 << EPIT_OM_SHIFT); //clear EPIT output
-    clkReg->cr &= ~EPIT_OCIEN;
-    clkReg->cr |= EPIT_CLKSRC;
-    clkReg->sr = 1;
-    clkReg->cr |= EPIT_ENMOD;
-    clkReg->cr |= EPIT_EN;
-    clkReg->cr |= EPIT_OCIEN;
-
-    clkReg->lr = CLOCK_COMPARE_INTERVAL;
-    clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
-    */
-    clkReg->cr = 0;
-    clkReg->cr |= EPIT_CLKSRC;
-    clkReg->cr |= EPIT_OM;
-    clkReg->cr |= EPIT_IOVW;
-    clkReg->cr |= EPIT_PRESCALAR;
-    clkReg->cr |= EPIT_RLD;
-    clkReg->cr |= EPIT_OCIEN;
-    clkReg->cr |= EPIT_ENMOD;
-    clkReg->cr |= EPIT_EN;
-
-    clkReg->lr = CLOCK_COMPARE_INTERVAL;
-    clkReg->cmpr = CLOCK_COMPARE_INTERVAL;
-    clkReg->sr = 1;
-
-    dprintf(0, "clkReg->cr = 0x%x, clkReg->lr = %d, clkReg->cmpr = %d\n",
-                clkReg->cr, clkReg->lr, clkReg->cmpr);
+    clkReg->cr = EPIT1_CR;
+    clkReg->lr = CLOCK_LOAD_VALUE;
+    clkReg->cmpr = CLOCK_LOAD_VALUE;
 
     initialised = true;
     return CLOCK_R_OK;
@@ -168,7 +102,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
 int stop_timer(void){
     if (!initialised) return CLOCK_R_UINT;
     /* Map device and turn it off */
-    clkReg->cr = 0;
+    clkReg->cr = EPIT1_CR_CLR;
 
     int err = 0;
     /* Remove handler within kernel */
@@ -189,7 +123,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     if (ntimers == CLOCK_N_TIMERS) {
         return 0;
     }
-    dprintf(0, "registered timer called with delay=%lld\n", delay);
+    printf("registered timer called with delay=%lld\n", delay);
 
     /* Put the new timer into the last slot */
     timestamp_t cur_time = time_stamp();
@@ -244,10 +178,9 @@ int remove_timer(uint32_t id) {
 
 int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
-    jiffy += 1;
 
     timestamp_t cur_time = time_stamp();
-    dprintf(0, "timer interrupt at %lld\n", cur_time);
+    printf("timer interrupt at %lld\n", cur_time);
     int i;
     for (i=0; i<ntimers; i++) {
         if (timers[i].registered && timers[i].endtime <= cur_time) {
@@ -263,8 +196,14 @@ int timer_interrupt(void) {
         }
         ntimers -= i;
     }
+    if (i > 0) {
+        for (int j = i; j<ntimers; j++) {
+            timers[j-i] = timers[j];
+        }
+        ntimers -= i;
+    }
 
-    /* Clear status bit and ack the interrupt */
+    jiffy += 1;
     clkReg->sr = 1;
     int err = seL4_IRQHandler_Ack(irq_handler);
     assert(!err);
@@ -280,7 +219,9 @@ timestamp_t time_stamp(void) {
      * accurate information (as jiffy could be less accurate than 1 ms), can
      * query time from the current clock counter and add in.
      */
-    int cnr_diff = CLOCK_COMPARE_INTERVAL - clkReg->cnr;
-    int offset = (long long)CLOCK_INT_TIME*cnr_diff / CLOCK_COMPARE_INTERVAL;
-    return CLOCK_INT_TIME * jiffy + offset;
+    //int cnr_diff = CLOCK_COMPARE_INTERVAL - clkReg->cnr;
+    //int offset = (long long)CLOCK_INT_TIME*cnr_diff / CLOCK_COMPARE_INTERVAL;
+    //return CLOCK_INT_TIME * jiffy + offset;
+    //return CLOCK_INT_TIME * jiffy + CLOCK_INT_TIME*(clkReg->lr - clkReg->cnr)/CLOCK_LOAD_VALUE;
+    return CLOCK_INT_TIME * (jiffy + clkReg->sr); 
 }

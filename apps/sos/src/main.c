@@ -444,12 +444,12 @@ int main(void) {
     stop_timer();
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
-    register_timer(1000, cb, NULL);
-    register_timer(1000, cb, NULL);
-    register_timer(1000, cb, NULL);
-    register_timer(5000, cb, NULL);
 
-    result = register_timer(5000, cb, NULL);
+    register_timer(1000, cb, NULL);
+    register_timer(1000, cb, NULL);
+    register_timer(10000, cb, NULL);
+    register_timer(5000, cb, NULL);
+    result = register_timer(500, cb, NULL);
     remove_timer(result);
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

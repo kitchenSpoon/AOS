@@ -10,7 +10,7 @@
 #include "clock.h"
 
 /* Time in miliseconds that an interrupt will be fired */
-#define CLOCK_INT_TIME 10
+#define CLOCK_INT_TIME 100
 /* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
 #define CLOCK_SPEED 66
 /* Clock prescaler should be divisible by CLOCK_SPEED */
@@ -99,7 +99,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
     ntimers = 0;
     jiffy = 0;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
-        timers[i].id = i;
+        timers[i].id = i+1;
         timers[i].registered = false;
     }
 
@@ -176,24 +176,25 @@ int remove_timer(uint32_t id) {
     if (!initialised) return CLOCK_R_UINT;
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
 
+    if (id <= 0 || id >= CLOCK_N_TIMERS) return CLOCK_R_FAIL;
+
     /* Find the index of the timer */
     int i;
     for (i=0; i<ntimers; i++) {
-        if (timers[i].id == id) break;
+        if (timers[i].id == id && timers[i].registered) break;
     }
     if (i == ntimers) {
         return CLOCK_R_FAIL;
     }
 
-    timers[i].registered = false;
-
-    /* Remove this timer from timers queue */
+    /* Swap this timer to the end */
     timer_t tmp = timers[i];
-    ntimers -= 1;
-    for (; i<ntimers-2; i++) {
+    for (; i<ntimers-1; i++) {
         timers[i] = timers[i+1];
     }
-    timers[ntimers] = tmp;
+    timers[ntimers-1] = tmp;
+    timers[ntimers-1].registered = false;
+    ntimers -= 1;
 
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return CLOCK_R_OK;
@@ -212,12 +213,6 @@ int timer_interrupt(void) {
         } else {
             break;
         }
-    }
-    if (i > 0) {
-        for (int j = i; j<ntimers; j++) {
-            timers[j-i] = timers[j];
-        }
-        ntimers -= i;
     }
     if (i > 0) {
         for (int j = i; j<ntimers; j++) {

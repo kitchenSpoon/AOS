@@ -102,7 +102,7 @@ int stop_timer(void){
     assert(!err);
 
     /* Free the irq_handler cap within cspace */
-    cspace_err_t cspace_err = cspace_free_slot(cur_cspace, irq_handler);
+    cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, irq_handler);
     assert(cspace_err == CSPACE_NOERROR);
 
     initialised = false;
@@ -111,17 +111,17 @@ int stop_timer(void){
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     if (!initialised) return CLOCK_R_UINT;
-
-    dprintf(0, "registered timer called with delay=%lld\n", delay);
+    //dprintf(0, "registered timer called with delay=%lld\n", delay);
+    printf("timer interrupt at %lld\n", time_stamp());
     int id;
     for (id=0; id<CLOCK_N_TIMERS; id++) {
         if (timers[id].registered == false) {
-	    timestamp_t curtime = time_stamp();   
+	        timestamp_t curtime = time_stamp();   
             timers[id].endtime = curtime + ms2timestamp(delay);
             timers[id].callback = callback;
             timers[id].data = data;
             timers[id].registered = true;
-	    dprintf(0, "id= %d, curtime = %lld, endtime = %lld\n", id, (uint64_t)curtime, (uint64_t)timers[id].endtime);
+	    //dprintf(0, "id= %d, curtime = %lld, endtime = %lld\n", id, (uint64_t)curtime, (uint64_t)timers[id].endtime);
             break;
         }
     }
@@ -144,7 +144,8 @@ int remove_timer(uint32_t id) {
 int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
 
-    dprintf(0, "timer interrupt at %lld\n", time_stamp());
+    printf("timer interrupt at %lld\n", time_stamp());
+    //dprintf(0, "timer interrupt at %lld\n", time_stamp());
     // Could there by concurrency issue here?
     jiffy += 1;
     for (int i=0; i<CLOCK_N_TIMERS; i++) {
@@ -171,10 +172,6 @@ timestamp_t time_stamp(void) {
      * accurate information (as jiffy could be less accurate than 1 ms), can
      * query time from the current clock counter and add in.
      */
-
-    return CLOCK_INT_TIME * jiffy;
-    /*
-    clock_register_t * clkReg = map_device((void*)EPIT1_BASE_PADDR, 4000); 
-    return CLOCK_INT_TIME * jiffy + (clkReg->cnr);
-    */
+    if(clkReg->sr) jiffy++;
+    return CLOCK_INT_TIME * jiffy + CLOCK_INT_TIME*(clkReg->lr - clkReg->cnr)/CLOCK_COMPARE_INTERVAL;
 }

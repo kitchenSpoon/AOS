@@ -139,6 +139,7 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_MessageInfo_t message;
 
         message = seL4_Wait(ep, &badge);
+        //printf("badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
@@ -445,11 +446,11 @@ int main(void) {
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
 
-    register_timer(1000, cb, NULL);
-    register_timer(1000, cb, NULL);
-    register_timer(10000, cb, NULL);
-    register_timer(5000, cb, NULL);
-    result = register_timer(500, cb, NULL);
+    register_timer(1000000, cb, NULL);      //1s
+    register_timer(1000000, cb, NULL);      //1s
+    register_timer(10000000, cb, NULL);     //10s
+    register_timer(5000000, cb, NULL);      //5s
+    result = register_timer(500000, cb, NULL);      //.5s
     remove_timer(result);
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

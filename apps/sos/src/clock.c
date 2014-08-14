@@ -27,10 +27,21 @@
 #define EPIT1_CR_MASK       0x0142000D
 #define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
 
-#define EPIT_EN             1
-#define EPIT_SWR            16
-//EPIT1_CR_CLR 0b0000_0001_1000_0011_0000_0000_0001_1100;
-#define EPIT1_CR_CLR        0x0183001C
+#define EPIT_CR_CLKSRC_SHIFT    24      // Clock source shift (bits 24-25)
+#define EPIT_CR_OM_SHIFT        22      // OM shift (bits 22-23)
+#define EPIT_CR_STOPEN          BIT(21) // Stop enable bit
+#define EPIT_CR_WAITEN          BIT(19) // Wait enable bit
+#define EPIT_CR_DBGEN           BIT(18) // Debug enable bit
+#define EPIT_CR_IOVW            BIT(17) // Set to overwrite CNR when write to load register
+#define EPIT_CR_SWR             BIT(16)
+#define EPIT_CR_PRE_SHIFT       4       // Prescalar shift (bits 4-15)
+#define EPIT_CR_RLD             BIT(3)  // Reload bit
+#define EPIT_CR_OCIEN           BIT(2)  // Enable interrupt
+#define EPIT_CR_ENMOD           BIT(1)  // Set ENMOD to reload CNR when re-enable counter
+#define EPIT_CR_EN              BIT(0)  // Enable bit     
+
+#define EPIT_CR_CLKSRC          (1 << EPIT_CR_CLKSRC_SHIFT) // Peripheral clock
+#define EPIT_CR_PRESCALER       ((CLOCK_PRESCALER-1) << EPIT_CR_PRE_SHIFT)   
 
 #define CLOCK_N_TIMERS 64
 typedef struct {
@@ -59,13 +70,9 @@ static bool initialised;
 static seL4_CPtr irq_handler;
 static clock_register_t *clkReg;
 
-
-/*
- * Convert miliseconds to timestamp_t unit.
- */
-static timestamp_t ms2timestamp(uint64_t ms) {
-    timestamp_t time = (timestamp_t)ms*1000;
-    return time;
+static uint64_t
+cal_load_value(void) {
+    return 0;
 }
 /* Swap timers in timers array */
 static void
@@ -110,13 +117,27 @@ int start_timer(seL4_CPtr interrupt_ep) {
     /* Map device and initialize it */
     //if mapdevice fails, it panics, 
     clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
-    clkReg->cr |= (1u << EPIT_SWR);
-    printf(" ");
-    while (clkReg->cr & (1u << EPIT_SWR));
-    printf("\n");
-    clkReg->cr = EPIT1_CR;
-    clkReg->lr = CLOCK_LOAD_VALUE;
+    //TODO: setup 2nd timer
+    clkReg->cr |= EPIT_CR_SWR;
+    printf("Resetting timer...\n");
+    while (clkReg->cr & EPIT_CR_SWR);
+    printf("Done\n");
+
+    //clkReg->cr = 0;
+    uint32_t tmp = 0;
+    tmp |= EPIT_CR_CLKSRC;
+    tmp |= EPIT_CR_PRESCALER;
+    tmp |= EPIT_CR_IOVW;
+    tmp |= EPIT_CR_RLD;
+    tmp |= EPIT_CR_ENMOD;
+    tmp |= EPIT_CR_OCIEN;
+
+    clkReg->cr = tmp;
     clkReg->cmpr = 0;
+
+    clkReg->cr |= EPIT_CR_EN;
+    clkReg->lr = CLOCK_LOAD_VALUE;
+
     printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
 
     initialised = true;
@@ -127,7 +148,7 @@ int start_timer(seL4_CPtr interrupt_ep) {
 int stop_timer(void){
     if (!initialised) return CLOCK_R_UINT;
     /* Map device and turn it off */
-    clkReg->cr = EPIT1_CR_CLR;
+    clkReg->cr &= ~(0x1);
 
     int err = 0;
     /* Remove handler within kernel */
@@ -137,6 +158,8 @@ int stop_timer(void){
     /* Free the irq_handler cap within cspace */
     cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, irq_handler);
     assert(cspace_err == CSPACE_NOERROR);
+
+    //TODO: stop 2nd timer!!
 
     initialised = false;
     return CLOCK_R_OK;
@@ -152,7 +175,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
 
     /* Put the new timer into the last slot */
     timestamp_t cur_time = time_stamp();
-    timers[ntimers].endtime = cur_time + ms2timestamp(delay);
+    timers[ntimers].endtime = cur_time + delay;
     timers[ntimers].callback = callback;
     timers[ntimers].data = data;
     timers[ntimers].registered = true;
@@ -168,6 +191,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
             break;
         }
     }
+    // TODO: enable 2nd timer
 
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return id;
@@ -177,7 +201,7 @@ int remove_timer(uint32_t id) {
     if (!initialised) return CLOCK_R_UINT;
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
 
-    if (id <= 0 || id >= CLOCK_N_TIMERS) return CLOCK_R_FAIL;
+    if (id <= 0 || id > CLOCK_N_TIMERS) return CLOCK_R_FAIL;
 
     /* Find the index of the timer */
     int i;
@@ -197,15 +221,18 @@ int remove_timer(uint32_t id) {
     timers[ntimers-1].registered = false;
     ntimers -= 1;
 
+    //TODO: update/disable 2nd timer?
+
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return CLOCK_R_OK;
 }
 
-int timer_interrupt(void) {
-    if (!initialised) return CLOCK_R_UINT;
-
-    timestamp_t cur_time = time_stamp();
-    printf("timer interrupt at %lld\n", cur_time);
+/*
+ * Check if there is a timeout. If there is, perform a callback
+ * @Return: true if there is at least 1 timeout, false otherwise
+ */
+static bool
+check_timeout(timestamp_t cur_time) {
     int i;
     for (i=0; i<ntimers; i++) {
         if (timers[i].registered && timers[i].endtime <= cur_time) {
@@ -221,7 +248,18 @@ int timer_interrupt(void) {
         }
         ntimers -= i;
     }
+    return (i > 0);
+}
+int timer_interrupt(void) {
+    if (!initialised) return CLOCK_R_UINT;
 
+    timestamp_t cur_time = time_stamp();
+    printf("timer interrupt at %lld\n", cur_time);
+
+    bool timeout = check_timeout(cur_time);
+    if (timeout) {
+        //TODO: enable 2nd timer?
+    }
     jiffy += 1;
     clkReg->sr = 1;
     int err = seL4_IRQHandler_Ack(irq_handler);

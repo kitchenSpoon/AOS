@@ -85,7 +85,6 @@ seL4_CPtr _sos_interrupt_ep_cap;
  */
 extern fhandle_t mnt_point;
 
-
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
@@ -418,12 +417,6 @@ cb(uint32_t id, void* data) {
     dprintf(0, "call back from %d at %lld\n", id, (long long)time_stamp());
 }
 
-static void
-timer_init(seL4_CPtr interrupt_ep) {
-    int result = start_timer(interrupt_ep);
-    conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
-}
-
 /*
  * Main entry point - called by crt.
  */
@@ -445,9 +438,10 @@ int main(void) {
     // Test code
     register_timer(10000, cb, NULL);
 
-    stop_timer();
-    result = start_timer(interrupt_ep);
-    conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
+    //stop_timer();
+    int result;
+    // = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
+    //conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
     register_timer(1000, cb, NULL);
     register_timer(1000, cb, NULL);
     register_timer(1000, cb, NULL);

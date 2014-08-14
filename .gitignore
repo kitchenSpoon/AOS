@@ -8,3 +8,4 @@ include/*
 stage/*
 kernel/libsel4/arch_include/arm/sel4/arch/invocation.h
 *.diff
+*.orig

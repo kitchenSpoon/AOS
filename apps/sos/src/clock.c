@@ -23,7 +23,7 @@
 #define EPIT1_BASE_PADDR    0x020D0000
 #define EPIT1_SIZE          0x4000
 // EPIT1_CR_BASE_MASK 0b000000_01_01_0_0_0_0_1_0_000000000000_1101;
-#define EPIT1_CR_MASK       0x0142000F
+#define EPIT1_CR_MASK       0x0142000D
 #define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
 //EPIT1_CR_CLR 0b0000_0001_1000_0011_0000_0000_0001_1100;
 #define EPIT1_CR_CLR        0x0183001C
@@ -71,6 +71,22 @@ tswap(timer_t *timers, const int i, const int j) {
     timers[j] = tmp;
 }
 
+static seL4_CPtr
+enable_irq(int irq, seL4_CPtr aep) {
+    seL4_CPtr cap;
+    int err;
+    /* Create an IRQ handler */
+    cap = cspace_irq_control_get_cap(cur_cspace, seL4_CapIRQControl, irq);
+    conditional_panic(!cap, "Failed to acquire and IRQ control cap");
+    /* Assign to an end point */
+    err = seL4_IRQHandler_SetEndpoint(cap, aep);
+    conditional_panic(err, "Failed to set interrupt endpoint");
+    /* Ack the handler before continuing */
+    err = seL4_IRQHandler_Ack(cap);
+    conditional_panic(err, "Failure to acknowledge pending interrupts");
+    return cap;
+}
+
 int start_timer(seL4_CPtr interrupt_ep) {
     if (initialised) {
         stop_timer();
@@ -92,7 +108,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
     clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
     clkReg->cr = EPIT1_CR;
     clkReg->lr = CLOCK_LOAD_VALUE;
-    clkReg->cmpr = CLOCK_LOAD_VALUE;
+    clkReg->cmpr = 0;
+    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
 
     initialised = true;
     return CLOCK_R_OK;
@@ -181,6 +203,7 @@ int timer_interrupt(void) {
 
     timestamp_t cur_time = time_stamp();
     printf("timer interrupt at %lld\n", cur_time);
+/*
     int i;
     for (i=0; i<ntimers; i++) {
         if (timers[i].registered && timers[i].endtime <= cur_time) {
@@ -202,6 +225,7 @@ int timer_interrupt(void) {
         }
         ntimers -= i;
     }
+*/
 
     jiffy += 1;
     clkReg->sr = 1;

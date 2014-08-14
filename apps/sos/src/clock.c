@@ -177,16 +177,17 @@ int stop_timer(void){
  * resolution , we will stop running till there is.
  * */
 static void
-update_var_timer(timestamp_t cur_time) {
+update_var_timer(void) {
+    timestamp_t cur_time = time_stamp();
 
-   if(timers[0].registered && timers[0].endtime <= cur_time + CLOCK_INT_MILISEC){
-     uint32_t counter = cur_time + CLOCK_INT_MILISEC - timers[0].endtime;
-     epit2->cr |= EPIT_CR_EN;
-     epit2->lr = counter;
-   } else {
-     /* stop var_timer */
-     epit2->cr &= ~EPIT_CR_EN;
-   }
+    if(timers[0].registered && timers[0].endtime <= cur_time + CLOCK_INT_MICROSEC){
+        uint32_t load_value = (timers[0].endtime - cur_time) * CLOCK_SPEED;
+        epit2->cr |= EPIT_CR_EN;
+        epit2->lr = load_value;
+        printf("update_var_timer: curtime=%llu, endtime=%llu, load_value=%u\n", cur_time, timers[0].endtime, load_value);
+    } else {
+        epit2->cr &= ~EPIT_CR_EN;
+    }
 }
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
@@ -216,7 +217,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
         }
     }
 
-    update_var_timer(cur_time);
+    update_var_timer();
 
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return id;
@@ -246,7 +247,7 @@ int remove_timer(uint32_t id) {
     timers[ntimers-1].registered = false;
     ntimers -= 1;
 
-    update_var_timer(time_stamp());
+    update_var_timer();
 
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return CLOCK_R_OK;
@@ -279,18 +280,20 @@ int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
 
     timestamp_t cur_time = time_stamp();
-    printf("timer interrupt at %lld\n", cur_time);
+    printf("---A timer interrupt occured at %lld\n", cur_time);
 
     check_timeout(cur_time);
+    update_var_timer();
+
     if (epit1->sr) {
-        printf("epit1 called\n");
+        printf("epit1 handled the interrupt\n");
         jiffy += 1;
         epit1->sr = 1;
         int err = seL4_IRQHandler_Ack(irq_handler1);
         assert(!err);
     }
     if (epit2->sr) {
-        printf("epit2 called\n");
+        printf("epit2 handled the interrupt\n");
         epit2->sr = 1;
         int err = seL4_IRQHandler_Ack(irq_handler2);
         assert(!err);

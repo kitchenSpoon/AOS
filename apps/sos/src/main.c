@@ -416,7 +416,7 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
 
 static void
 cb(uint32_t id, void* data) {
-    dprintf(0, "call back from %d at %lld\n", id, (long long)time_stamp());
+    dprintf(0, "**call back from %d at %lld\n", id, (long long)time_stamp());
 }
 
 /*
@@ -439,19 +439,35 @@ int main(void) {
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
-    // Test code
-    register_timer(10000, cb, NULL);
+    /* Test code */
+    register_timer(10000000, cb, NULL);     // 10s
 
+    /* Stop and start timer*/
     stop_timer();
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
 
-    register_timer(1000000, cb, NULL);      //1s
-    register_timer(1000000, cb, NULL);      //1s
-    register_timer(10000000, cb, NULL);     //10s
-    register_timer(5000000, cb, NULL);      //5s
-    result = register_timer(500000, cb, NULL);      //.5s
+    /* Multiple timeout with the same time*/
+    register_timer(1000000, cb, NULL);      // 1s
+    register_timer(1000000, cb, NULL);      // 1s
+    register_timer(1000000, cb, NULL);      // 1s
+
+    register_timer(10000000, cb, NULL);     // 10s
+
+    /* Timeouts that are close together */
+    register_timer(5000000, cb, NULL);      // 5s
+    register_timer(5010000, cb, NULL);      // 5.010s
+    
+    /* Removing timeouts */
+    result = register_timer(500000, cb, NULL);
     remove_timer(result);
+   
+    /* Invalid removal of timeouts*/
+    result = remove_timer(66);
+    assert(result == CLOCK_R_FAIL);
+    result = remove_timer(-1);
+    assert(result == CLOCK_R_FAIL);
+
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

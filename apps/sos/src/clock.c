@@ -10,14 +10,15 @@
 #include "clock.h"
 
 /* Time in miliseconds that an interrupt will be fired */
-#define CLOCK_INT_TIME 100
+#define CLOCK_INT_MILISEC 100
+#define CLOCK_INT_MICROSEC (CLOCK_INT_MILISEC*1000)
 /* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
 #define CLOCK_SPEED 66
 /* Clock prescaler should be divisible by CLOCK_SPEED */
 #define CLOCK_PRESCALER 1
 #define CLOCK_SPEED_PRESCALED (CLOCK_SPEED / CLOCK_PRESCALER)
 /* Constant to be loaded into Clock control register when it gets initialized */
-#define CLOCK_LOAD_VALUE (CLOCK_INT_TIME*(CLOCK_SPEED_PRESCALED)*1000)
+#define CLOCK_LOAD_VALUE (CLOCK_INT_MICROSEC*(CLOCK_SPEED_PRESCALED))
 
 #define EPIT1_IRQ_NUM       88
 #define EPIT1_BASE_PADDR    0x020D0000
@@ -63,7 +64,7 @@ static clock_register_t *clkReg;
  * Convert miliseconds to timestamp_t unit.
  */
 static timestamp_t ms2timestamp(uint64_t ms) {
-    timestamp_t time = (timestamp_t)ms;
+    timestamp_t time = (timestamp_t)ms*1000;
     return time;
 }
 /* Swap timers in timers array */
@@ -233,13 +234,11 @@ timestamp_t time_stamp(void) {
     if (!initialised) return CLOCK_R_UINT;
 
     /*
-     * Having a counter (jiffy) to keep counting the time elapsed. To get more
-     * accurate information (as jiffy could be less accurate than 1 ms), can
-     * query time from the current clock counter and add in.
+     * Apart from jiffy counter, we need to take into account the current value
+     * of the clock's counter EPIT_CNR. We also take care of the case when an
+     * overflow has happened but haven't got acknowledged
      */
-    //int cnr_diff = CLOCK_COMPARE_INTERVAL - clkReg->cnr;
-    //int offset = (long long)CLOCK_INT_TIME*cnr_diff / CLOCK_COMPARE_INTERVAL;
-    //return CLOCK_INT_TIME * jiffy + offset;
-    //return CLOCK_INT_TIME * jiffy + CLOCK_INT_TIME*(clkReg->lr - clkReg->cnr)/CLOCK_LOAD_VALUE;
-    return CLOCK_INT_TIME * (jiffy + clkReg->sr); 
+    uint64_t cnr_diff = CLOCK_LOAD_VALUE - clkReg->cnr;
+    uint64_t offset = (uint64_t)CLOCK_INT_MICROSEC*cnr_diff / CLOCK_LOAD_VALUE;
+    return CLOCK_INT_MICROSEC * (jiffy + clkReg->sr) + offset; 
 }

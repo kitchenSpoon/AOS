@@ -20,13 +20,6 @@
 /* Constant to be loaded into Clock control register when it gets initialized */
 #define CLOCK_LOAD_VALUE (CLOCK_INT_MICROSEC*(CLOCK_SPEED_PRESCALED))
 
-#define EPIT1_IRQ_NUM       88
-#define EPIT1_BASE_PADDR    0x020D0000
-#define EPIT1_SIZE          0x4000
-// EPIT1_CR_BASE_MASK 0b000000_01_01_0_0_0_0_1_0_000000000000_1101;
-#define EPIT1_CR_MASK       0x0142000D
-#define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
-
 #define EPIT_CR_CLKSRC_SHIFT    24      // Clock source shift (bits 24-25)
 #define EPIT_CR_OM_SHIFT        22      // OM shift (bits 22-23)
 #define EPIT_CR_STOPEN          BIT(21) // Stop enable bit
@@ -42,6 +35,15 @@
 
 #define EPIT_CR_CLKSRC          (1 << EPIT_CR_CLKSRC_SHIFT) // Peripheral clock
 #define EPIT_CR_PRESCALER       ((CLOCK_PRESCALER-1) << EPIT_CR_PRE_SHIFT)   
+
+#define EPIT1_IRQ_NUM       88
+#define EPIT1_BASE_PADDR    0x020D0000
+#define EPIT1_SIZE          0x4000
+
+#define EPIT2_IRQ_NUM       89
+#define EPIT2_BASE_PADDR    0x020D4000
+#define EPIT2_SIZE          0x4000
+
 
 #define CLOCK_N_TIMERS 64
 typedef struct {
@@ -67,8 +69,8 @@ static int ntimers;
 static timer_t timers[CLOCK_N_TIMERS];
 static bool initialised;
 
-static seL4_CPtr irq_handler;
-static clock_register_t *clkReg;
+static seL4_CPtr irq_handler1, irq_handler2;
+clock_register_t *epit1, *epit2;
 
 static uint64_t
 cal_load_value(void) {
@@ -98,6 +100,26 @@ enable_irq(int irq, seL4_CPtr aep) {
     return cap;
 }
 
+/* We have similar setup for EPIT1 & EPIT2 */
+static void
+setup_epit(clock_register_t *epit) {
+    epit->cr |= EPIT_CR_SWR;
+    printf("Resetting an EPIT\n");
+    while (epit->cr & EPIT_CR_SWR);
+    printf("Done\n");
+
+    uint32_t tmp = 0;
+    tmp |= EPIT_CR_CLKSRC;
+    tmp |= EPIT_CR_PRESCALER;
+    tmp |= EPIT_CR_IOVW;
+    tmp |= EPIT_CR_RLD;
+    tmp |= EPIT_CR_ENMOD;
+    tmp |= EPIT_CR_OCIEN;
+    epit->cr = tmp;
+
+    printf("EPIT: CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", epit->cr, epit->lr, epit->cmpr, epit->cnr);
+}
+
 int start_timer(seL4_CPtr interrupt_ep) {
     if (initialised) {
         stop_timer();
@@ -111,34 +133,15 @@ int start_timer(seL4_CPtr interrupt_ep) {
         timers[i].registered = false;
     }
 
-    /* Create IRQ Handler */
-    irq_handler = enable_irq(EPIT1_IRQ_NUM, interrupt_ep);
+    irq_handler1 = enable_irq(EPIT1_IRQ_NUM, interrupt_ep);
+    epit1 = (clock_register_t*)map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
+    setup_epit(epit1);
+    epit1->cr |= EPIT_CR_EN;
+    epit1->lr = CLOCK_LOAD_VALUE;
 
-    /* Map device and initialize it */
-    //if mapdevice fails, it panics, 
-    clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
-    //TODO: setup 2nd timer
-    clkReg->cr |= EPIT_CR_SWR;
-    printf("Resetting timer...\n");
-    while (clkReg->cr & EPIT_CR_SWR);
-    printf("Done\n");
-
-    //clkReg->cr = 0;
-    uint32_t tmp = 0;
-    tmp |= EPIT_CR_CLKSRC;
-    tmp |= EPIT_CR_PRESCALER;
-    tmp |= EPIT_CR_IOVW;
-    tmp |= EPIT_CR_RLD;
-    tmp |= EPIT_CR_ENMOD;
-    tmp |= EPIT_CR_OCIEN;
-
-    clkReg->cr = tmp;
-    clkReg->cmpr = 0;
-
-    clkReg->cr |= EPIT_CR_EN;
-    clkReg->lr = CLOCK_LOAD_VALUE;
-
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    irq_handler2 = enable_irq(EPIT2_IRQ_NUM, interrupt_ep);
+    epit2 = (clock_register_t*)map_device((void*)EPIT2_BASE_PADDR, EPIT2_SIZE); 
+    setup_epit(epit2);
 
     initialised = true;
     return CLOCK_R_OK;
@@ -147,19 +150,21 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 int stop_timer(void){
     if (!initialised) return CLOCK_R_UINT;
-    /* Map device and turn it off */
-    clkReg->cr &= ~(0x1);
-
     int err = 0;
-    /* Remove handler within kernel */
-    err = seL4_IRQHandler_Clear(irq_handler);
+    cspace_err_t cspace_err;
+    
+    /* Cleanup in seL4 kernel & cspace */
+    epit1->cr &= ~EPIT_CR_EN;
+    err = seL4_IRQHandler_Clear(irq_handler1);
     assert(!err);
-
-    /* Free the irq_handler cap within cspace */
-    cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, irq_handler);
+    cspace_err = cspace_delete_cap(cur_cspace, irq_handler1);
     assert(cspace_err == CSPACE_NOERROR);
 
-    //TODO: stop 2nd timer!!
+    epit2->cr &= ~EPIT_CR_EN;
+    err = seL4_IRQHandler_Clear(irq_handler2);
+    assert(!err);
+    cspace_err = cspace_delete_cap(cur_cspace, irq_handler2);
+    assert(cspace_err == CSPACE_NOERROR);
 
     initialised = false;
     return CLOCK_R_OK;
@@ -255,15 +260,20 @@ int timer_interrupt(void) {
 
     timestamp_t cur_time = time_stamp();
     printf("timer interrupt at %lld\n", cur_time);
-
-    bool timeout = check_timeout(cur_time);
-    if (timeout) {
-        //TODO: enable 2nd timer?
+    check_timeout(cur_time);
+    if (epit1->sr) {
+        printf("epit1 called\n");
+        jiffy += 1;
+        epit1->sr = 1;
+        int err = seL4_IRQHandler_Ack(irq_handler1);
+        assert(!err);
     }
-    jiffy += 1;
-    clkReg->sr = 1;
-    int err = seL4_IRQHandler_Ack(irq_handler);
-    assert(!err);
+    if (epit2->sr) {
+        printf("epit2 called\n");
+        epit2->sr = 1;
+        int err = seL4_IRQHandler_Ack(irq_handler2);
+        assert(!err);
+    }
 
     return CLOCK_R_OK;
 }
@@ -276,7 +286,7 @@ timestamp_t time_stamp(void) {
      * of the clock's counter EPIT_CNR. We also take care of the case when an
      * overflow has happened but haven't got acknowledged
      */
-    uint64_t cnr_diff = CLOCK_LOAD_VALUE - clkReg->cnr;
+    uint64_t cnr_diff = CLOCK_LOAD_VALUE - epit1->cnr;
     uint64_t offset = (uint64_t)CLOCK_INT_MICROSEC*cnr_diff / CLOCK_LOAD_VALUE;
-    return CLOCK_INT_MICROSEC * (jiffy + clkReg->sr) + offset; 
+    return CLOCK_INT_MICROSEC * (jiffy + epit1->sr) + offset; 
 }

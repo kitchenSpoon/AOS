@@ -439,17 +439,18 @@ int main(void) {
     int res = register_timer(10000, cb, NULL);
     //remove_timer(res);
     register_timer(20000, cb, NULL);
-    /*
     stop_timer();
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     stop_timer();
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     stop_timer();
     start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
-    */
-
-
-    register_timer(18000, cb, NULL);
+    register_timer(6000, cb, NULL);
+    register_timer(8000, cb, NULL);
+    register_timer(8000, cb, NULL);
+    register_timer(8000, cb, NULL);
+    register_timer(8000, cb, NULL);
+    register_timer(10000, cb, NULL);
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

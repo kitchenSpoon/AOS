@@ -101,9 +101,9 @@ enable_irq(int irq, seL4_CPtr aep) {
 static void
 setup_epit(clock_register_t *epit) {
     epit->cr |= EPIT_CR_SWR;
-    printf("Resetting an EPIT\n");
+    printf(" ");
     while (epit->cr & EPIT_CR_SWR);
-    printf("Done\n");
+    printf("\n");
 
     uint32_t tmp = 0;
     tmp |= EPIT_CR_CLKSRC;
@@ -113,8 +113,6 @@ setup_epit(clock_register_t *epit) {
     tmp |= EPIT_CR_ENMOD;
     tmp |= EPIT_CR_OCIEN;
     epit->cr = tmp;
-
-    printf("EPIT: CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", epit->cr, epit->lr, epit->cmpr, epit->cnr);
 }
 
 int start_timer(seL4_CPtr interrupt_ep) {
@@ -184,7 +182,7 @@ update_var_timer(void) {
         uint32_t load_value = (timers[0].endtime - cur_time) * CLOCK_SPEED;
         epit2->cr |= EPIT_CR_EN;
         epit2->lr = load_value;
-        printf("update_var_timer: curtime=%llu, endtime=%llu, load_value=%u\n", cur_time, timers[0].endtime, load_value);
+        //printf("update_var_timer: curtime=%llu, endtime=%llu, load_value=%u\n", cur_time, timers[0].endtime, load_value);
     } else {
         epit2->cr &= ~EPIT_CR_EN;
     }
@@ -196,7 +194,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     if (ntimers == CLOCK_N_TIMERS) {
         return 0;
     }
-    printf("registered timer called with delay=%lld\n", delay);
+    //printf("registered timer called with delay=%lld\n", delay);
 
     /* Put the new timer into the last slot */
     timestamp_t cur_time = time_stamp();
@@ -205,7 +203,7 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
     timers[ntimers].data = data;
     timers[ntimers].registered = true;
     int id = timers[ntimers].id;
-    printf("id=%d, curtime=%lld,  endtime=%lld\n", id, cur_time, timers[ntimers].endtime);
+    //printf("id=%d, curtime=%lld,  endtime=%lld\n", id, cur_time, timers[ntimers].endtime);
     ntimers += 1;
 
     /* Re-arrange the timers array to ensure the order */
@@ -280,20 +278,20 @@ int timer_interrupt(void) {
     if (!initialised) return CLOCK_R_UINT;
 
     timestamp_t cur_time = time_stamp();
-    printf("---A timer interrupt occured at %lld\n", cur_time);
+    //printf("---A timer interrupt occured at %lld\n", cur_time);
 
     check_timeout(cur_time);
     update_var_timer();
 
     if (epit1->sr) {
-        printf("epit1 handled the interrupt\n");
+        //printf("epit1 handled the interrupt\n");
         jiffy += 1;
         epit1->sr = 1;
         int err = seL4_IRQHandler_Ack(irq_handler1);
         assert(!err);
     }
     if (epit2->sr) {
-        printf("epit2 handled the interrupt\n");
+        //printf("epit2 handled the interrupt\n");
         epit2->sr = 1;
         int err = seL4_IRQHandler_Ack(irq_handler2);
         assert(!err);

@@ -132,14 +132,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
 }
 
 void syscall_loop(seL4_CPtr ep) {
-    
-    int timer_interrupt_counter = 0;
+
     while (1) {
         seL4_Word badge;
         seL4_Word label;
         seL4_MessageInfo_t message;
 
         message = seL4_Wait(ep, &badge);
+        //printf("badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
@@ -150,12 +150,6 @@ void syscall_loop(seL4_CPtr ep) {
                 int ret = timer_interrupt();
                 if (ret != CLOCK_R_OK) {
                     //TODO: What now??
-                }
-
-                timer_interrupt_counter++;
-                if(timer_interrupt_counter == 10){
-                    dprintf(0, "time since start timer : %lld\n", time_stamp());
-                    timer_interrupt_counter = 0;
                 }
             }
         }else if(label == seL4_VMFault){
@@ -422,7 +416,7 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
 
 static void
 cb(uint32_t id, void* data) {
-    dprintf(0, "call back from %d at %lld\n", id, (long long)time_stamp());
+    dprintf(0, "**call back from %d at %lld\n", id, (long long)time_stamp());
 }
 
 /*
@@ -446,7 +440,7 @@ int main(void) {
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
     /* Test code */
-    register_timer(10000000, cb, NULL);
+    register_timer(10000000, cb, NULL);     // 10s
 
     /* Stop and start timer*/
     stop_timer();
@@ -454,15 +448,15 @@ int main(void) {
     conditional_panic(result != CLOCK_R_OK, "Failed to initialise timer");
 
     /* Multiple timeout with the same time*/
-    register_timer(1000000, cb, NULL);
-    register_timer(1000000, cb, NULL);
-    register_timer(1000000, cb, NULL);
+    register_timer(1000000, cb, NULL);      // 1s
+    register_timer(1000000, cb, NULL);      // 1s
+    register_timer(1000000, cb, NULL);      // 1s
 
-    register_timer(10000000, cb, NULL);
+    register_timer(10000000, cb, NULL);     // 10s
 
     /* Timeouts that are close together */
-    register_timer(5000000, cb, NULL);
-    register_timer(5010000, cb, NULL);
+    register_timer(5000000, cb, NULL);      // 5s
+    register_timer(5010000, cb, NULL);      // 5.010s
     
     /* Removing timeouts */
     result = register_timer(500000, cb, NULL);
@@ -473,7 +467,7 @@ int main(void) {
     assert(result == CLOCK_R_FAIL);
     result = remove_timer(-1);
     assert(result == CLOCK_R_FAIL);
-    
+
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

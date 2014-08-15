@@ -10,7 +10,7 @@
 #include "clock.h"
 
 /* Time in miliseconds that an interrupt will be fired */
-#define CLOCK_INT_MILISEC 10
+#define CLOCK_INT_MILISEC 100
 #define CLOCK_INT_MICROSEC (CLOCK_INT_MILISEC*1000)
 /* Assumed ticking speed of the clock chosen, default 66MHz for ipg_clk */
 #define CLOCK_SPEED 66
@@ -20,17 +20,30 @@
 /* Constant to be loaded into Clock control register when it gets initialized */
 #define CLOCK_LOAD_VALUE (CLOCK_INT_MICROSEC*(CLOCK_SPEED_PRESCALED))
 
+#define EPIT_CR_CLKSRC_SHIFT    24      // Clock source shift (bits 24-25)
+#define EPIT_CR_OM_SHIFT        22      // OM shift (bits 22-23)
+#define EPIT_CR_STOPEN          BIT(21) // Stop enable bit
+#define EPIT_CR_WAITEN          BIT(19) // Wait enable bit
+#define EPIT_CR_DBGEN           BIT(18) // Debug enable bit
+#define EPIT_CR_IOVW            BIT(17) // Set to overwrite CNR when write to load register
+#define EPIT_CR_SWR             BIT(16)
+#define EPIT_CR_PRE_SHIFT       4       // Prescalar shift (bits 4-15)
+#define EPIT_CR_RLD             BIT(3)  // Reload bit
+#define EPIT_CR_OCIEN           BIT(2)  // Enable interrupt
+#define EPIT_CR_ENMOD           BIT(1)  // Set ENMOD to reload CNR when re-enable counter
+#define EPIT_CR_EN              BIT(0)  // Enable bit     
+
+#define EPIT_CR_CLKSRC          (1 << EPIT_CR_CLKSRC_SHIFT) // Peripheral clock
+#define EPIT_CR_PRESCALER       ((CLOCK_PRESCALER-1) << EPIT_CR_PRE_SHIFT)   
+
 #define EPIT1_IRQ_NUM       88
 #define EPIT1_BASE_PADDR    0x020D0000
 #define EPIT1_SIZE          0x4000
-// EPIT1_CR_BASE_MASK 0b000000_01_01_0_0_0_0_1_0_000000000000_1101;
-#define EPIT1_CR_MASK       0x0142000D
-#define EPIT1_CR            (EPIT1_CR_MASK | ((CLOCK_PRESCALER-1) << 4))
 
-#define EPIT_EN             1
-#define EPIT_SWR            16
-//EPIT1_CR_CLR 0b0000_0001_1000_0011_0000_0000_0001_1100;
-#define EPIT1_CR_CLR        0x0183001C
+#define EPIT2_IRQ_NUM       89
+#define EPIT2_BASE_PADDR    0x020D4000
+#define EPIT2_SIZE          0x4000
+
 
 #define CLOCK_N_TIMERS 64
 typedef struct {
@@ -56,17 +69,9 @@ static int ntimers;
 static timer_t timers[CLOCK_N_TIMERS];
 static bool initialised;
 
-static seL4_CPtr irq_handler;
-static clock_register_t *clkReg;
+static seL4_CPtr irq_handler1, irq_handler2;
+clock_register_t *epit1, *epit2;
 
-
-/*
- * Convert miliseconds to timestamp_t unit.
- */
-static timestamp_t ms2timestamp(uint64_t ms) {
-    timestamp_t time = (timestamp_t)ms*1000;
-    return time;
-}
 /* Swap timers in timers array */
 static void
 tswap(timer_t *timers, const int i, const int j) {
@@ -91,6 +96,27 @@ enable_irq(int irq, seL4_CPtr aep) {
     return cap;
 }
 
+
+/* We have similar setup for EPIT1 & EPIT2 */
+static void
+setup_epit(clock_register_t *epit) {
+    epit->cr |= EPIT_CR_SWR;
+    printf("Resetting an EPIT\n");
+    while (epit->cr & EPIT_CR_SWR);
+    printf("Done\n");
+
+    uint32_t tmp = 0;
+    tmp |= EPIT_CR_CLKSRC;
+    tmp |= EPIT_CR_PRESCALER;
+    tmp |= EPIT_CR_IOVW;
+    tmp |= EPIT_CR_RLD;
+    tmp |= EPIT_CR_ENMOD;
+    tmp |= EPIT_CR_OCIEN;
+    epit->cr = tmp;
+
+    printf("EPIT: CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", epit->cr, epit->lr, epit->cmpr, epit->cnr);
+}
+
 int start_timer(seL4_CPtr interrupt_ep) {
     if (initialised) {
         stop_timer();
@@ -104,20 +130,16 @@ int start_timer(seL4_CPtr interrupt_ep) {
         timers[i].registered = false;
     }
 
-    /* Create IRQ Handler */
-    irq_handler = enable_irq(EPIT1_IRQ_NUM, interrupt_ep);
+    irq_handler1 = enable_irq(EPIT1_IRQ_NUM, interrupt_ep);
+    epit1 = (clock_register_t*)map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
+    setup_epit(epit1);
+    epit1->cr |= EPIT_CR_EN;
+    epit1->lr = CLOCK_LOAD_VALUE;
 
-    /* Map device and initialize it */
-    //if mapdevice fails, it panics, 
-    clkReg = map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
-    clkReg->cr |= (1u << EPIT_SWR);
-    printf(" ");
-    while (clkReg->cr & (1u << EPIT_SWR));
-    printf("\n");
-    clkReg->cr = EPIT1_CR;
-    clkReg->lr = CLOCK_LOAD_VALUE;
-    clkReg->cmpr = 0;
-    printf("CR= 0x%x, LR=%u, CMPR=%u, CNR=%u\n", clkReg->cr, clkReg->lr, clkReg->cmpr, clkReg->cnr);
+    irq_handler2 = enable_irq(EPIT2_IRQ_NUM, interrupt_ep);
+    epit2 = (clock_register_t*)map_device((void*)EPIT2_BASE_PADDR, EPIT2_SIZE); 
+    setup_epit(epit2);
+    epit2->cr &= ~EPIT_CR_EN;
 
     initialised = true;
     return CLOCK_R_OK;
@@ -126,20 +148,46 @@ int start_timer(seL4_CPtr interrupt_ep) {
 
 int stop_timer(void){
     if (!initialised) return CLOCK_R_UINT;
-    /* Map device and turn it off */
-    clkReg->cr = EPIT1_CR_CLR;
-
     int err = 0;
-    /* Remove handler within kernel */
-    err = seL4_IRQHandler_Clear(irq_handler);
+    cspace_err_t cspace_err;
+    
+    /* Cleanup in seL4 kernel & cspace */
+    epit1->cr &= ~EPIT_CR_EN;
+    err = seL4_IRQHandler_Clear(irq_handler1);
     assert(!err);
+    cspace_err = cspace_delete_cap(cur_cspace, irq_handler1);
+    assert(cspace_err == CSPACE_NOERROR);
 
-    /* Free the irq_handler cap within cspace */
-    cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, irq_handler);
+    epit2->cr &= ~EPIT_CR_EN;
+    err = seL4_IRQHandler_Clear(irq_handler2);
+    assert(!err);
+    cspace_err = cspace_delete_cap(cur_cspace, irq_handler2);
     assert(cspace_err == CSPACE_NOERROR);
 
     initialised = false;
     return CLOCK_R_OK;
+}
+
+/* Check when the next timeout will happen
+ * if the next timeout is less than the resolution
+ * of our main timer interval, we use a second variable
+ * timer for finer resolution.
+ *
+ * If the next timeout is not within the main timer's 
+ * resolution , we will stop running till there is.
+ * */
+static void
+update_var_timer(void) {
+    timestamp_t cur_time = time_stamp();
+
+    if(timers[0].registered && timers[0].endtime <= cur_time + CLOCK_INT_MICROSEC){
+        uint32_t load_value = (timers[0].endtime - cur_time) * CLOCK_SPEED;
+        epit2->cr |= EPIT_CR_EN;
+        epit2->lr = load_value;
+        printf("update_var_timer: curtime=%llu, endtime=%llu, load_value=%u\n", cur_time, timers[0].endtime, load_value);
+    } else {
+        epit2->cr &= ~EPIT_CR_EN;
+    }
 }
 
 uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
@@ -169,6 +217,8 @@ uint32_t register_timer(uint64_t delay, timer_callback_t callback, void *data) {
         }
     }
 
+    update_var_timer();
+
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return id;
 }
@@ -197,15 +247,18 @@ int remove_timer(uint32_t id) {
     timers[ntimers-1].registered = false;
     ntimers -= 1;
 
+    update_var_timer();
+
     assert(ntimers >= 0 && ntimers <= CLOCK_N_TIMERS);
     return CLOCK_R_OK;
 }
 
-int timer_interrupt(void) {
-    if (!initialised) return CLOCK_R_UINT;
-
-    timestamp_t cur_time = time_stamp();
-    //printf("timer interrupt at %lld\n", cur_time);
+/*
+ * Check if there is a timeout. If there is, perform a callback
+ * @Return: true if there is at least 1 timeout, false otherwise
+ */
+static void
+check_timeout(timestamp_t cur_time) {
     int i;
     for (i=0; i<ntimers; i++) {
         if (timers[i].registered && timers[i].endtime <= cur_time) {
@@ -221,11 +274,30 @@ int timer_interrupt(void) {
         }
         ntimers -= i;
     }
+}
 
-    jiffy += 1;
-    clkReg->sr = 1;
-    int err = seL4_IRQHandler_Ack(irq_handler);
-    assert(!err);
+int timer_interrupt(void) {
+    if (!initialised) return CLOCK_R_UINT;
+
+    timestamp_t cur_time = time_stamp();
+    printf("---A timer interrupt occured at %lld\n", cur_time);
+
+    check_timeout(cur_time);
+    update_var_timer();
+
+    if (epit1->sr) {
+        printf("epit1 handled the interrupt\n");
+        jiffy += 1;
+        epit1->sr = 1;
+        int err = seL4_IRQHandler_Ack(irq_handler1);
+        assert(!err);
+    }
+    if (epit2->sr) {
+        printf("epit2 handled the interrupt\n");
+        epit2->sr = 1;
+        int err = seL4_IRQHandler_Ack(irq_handler2);
+        assert(!err);
+    }
 
     return CLOCK_R_OK;
 }
@@ -238,8 +310,7 @@ timestamp_t time_stamp(void) {
      * of the clock's counter EPIT_CNR. We also take care of the case when an
      * overflow has happened but haven't got acknowledged
      */
-    uint64_t cnr_diff = CLOCK_LOAD_VALUE - clkReg->cnr;
+    uint64_t cnr_diff = CLOCK_LOAD_VALUE - epit1->cnr;
     uint64_t offset = (uint64_t)CLOCK_INT_MICROSEC*cnr_diff / CLOCK_LOAD_VALUE;
-    /* If our clock's counter overflow bit(clkReg->sr) is set we increase the value we return */
-    return CLOCK_INT_MICROSEC * (jiffy + clkReg->sr) + offset; 
+    return CLOCK_INT_MICROSEC * (jiffy + epit1->sr) + offset; 
 }

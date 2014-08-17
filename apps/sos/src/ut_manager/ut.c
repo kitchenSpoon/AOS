@@ -105,6 +105,7 @@ static inline void _select_largest_contiguous(void){
                 contig_end = i + 1;
             }
             this_start = i + 1;
+            this_size = 0;
         }
     }
 

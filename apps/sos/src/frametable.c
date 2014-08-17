@@ -163,6 +163,8 @@ int frame_free(int id){
         return FRAME_IS_FAIL;
     }
 
+    if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) return FRAME_IS_FAIL;
+
     seL4_Word paddr = frametable[id].fte_paddr;
     seL4_CPtr frame_cap = frametable[id].fte_cap;
 

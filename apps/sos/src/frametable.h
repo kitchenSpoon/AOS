@@ -10,16 +10,17 @@ int frame_init(void);
 
 /*
  * Allocate a new frame that could be used in SOS.
- *      Note: This can allocate only 1 frame
- * Returns a virtual memory that could be referenced in SOS
+ *     
+ *     Note: This can allocate only 1 frame
+ * Returns //a virtual memory that could be referenced in SOS
  */
-seL4_Word frame_alloc(void);
+int frame_alloc(seL4_Word* vaddr);
 
 /*
  * Free the frame correspond to ADDR
  *
  * Returns 0 only if success
  */ 
-int frame_free(seL4_Word addr);
+int frame_free(int id);
 
 #endif /* _SOS_FRAME_TABLE_H_ */

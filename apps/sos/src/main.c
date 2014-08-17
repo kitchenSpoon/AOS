@@ -414,11 +414,6 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     return badged_cap;
 }
 
-static void
-cb(uint32_t id, void* data) {
-    dprintf(0, "**call back from %d at %lld\n", id, (long long)time_stamp());
-}
-
 /*
  * Main entry point - called by crt.
  */

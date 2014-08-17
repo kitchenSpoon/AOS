@@ -17,6 +17,12 @@
 #define DMA_SIZE_BITS       (22)
 #define DMA_VEND            (DMA_VSTART + (1ull << DMA_SIZE_BITS))
 
+/* Address where memory is used by frame table.
+ * Do not use address range between FRAME_TABLE_VSTART and FRAME_TABLE_VEND */
+#define FRAME_VSTART        (0x20000000)
+#define FRAME_MEMORY        (1ull << 29)            // 512MB
+#define FRAME_VEND          (FRAME_VSTART + FRAME_MEMORY)
+
 /* From this address onwards is where any devices will get mapped in
  * by the map_device function. You should not use any addresses beyond
  * here without first modifying map_device */

@@ -27,6 +27,7 @@
 #include "vmem_layout.h"
 #include "mapping.h"
 #include "clock.h"
+#include "frametable.h"
 
 #include <autoconf.h>
 
@@ -403,9 +404,79 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     err = dma_init(dma_addr, DMA_SIZE_BITS);
     conditional_panic(err, "Failed to intiialise DMA memory\n");
 
-    /* Initialise other system components here */
-
+    /* Initialise IPC */
     _sos_ipc_init(ipc_ep, async_ep);
+
+    /* Initialise frame table */
+    err = frame_init();
+    conditional_panic(err != FRAME_IS_OK, "Failed to initialise frame table\n");
+}
+
+#define TEST_1      1
+#define TEST_2      2
+#define TEST_3      4
+static void
+frametable_test(uint32_t test_mask) {
+    if (test_mask & TEST_1) {
+        printf("Starting test 1...\n");
+        /* Allocate 10 pages and make sure you can touch them all */
+        for (int i = 0; i < 10; i++) {
+            /* Allocate a page */
+            seL4_Word vaddr;
+            frame_alloc(&vaddr);
+            assert(vaddr);
+
+            /* Test you can touch the page */
+            *(int*)vaddr = 0x37;
+            assert(*(int*)vaddr == 0x37);
+
+            printf("Page #%d allocated at %p\n",  i, (void *) vaddr);
+        }
+        printf("Done!!!\n");
+    }
+    if (test_mask & TEST_2) {
+        printf("Starting test 2...\n");
+        /* Test that you eventually run out of memory gracefully,
+           and doesn't crash */
+        int i = 0;
+        for (;;i++) {
+            /* Allocate a page */
+            seL4_Word vaddr;
+            frame_alloc(&vaddr);
+            //printf("vaddr = 0x%08x\n", vaddr);
+            if (!vaddr) {
+                printf("Out of memory!\n");
+                break;
+            }
+
+            /* Test you can touch the page */
+            *(int*)vaddr = 0x37;
+            assert(*(int*)vaddr == 0x37);
+        }
+        printf("Allocated %d frames\n", i);
+        printf("Done!!!\n");
+    }
+    if (test_mask & TEST_3) {
+        printf("Starting test 3...\n");
+        /* Test that you never run out of memory if you always free frames. 
+           This loop should never finish */
+        for (int i = 0;; i++) {
+            /* Allocate a page */
+            seL4_Word vaddr;
+            int page = frame_alloc(&vaddr);
+            assert(vaddr != 0);
+
+            /* Test you can touch the page */
+            *(int*)vaddr = 0x37;
+            assert(*(int*)vaddr == 0x37);
+
+            printf("Page #%d allocated at %p\n",  i, (int*) vaddr);
+
+            frame_free(page);
+        }
+        printf("Done!!!\n");
+
+    }
 }
 
 static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
@@ -433,6 +504,9 @@ int main(void) {
     /* Initialize timer driver */
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
+
+    printf("before test\n");
+    frametable_test(TEST_1 | TEST_2);
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

@@ -32,6 +32,7 @@ typedef struct {
 frame_entry_t *frametable;
 int first_free;                     // Index of the first free/untyped frame
 static bool frame_initialised;
+size_t frametable_reserved;           // # of frames the frametable consumes
 
 /* Convert from an id in frametable to the corresponding vaddr */
 static seL4_Word
@@ -100,6 +101,9 @@ int frame_init(){
         frametable[i].fte_next_free = FRAME_INVALID;
     }
 
+    /* Mark the number of frames occupied by the frametable */
+    frametable_reserved = i;
+
     /* The ith frame is the first free frame */
     first_free = i;
 
@@ -159,7 +163,10 @@ int frame_free(int id){
     if (!frame_initialised) {
         return FRAME_IS_UNINT;
     }
-    if (id < 0 || id >= NFRAMES) {
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return FRAME_IS_FAIL;
+    }
+    if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
         return FRAME_IS_FAIL;
     }
 

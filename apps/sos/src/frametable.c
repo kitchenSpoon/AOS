@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <sel4/sel4.h>
 #include <cspace/cspace.h>
 #include <ut_manager/ut.h>
 #include <strings.h>
@@ -189,4 +190,17 @@ int frame_free(int id){
     first_free = id;
 
     return FRAME_IS_OK;
+}
+
+seL4_CPtr frame_get_cap(int id) {
+    if (!frame_initialised) {
+        return FRAME_IS_UNINT;
+    }
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return FRAME_IS_FAIL;
+    }
+    if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
+        return FRAME_IS_FAIL;
+    }
+    return frametable[id].fte_cap;
 }

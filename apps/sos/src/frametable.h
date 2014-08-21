@@ -15,7 +15,7 @@ int frame_init(void);
 
 /*
  * Allocate a new frame that could be used in SOS.
- *     Note: This can allocate only 1 frame
+ *
  * Returns an index of frametable that can be used with frame_free()
  *         or a negative number if failed
  */

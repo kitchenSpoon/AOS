@@ -20,7 +20,7 @@
 #include <ut_manager/ut.h>
 #include <mapping.h>
 
-#define verbose 0
+#define verbose 2
 #include <sys/debug.h>
 #include <sys/panic.h>
 

@@ -10,20 +10,21 @@ typedef pagetable_t* pagedir_t;
 
 /*
  * Initialise page table.
+ * This needs to be called after frametable is initalised.
  *
- * Returns 0 iff successful
+ * Returns PAGE_IS_OK iff successful
  */
 int pagetable_init(void);
 
 /*
  * Map a page in into the page table
- * Returns 0 if succesful
+ * Returns PAGE_IS_OK if succesful
  */
 int sos_page_map(pagedir_t* spd, seL4_Word* vaddr);
 
 /*
  * Unmap a page in into the page table
- * Returns 0 if successful
+ * Returns PAGE_IS_OK if successful
  */
 int sos_page_unmap(pagedir_t* spd, seL4_Word* vaddr);
 #endif /* _SOS_PAGE_TABLE_H_ */

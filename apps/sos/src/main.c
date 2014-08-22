@@ -21,14 +21,13 @@
 #include <serial/serial.h>
 
 #include "network.h"
-#include "elf.h"
 
 #include "ut_manager/ut.h"
 #include "vmem_layout.h"
 #include "mapping.h"
 #include "clock.h"
 #include "frametable.h"
-#include "pagetable.h"
+#include "addrspace.h"
 
 #include <autoconf.h>
 
@@ -156,6 +155,7 @@ void syscall_loop(seL4_CPtr ep) {
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
+            //TODO: add vm_fault handler here
             dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
                     seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
@@ -306,10 +306,13 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
+    //TODO Create an address space
+
     /* load the elf image */
     err = elf_load(tty_test_process.vroot, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
+    //TODO: Setup stack & heap
 
     /* Create a stack frame */
     stack_addr = ut_alloc(seL4_PageBits);

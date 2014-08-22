@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <string.h>
 #include <cspace/cspace.h>
+#include <sel4/sel4.h>
 #include <mapping.h>
 #include <sys/panic.h>
 

@@ -15,11 +15,16 @@ int frame_init(void);
 
 /*
  * Allocate a new frame that could be used in SOS.
- *     Note: This can allocate only 1 frame
+ *
  * Returns an index of frametable that can be used with frame_free()
  *         or a negative number if failed
  */
 int frame_alloc(seL4_Word* vaddr);
+
+/*
+ * Get capability given the id returned by frame_alloc()
+ */
+seL4_CPtr frame_get_cap(int id);
 
 /*
  * Free the frame correspond to ID / "physical address"

@@ -28,6 +28,7 @@
 #include "mapping.h"
 #include "clock.h"
 #include "frametable.h"
+#include "pagetable.h"
 
 #include <autoconf.h>
 

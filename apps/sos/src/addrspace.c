@@ -1,10 +1,22 @@
+#include <errno.h>
 #include "addrspace.h"
+#include "frametable.h"
 
+#define N_PAGETABLES       (1024)
 addrspace_t
-*as_create(void) {
-    // TODO: set up the first level pagetable for now
+*as_create(void);
 
-    return NULL;
+int
+as_init(addrspace_t *as) {
+    as->as_pd = (pagedir_t)alloc_kpages(1);
+    if (as->as_pd == NULL) {
+        return ENOMEM;
+    }
+    for (int i=0; i<N_PAGETABLES; i++) {
+        as->as_pd = NULL;
+    }
+
+    return 0;
 }
 
 void

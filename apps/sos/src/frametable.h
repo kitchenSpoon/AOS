@@ -1,5 +1,5 @@
-#ifndef _SOS_FRAME_TABLE_H_
-#define _SOS_FRAME_TABLE_H_
+#ifndef _LIBOS_FRAMETABLE_H_
+#define _LIBOS_FRAMETABLE_H_
 
 /* Return status for frame table */
 #define FRAME_IS_OK         (0)
@@ -40,4 +40,4 @@ seL4_CPtr frame_get_cap(int id);
  */
 seL4_Word alloc_kpages(int n);
 
-#endif /* _SOS_FRAME_TABLE_H_ */
+#endif /* _LIBOS_FRAMETABLE_H_ */

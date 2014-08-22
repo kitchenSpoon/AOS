@@ -7,6 +7,7 @@
 #include "apps_vmem_layout.h"
 #include "frametable.h"
 #include "addrspace.h"
+#include "mapping.h"
 
 #define STATUS_USED     0
 #define STATUS_FREE     1
@@ -19,14 +20,8 @@
 #define INDEX_1(a)          ((a) & INDEX_1_MASK >> 22)
 #define INDEX_2(a)          ((a) & INDEX_2_MASK >> 12)
 
-static int
-_map_pagetable(pagedir_t* pd, int i) {
-    return 0;
-}
-
 int
-sos_page_map(addrspace_t *as, seL4_Word vaddr) {
-    //TODO:
+sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_pd, cspace_t *app_cspace) {
     // This is the sos_map_page() function mentioned in the Milestone note
     // We could probably follow the map_page() code
     // Except that we need to do a lot more than that
@@ -34,9 +29,40 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr) {
     //     Call frame_alloc to get map SOS's vaddr to seL4's frame
     //     Get the frame cap from the frametable, map the application's vaddr to the same frame
     //     Map the application's vaddr to its own pagetable (the one we implement)
+
+    int err;
+    //int x = INDEX_1(vaddr);
+    //int y = INDEX_2(vaddr);
+    pagetable_entry_t pte;
+
+    /* Link SOS's VM to seL4 pagetable */
+    pte.frame_id = frame_alloc(&pte.kvaddr);
+    if (!pte.kvaddr) {
+        return PAGE_IS_FAIL;
+    }
+    pte.kframe_cap = frame_get_cap(pte.frame_id);
+
+    /* Link application's VM to seL4 pagetable */
+    pte.frame_cap = cspace_copy_cap(app_cspace, 
+                                 cur_cspace, 
+                                 pte.kframe_cap,
+                                 seL4_AllRights);
+    if (pte.frame_cap == CSPACE_NULL) {
+        frame_free(pte.kvaddr);
+        return PAGE_IS_FAIL;
+    }
+
+    err = map_page(pte.frame_cap, app_sel4_pd, vaddr, 
+                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    if (err) {
+        frame_free(pte.kvaddr);
+        cspace_delete_cap(app_cspace, pte.frame_cap);
+        return PAGE_IS_FAIL;
+    }
+
+
+
     return 0;
-    //int i = INDEX_1(vaddr);
-    //int j = INDEX_2(vaddr);
 
     /* Attempt the mapping */
     //int err = _map_page(pd, vaddr);

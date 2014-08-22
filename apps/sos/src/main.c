@@ -72,6 +72,8 @@ struct {
 
     cspace_t *croot;
 
+    addrspace_t *as;
+
 } tty_test_process;
 
 
@@ -306,7 +308,9 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
-    //TODO Create an address space
+    /* initialise address space */
+    err = as_init(tty_test_process.as);
+    conditional_panic(err, "Failed to initialise address space");
 
     /* load the elf image */
     err = elf_load(tty_test_process.vroot, elf_base);

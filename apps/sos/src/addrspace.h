@@ -1,17 +1,8 @@
-/*
- * Copyright 2014, NICTA
- *
- * This software may be distributed and modified according to the terms of
- * the BSD 2-Clause license. Note that NO WARRANTY is provided.
- * See "LICENSE_BSD2.txt" for details.
- *
- * @TAG(NICTA_BSD)
- */
-
 #ifndef _LIBOS_ADDRSPACE_H_
 #define _LIBOS_ADDRSPACE_H_
 
 #include <sel4/sel4.h>
+#include <cspace/cspace.h>
 
 #define PAGE_IS_OK         (0)
 #define PAGE_IS_FAIL       (-1)
@@ -20,7 +11,9 @@ typedef
 struct _pagetable_entry{
     int status;             // Either USED or FREE
     int frame_id;           // index returned by frametable
+    seL4_CPtr kframe_cap;    // frame cap of the allocated frame or NULL
     seL4_CPtr frame_cap;    // frame cap of the allocated frame or NULL
+    seL4_Word kvaddr;
 } pagetable_entry_t;
 
 typedef pagetable_entry_t* pagetable_t;
@@ -67,9 +60,11 @@ struct addrspace {
  *    as_define_heap - set up the heap region in the address space.
  */
 addrspace_t      *as_create(void);
-void              as_destroy(addrspace_t *);
+int               as_init(addrspace_t *as);
+void              as_destroy(addrspace_t *as);
 int               as_define_region(addrspace_t *as,
-                                   seL4_Word vaddr, size_t sz,
+                                   seL4_Word vaddr,
+                                   size_t sz,
                                    int32_t rights);
 int               as_define_stack(addrspace_t *as, seL4_Word *initstackptr);
 int               as_define_heap(addrspace_t *as);
@@ -93,8 +88,7 @@ int elf_load(seL4_ARM_PageDirectory dest_pd, char* elf_file);
  * Map a page in into the page table
  * Returns PAGE_IS_OK if succesful
  */
-int sos_page_map(addrspace_t *as, seL4_Word vaddr);
-
+int sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_pd, cspace_t *app_cspace);
 /*
  * Unmap a page in into the page table
  * Returns PAGE_IS_OK if successful

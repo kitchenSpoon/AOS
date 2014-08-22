@@ -19,60 +19,21 @@
 #define INDEX_1(a)          ((a) & INDEX_1_MASK >> 22)
 #define INDEX_2(a)          ((a) & INDEX_2_MASK >> 12)
 
-/*
- * Allocate N frames.
- * Note:
- *      Only works for n == 1 now
- *      Assume that pagetable functions do not need to free memory!!
- *
- * Return the new address if successful, or NULL otherwise
- */
-static seL4_Word
-_page_malloc(int n) {
-    assert(n == 1);
-
-    /*
-    static int allocated = 0;
-
-    seL4_Word vaddr = PAGE_VSTART + allocated * PAGE_SIZE;
-
-    frame_alloc(&vaddr);
-    if (vaddr != NULL) allocated++;
-
-    return vaddr;
-    */
-    seL4_Word vaddr;
-    frame_alloc(&vaddr);
-    return vaddr;
-}
-
 static int
 _map_pagetable(pagedir_t* pd, int i) {
     return 0;
 }
 
-static int
-_unmap_pagetable(pagedir_t* pd, int i) {
-    return 0;
-}
-
-static int
-_map_page(pagedir_t* pd, seL4_Word vaddr, uint32_t rights, uint32_t attr) {
-    // allocate pagetable if there is none
-    return PAGE_IS_OK;
-}
-
-static int
-_umap_page(pagedir_t* pd, seL4_Word vaddr) {
-    return PAGE_IS_OK;
-}
-
-pagedir_t* sos_addrspace_create(void) {
-    pagedir_t* ret = (pagedir_t*)_page_malloc(1);
-    return ret;
-}
-
-int sos_page_map(pagedir_t* pd, seL4_Word vaddr) {
+int
+sos_page_map(addrspace_t *as, seL4_Word vaddr) {
+    //TODO:
+    // This is the sos_map_page() function mentioned in the Milestone note
+    // We could probably follow the map_page() code
+    // Except that we need to do a lot more than that
+    // We need to do 3 things:
+    //     Call frame_alloc to get map SOS's vaddr to seL4's frame
+    //     Get the frame cap from the frametable, map the application's vaddr to the same frame
+    //     Map the application's vaddr to its own pagetable (the one we implement)
     return 0;
     //int i = INDEX_1(vaddr);
     //int j = INDEX_2(vaddr);
@@ -90,4 +51,5 @@ int sos_page_map(pagedir_t* pd, seL4_Word vaddr) {
     //return err;
 }
 
-int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
+int
+sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);

@@ -22,15 +22,22 @@ int frame_init(void);
 int frame_alloc(seL4_Word* vaddr);
 
 /*
- * Get capability given the id returned by frame_alloc()
- */
-seL4_CPtr frame_get_cap(int id);
-
-/*
  * Free the frame correspond to ID / "physical address"
  *
  * Returns FRAME_IS_OK only if successul
  */ 
 int frame_free(int frametable_id);
+
+/*
+ * Get capability given the id returned by frame_alloc()
+ */
+seL4_CPtr frame_get_cap(int id);
+
+/*
+ * Allocate N frames.
+ *
+ * Return the new address if successful, or NULL otherwise
+ */
+seL4_Word alloc_kpages(int n);
 
 #endif /* _SOS_FRAME_TABLE_H_ */

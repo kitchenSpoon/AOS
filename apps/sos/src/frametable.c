@@ -192,7 +192,8 @@ int frame_free(int id){
     return FRAME_IS_OK;
 }
 
-seL4_CPtr frame_get_cap(int id) {
+seL4_CPtr
+frame_get_cap(int id) {
     if (!frame_initialised) {
         return FRAME_IS_UNINT;
     }
@@ -203,4 +204,17 @@ seL4_CPtr frame_get_cap(int id) {
         return FRAME_IS_FAIL;
     }
     return frametable[id].fte_cap;
+}
+
+
+/*
+ * Note: Only works for n == 1 now
+ */
+seL4_Word
+alloc_kpages(int n) {
+    assert(n == 1);
+
+    seL4_Word vaddr;
+    frame_alloc(&vaddr);
+    return vaddr;
 }

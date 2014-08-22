@@ -39,8 +39,8 @@ struct region {
     
 typedef
 struct addrspace {
-    region_t *as_rhead;
     pagedir_t as_pd;
+    region_t *as_rhead;
     region_t *as_stack;
     region_t *as_heap;
     int as_loading;        // to ignore readonly permission on loading
@@ -88,11 +88,12 @@ int elf_load(seL4_ARM_PageDirectory dest_pd, char* elf_file);
  *
  *    sos_unmap_page - unmap a page
  */
+
 /*
  * Map a page in into the page table
  * Returns PAGE_IS_OK if succesful
  */
-int sos_page_map(pagedir_t* pd, seL4_Word vaddr);
+int sos_page_map(addrspace_t *as, seL4_Word vaddr);
 
 /*
  * Unmap a page in into the page table

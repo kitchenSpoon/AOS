@@ -87,7 +87,9 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
  * Map a page in into the page table
  * Returns PAGE_IS_OK if succesful
  */
-int sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_pd, cspace_t *app_cspace);
+int sos_page_map(addrspace_t *as,
+                 seL4_ARM_PageDirectory app_sel4_pd, cspace_t *app_cspace,
+                 seL4_Word vaddr, seL4_Word* kvaddr);
 /*
  * Unmap a page in into the page table
  * Returns PAGE_IS_OK if successful

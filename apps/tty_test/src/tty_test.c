@@ -38,12 +38,48 @@ thread_block(void){
     seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
 }
 
+#define NPAGES 27
+/* called from pt_test */
+static void
+do_pt_test( char *buf )
+{
+    int i;
+
+    /* set */
+    for(i = 0; i < NPAGES; i ++)
+        buf[i * 4096] = i;
+
+    /* check */
+    for(i = 0; i < NPAGES; i ++)
+        assert(buf[i * 4096] == i);
+}
+
+static void
+pt_test( void )
+{
+    /* need a decent sized stack */
+    char buf1[NPAGES * 4096], *buf2 = NULL;
+
+    /* check the stack is above phys mem */
+    assert((void *) buf1 > (void *) 0x20000000);
+
+    /* stack test */
+    do_pt_test(buf1);
+
+    /* heap test */
+    //buf2 = malloc(NPAGES * 4096);
+    //assert(buf2);
+    //do_pt_test(buf2);
+    //free(buf2);
+}
+
 int main(void){
     /* initialise communication */
     ttyout_init();
 
     do {
         printf("task:\tHello world, I'm\ttty_test!\n");
+        pt_test();
         thread_block();
         // sleep(1);	// Implement this as a syscall
     } while(1);

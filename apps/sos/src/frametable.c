@@ -118,10 +118,10 @@ frame_init(void){
 seL4_Word frame_alloc(void){
 
     if (!frame_initialised) {
-        return NULL;
+        return 0;
     }
     if(first_free == FRAME_INVALID) {
-        return NULL;
+        return 0;
     }
 
     int result;
@@ -133,7 +133,7 @@ seL4_Word frame_alloc(void){
     result = _map_to_sel4(seL4_CapInitThreadPD, vaddr,
                           &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
     if (result != FRAME_IS_OK) {
-        return NULL;
+        return 0;
     }
 
     frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;

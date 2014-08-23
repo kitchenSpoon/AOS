@@ -20,7 +20,9 @@
 #define INDEX_2(a)          ((a) & INDEX_2_MASK >> 12)
 
 int
-sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_pd, cspace_t *app_cspace) {
+sos_page_map(addrspace_t *as,
+             seL4_ARM_PageDirectory app_sel4_pd, cspace_t *app_cspace,
+             seL4_Word vaddr, seL4_Word* kvaddr) {
     // This is the sos_map_page() function mentioned in the Milestone note
     // We could probably follow the map_page() code
     // Except that we need to do a lot more than that
@@ -49,6 +51,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
         return PAGE_IS_FAIL;
     }
 
+    //todo: need to implement our own map_page if we want to free
     err = map_page(pte.frame_cap, app_sel4_pd, vaddr, 
                    seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
@@ -57,37 +60,30 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
         return PAGE_IS_FAIL;
     }
 
-    /*
-    //Insert PTE into application's pagetable
+    /* Insert PTE into application's pagetable */
     int x = INDEX_1(vaddr);
     int y = INDEX_2(vaddr);
-    //will as->as_pd ever be NULL?
+    assert(as->as_pd != NULL);
+    as->as_pd[x] = (pagetable_t)frame_alloc();
     if (as->as_pd[x] == NULL) {
-        as->as_pd[x] = (pagetable_entry_t*)alloc_kpages(1);
-        //out of memory
-        if (as->as_pd[x] == NULL) {
-            frame_free(pte.kvaddr);
-            cspace_delete_cap(app_cspace, pte.frame_cap);
-            
-            return PAGE_IS_FAIL;
-        }
+        /* No memory */
+        frame_free(pte.kvaddr);
+        cspace_delete_cap(app_cspace, pte.frame_cap);
+        //todo: unmap_page when implemented local map_page
+        return PAGE_IS_FAIL;
     }
-    as->as_pd[x][y] = pte;
-    */
+
+    as->as_pd[x][y] = (pagetable_entry_t*)malloc(sizeof(pagetable_entry_t));
+    if (as->as_pd[x][y] == NULL) {
+        frame_free(pte.kvaddr);
+        cspace_delete_cap(app_cspace, pte.frame_cap);
+        //todo: unmap_page when implemented local map_page
+        return PAGE_IS_FAIL;
+    }
+    *(as->as_pd[x][y]) = pte;
+    *kvaddr = pte.kvaddr;
 
     return 0;
-
-    /* Attempt the mapping */
-    //int err = _map_page(pd, vaddr);
-    //if (err) {
-    //    /* Assume the error was because we have no page table */
-    //    err = _map_pagetable(pd, i);
-    //    if (!err) {
-    //        /* Try the mapping again */
-    //        err = _map_page(pd, vaddr, rights, attr);
-    //    }
-    //}
-    //return err;
 }
 
 int

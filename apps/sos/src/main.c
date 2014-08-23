@@ -514,8 +514,7 @@ int main(void) {
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
-    printf("before test\n");
-    frametable_test(TEST_1 | TEST_2);
+    //frametable_test(TEST_1 | TEST_3);
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

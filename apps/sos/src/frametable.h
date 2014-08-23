@@ -40,4 +40,9 @@ seL4_CPtr frame_get_cap(int id);
  */
 seL4_Word alloc_kpages(int n);
 
+/*
+ *TODO 
+ */ 
+int free_kpages(int n);
+
 #endif /* _LIBOS_FRAMETABLE_H_ */

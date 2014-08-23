@@ -218,3 +218,12 @@ alloc_kpages(int n) {
     frame_alloc(&vaddr);
     return vaddr;
 }
+
+/*
+ * TODO
+ */
+int
+free_kpages(int n){
+    assert(n == 1);
+    return 1; 
+}

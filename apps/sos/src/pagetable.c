@@ -31,8 +31,6 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
     //     Map the application's vaddr to its own pagetable (the one we implement)
 
     int err;
-    //int x = INDEX_1(vaddr);
-    //int y = INDEX_2(vaddr);
     pagetable_entry_t pte;
 
     /* Link SOS's VM to seL4 pagetable */
@@ -60,7 +58,21 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
         return PAGE_IS_FAIL;
     }
 
-
+    //Insert PTE into application's pagetable
+    int x = INDEX_1(vaddr);
+    int y = INDEX_2(vaddr);
+    //will as->as_pd ever be NULL?
+    if (as->as_pd[x] == NULL) {
+        as->as_pd[x] = (pagetable_entry_t*)alloc_kpages(1);
+        //out of memory
+        if (as->as_pd[x] == NULL) {
+            frame_free(pte.kvaddr);
+            cspace_delete_cap(app_cspace, pte.frame_cap);
+            
+            return PAGE_IS_FAIL;
+        }
+    }
+    as->as_pd[x][y] = pte;
 
     return 0;
 
@@ -78,4 +90,23 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
 }
 
 int
-sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
+sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
+
+    //TODO
+    
+    //remove PTE from application's pagetable
+    int x = INDEX_1(vaddr);
+    int y = INDEX_2(vaddr);
+    
+    if (as->as_pd[x] != NULL) {
+        pagetable_entry_t *pte = as->as_pd[x][y];
+        as->as_pd[x][y] = NULL;
+        free(pte);
+    }
+    
+    //unmap page from application's pd?
+    
+    //frame_free
+    frame_free(pte.kvaddr);
+    cspace_delete_cap(app_cspace, pte.frame_cap);
+}

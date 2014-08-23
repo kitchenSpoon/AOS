@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <limits.h>
 #include <sel4/sel4.h>
 #include <cspace/cspace.h>
 #include <ut_manager/ut.h>
@@ -10,7 +11,6 @@
 #include "mapping.h"
 #include "vmem_layout.h"
 
-#define PAGE_SIZE                (1ull<<12)
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
 
 #define FRAME_STATUS_UNTYPED     0

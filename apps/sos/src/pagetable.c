@@ -4,7 +4,6 @@
 #include <assert.h>
 #include <string.h>
 
-#include "apps_vmem_layout.h"
 #include "frametable.h"
 #include "addrspace.h"
 #include "mapping.h"
@@ -58,6 +57,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
         return PAGE_IS_FAIL;
     }
 
+    /*
     //Insert PTE into application's pagetable
     int x = INDEX_1(vaddr);
     int y = INDEX_2(vaddr);
@@ -73,6 +73,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
         }
     }
     as->as_pd[x][y] = pte;
+    */
 
     return 0;
 
@@ -91,6 +92,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
 
 int
 sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
+/*
 
     //TODO
     
@@ -109,4 +111,6 @@ sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
     //frame_free
     frame_free(pte.kvaddr);
     cspace_delete_cap(app_cspace, pte.frame_cap);
+*/
+    return 0;
 }

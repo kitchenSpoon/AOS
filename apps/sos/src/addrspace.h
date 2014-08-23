@@ -16,17 +16,18 @@ struct _pagetable_entry{
     seL4_Word kvaddr;
 } pagetable_entry_t;
 
-typedef pagetable_entry_t* pagetable_t;
+typedef pagetable_entry_t** pagetable_t;
 typedef pagetable_t* pagedir_t;
 
 
 #define AS_REGION_R     (1)
 #define AS_REGION_W     (2)
+#define AS_REGION_ALL   (3)
 
 typedef struct region region_t;
 struct region {
     seL4_Word vbase, vtop; /* valid addr in this region [vabase, vtop) */
-    int rights;
+    uint32_t rights;
     region_t *next;
 };
     
@@ -60,13 +61,12 @@ struct addrspace {
  *    as_define_heap - set up the heap region in the address space.
  */
 addrspace_t      *as_create(void);
-int               as_init(addrspace_t *as);
 void              as_destroy(addrspace_t *as);
 int               as_define_region(addrspace_t *as,
                                    seL4_Word vaddr,
                                    size_t sz,
                                    int32_t rights);
-int               as_define_stack(addrspace_t *as, seL4_Word *initstackptr);
+int               as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
 int               as_define_heap(addrspace_t *as);
 
 /*
@@ -74,7 +74,7 @@ int               as_define_heap(addrspace_t *as);
  *    elf_load - load an ELF user program executable into the current
  *               address space. (i.e. the only one address space )
  */
-int elf_load(seL4_ARM_PageDirectory dest_pd, char* elf_file);
+int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
 
 /*
  * Functions in pagetable.c:

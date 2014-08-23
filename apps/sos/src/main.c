@@ -59,7 +59,7 @@ extern char _cpio_archive[];
 const seL4_BootInfo* _boot_info;
 
 
-struct {
+struct process {
 
     seL4_Word tcb_addr;
     seL4_TCB tcb_cap;
@@ -74,7 +74,8 @@ struct {
 
     addrspace_t *as;
 
-} tty_test_process;
+};
+struct process tty_test_process;
 
 
 #define SOS_SYSCALL_PRINT 0
@@ -152,7 +153,7 @@ void syscall_loop(seL4_CPtr ep) {
             if (badge & IRQ_BADGE_TIMER) {
                 int ret = timer_interrupt();
                 if (ret != CLOCK_R_OK) {
-                    //TODO: What now??
+                    //What now?
                 }
             }
         }else if(label == seL4_VMFault){
@@ -309,14 +310,17 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
     /* initialise address space */
-    err = as_init(tty_test_process.as);
-    conditional_panic(err, "Failed to initialise address space");
+    tty_test_process.as = as_create();
+    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
 
     /* load the elf image */
-    err = elf_load(tty_test_process.vroot, elf_base);
+    err = elf_load(tty_test_process.as, tty_test_process.vroot, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
-    //TODO: Setup stack & heap
+    /* set up the stack & the heap */
+    //TODO: use our implementation, not theirs
+    //as_define_stack(tty_test_process.as, (seL4_Word)PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    //as_define_heap(tty_test_process.as);
 
     /* Create a stack frame */
     stack_addr = ut_alloc(seL4_PageBits);

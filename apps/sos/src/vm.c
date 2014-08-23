@@ -7,7 +7,7 @@
 #include <ut_manager/ut.h>
 #include <strings.h>
 
-#include "frametable.h"
+#include "vm.h"
 #include "mapping.h"
 #include "vmem_layout.h"
 
@@ -200,4 +200,10 @@ frame_get_cap(seL4_Word vaddr) {
         return FRAME_IS_FAIL;
     }
     return frametable[id].fte_cap;
+}
+
+int
+sos_VMFaultHandler(seL4_Word faultAddr, seL4_Word faultType){
+    //sos_map_page(,faultAddr,);
+    return 0;
 }

@@ -28,6 +28,7 @@
 
 #include "ttyout.h"
 
+#define verbose 5
 // Block a thread forever
 // we do this by making an unimplemented system call.
 static void
@@ -74,6 +75,7 @@ pt_test( void )
 }
 
 int main(void){
+    dprintf(0, "dafaq\n");
     /* initialise communication */
     ttyout_init();
 

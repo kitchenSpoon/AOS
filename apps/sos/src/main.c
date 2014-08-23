@@ -26,7 +26,7 @@
 #include "vmem_layout.h"
 #include "mapping.h"
 #include "clock.h"
-#include "frametable.h"
+#include "vm.h"
 #include "addrspace.h"
 
 #include <autoconf.h>
@@ -162,8 +162,10 @@ void syscall_loop(seL4_CPtr ep) {
             dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
                     seL4_GetMR(0),
                     seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
-
-            assert(!"Unable to handle vm faults");
+            
+                    sos_VMFaultHandler(seL4_GetMR(1), seL4_GetMR(2));
+                    
+                assert(!"Unable to handle vm faults");
         }else if(label == seL4_NoFault) {
             /* System call */
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
@@ -318,25 +320,24 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(err, "Failed to load elf image");
 
     /* set up the stack & the heap */
-    //TODO: use our implementation, not theirs
-    //as_define_stack(tty_test_process.as, (seL4_Word)PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
-    //as_define_heap(tty_test_process.as);
+    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    as_define_heap(tty_test_process.as);
 
-    /* Create a stack frame */
-    stack_addr = ut_alloc(seL4_PageBits);
-    conditional_panic(!stack_addr, "No memory for stack");
-    err =  cspace_ut_retype_addr(stack_addr,
-                                 seL4_ARM_SmallPageObject,
-                                 seL4_PageBits,
-                                 cur_cspace,
-                                 &stack_cap);
-    conditional_panic(err, "Unable to allocate page for stack");
+    ///* Create a stack frame */
+    //stack_addr = ut_alloc(seL4_PageBits);
+    //conditional_panic(!stack_addr, "No memory for stack");
+    //err =  cspace_ut_retype_addr(stack_addr,
+    //                             seL4_ARM_SmallPageObject,
+    //                             seL4_PageBits,
+    //                             cur_cspace,
+    //                             &stack_cap);
+    //conditional_panic(err, "Unable to allocate page for stack");
 
-    /* Map in the stack frame for the user app */
-    err = map_page(stack_cap, tty_test_process.vroot,
-                   PROCESS_STACK_TOP - (1 << seL4_PageBits),
-                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    conditional_panic(err, "Unable to map stack IPC buffer for user app");
+    ///* Map in the stack frame for the user app */
+    //err = map_page(stack_cap, tty_test_process.vroot,
+    //               PROCESS_STACK_TOP - (1 << seL4_PageBits),
+    //               seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    //conditional_panic(err, "Unable to map stack IPC buffer for user app");
 
     /* Map in the IPC buffer for the thread */
     err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,

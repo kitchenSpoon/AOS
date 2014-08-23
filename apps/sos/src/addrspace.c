@@ -1,7 +1,7 @@
 #include <errno.h>
 #include <limits.h>
 #include "addrspace.h"
-#include "frametable.h"
+#include "vm.h"
 
 #define N_PAGETABLES       (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))

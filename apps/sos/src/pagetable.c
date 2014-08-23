@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include "frametable.h"
+#include "vm.h"
 #include "addrspace.h"
 #include "mapping.h"
 

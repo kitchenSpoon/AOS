@@ -1,5 +1,5 @@
-#ifndef _LIBOS_FRAMETABLE_H_
-#define _LIBOS_FRAMETABLE_H_
+#ifndef _LIBOS_VM_H_
+#define _LIBOS_VM_H_
 
 #define FRAME_IS_OK         0
 #define FRAME_IS_UNINT      (-1)
@@ -30,4 +30,6 @@ int frame_free(seL4_Word vaddr);
  */
 seL4_CPtr frame_get_cap(seL4_Word vaddr);
 
-#endif /* _LIBOS_FRAMETABLE_H_ */
+int sos_VMFaultHandler(seL4_Word faultAddr, seL4_Word faultType);
+
+#endif /* _LIBOS_VM_H_ */

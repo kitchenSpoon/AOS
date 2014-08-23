@@ -129,6 +129,7 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         return seL4_InvalidArgument;
     }
 
+    printf("Starting elf_load...\n");
     num_headers = elf_getNumProgramHeaders(elf_file);
     for (i = 0; i < num_headers; i++) {
         char *source_addr;
@@ -156,6 +157,7 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
                                        get_sel4_rights_from_elf(flags) & seL4_AllRights);
         conditional_panic(err != 0, "Elf loading failed!\n");
     }
+    printf("Finished elf_load\n");
 
     return 0;
 }

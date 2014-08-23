@@ -33,11 +33,11 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, seL4_ARM_PageDirectory app_sel4_p
     pagetable_entry_t pte;
 
     /* Link SOS's VM to seL4 pagetable */
-    pte.frame_id = frame_alloc(&pte.kvaddr);
+    pte.kvaddr = frame_alloc();
     if (!pte.kvaddr) {
         return PAGE_IS_FAIL;
     }
-    pte.kframe_cap = frame_get_cap(pte.frame_id);
+    pte.kframe_cap = frame_get_cap(pte.kvaddr);
 
     /* Link application's VM to seL4 pagetable */
     pte.frame_cap = cspace_copy_cap(app_cspace, 

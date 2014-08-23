@@ -10,7 +10,6 @@
 typedef
 struct _pagetable_entry{
     int status;             // Either USED or FREE
-    int frame_id;           // index returned by frametable
     seL4_CPtr kframe_cap;    // frame cap of the allocated frame or NULL
     seL4_CPtr frame_cap;    // frame cap of the allocated frame or NULL
     seL4_Word kvaddr;

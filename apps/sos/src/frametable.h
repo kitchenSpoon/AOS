@@ -1,11 +1,9 @@
 #ifndef _LIBOS_FRAMETABLE_H_
 #define _LIBOS_FRAMETABLE_H_
 
-/* Return status for frame table */
-#define FRAME_IS_OK         (0)
-#define FRAME_IS_UNINT      (-1)       // Frame is uninitialised
+#define FRAME_IS_OK         0
+#define FRAME_IS_UNINT      (-1)
 #define FRAME_IS_FAIL       (-2)
-
 /*
  * Initialise frame table. Reserve memory and initialise values for frame table 
  *
@@ -16,33 +14,20 @@ int frame_init(void);
 /*
  * Allocate a new frame that could be used in SOS.
  *
- * Returns an index of frametable that can be used with frame_free()
- *         or a negative number if failed
+ * Returns the vaddr of the allocated frame or NULL if failed
  */
-int frame_alloc(seL4_Word* vaddr);
+seL4_Word frame_alloc(void);
 
 /*
- * Free the frame correspond to ID / "physical address"
+ * Free the frame with this SOS's vaddr
  *
  * Returns FRAME_IS_OK only if successul
  */ 
-int frame_free(int frametable_id);
+int frame_free(seL4_Word vaddr);
 
 /*
- * Get capability given the id returned by frame_alloc()
+ * Get the capability of the frame pointed by vaddr
  */
-seL4_CPtr frame_get_cap(int id);
-
-/*
- * Allocate N frames.
- *
- * Return the new address if successful, or NULL otherwise
- */
-seL4_Word alloc_kpages(int n);
-
-/*
- *TODO 
- */ 
-int free_kpages(int n);
+seL4_CPtr frame_get_cap(seL4_Word vaddr);
 
 #endif /* _LIBOS_FRAMETABLE_H_ */

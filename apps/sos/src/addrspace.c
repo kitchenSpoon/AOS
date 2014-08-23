@@ -13,9 +13,7 @@ addrspace_t
         return as;
     
     /* Initialise page directory */
-    seL4_Word vaddr;
-    int frameid = frame_alloc(&vaddr);
-    (void)frameid;
+    seL4_Word vaddr = frame_alloc();
     as->as_pd = (pagedir_t)vaddr;
     if (as->as_pd == NULL) {
         free(as);
@@ -52,7 +50,7 @@ as_destroy(addrspace_t *as) {
         //TODO actually free them
         for(int i = 0; i < N_PAGETABLES; i++){
             if(as->as_pd[i] != NULL){
-                free_kpages(1);
+                frame_free((seL4_Word)as->as_pd[i]);
             }
         }
     }

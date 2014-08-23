@@ -434,8 +434,7 @@ frametable_test(uint32_t test_mask) {
         /* Allocate 10 pages and make sure you can touch them all */
         for (int i = 0; i < 10; i++) {
             /* Allocate a page */
-            seL4_Word vaddr;
-            frame_alloc(&vaddr);
+            seL4_Word vaddr = frame_alloc();
             assert(vaddr);
 
             /* Test you can touch the page */
@@ -453,8 +452,7 @@ frametable_test(uint32_t test_mask) {
         int i = 0;
         for (;;i++) {
             /* Allocate a page */
-            seL4_Word vaddr;
-            frame_alloc(&vaddr);
+            seL4_Word vaddr = frame_alloc();
             //printf("vaddr = 0x%08x\n", vaddr);
             if (!vaddr) {
                 printf("Out of memory!\n");
@@ -474,8 +472,7 @@ frametable_test(uint32_t test_mask) {
            This loop should never finish */
         for (int i = 0;; i++) {
             /* Allocate a page */
-            seL4_Word vaddr;
-            int page = frame_alloc(&vaddr);
+            seL4_Word vaddr = frame_alloc();
             assert(vaddr != 0);
 
             /* Test you can touch the page */
@@ -484,7 +481,7 @@ frametable_test(uint32_t test_mask) {
 
             printf("Page #%d allocated at %p\n",  i, (int*) vaddr);
 
-            frame_free(page);
+            frame_free(vaddr);
         }
         printf("Done!!!\n");
 

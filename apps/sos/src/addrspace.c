@@ -12,6 +12,7 @@ addrspace_t
     if (as == NULL)
         return as;
     
+    /* Initialise page directory */
     seL4_Word vaddr;
     int frameid = frame_alloc(&vaddr);
     (void)frameid;
@@ -25,7 +26,13 @@ addrspace_t
         as->as_pd[i] = NULL;
     }
 
-    return 0;
+    /* Initialise the remaining values */
+    as->as_rhead   = NULL;
+    as->as_stack   = NULL;
+    as->as_heap    = NULL;
+    as->as_loading = false;
+
+    return as;
 }
 
 void
@@ -73,6 +80,8 @@ static int
 _region_init(addrspace_t *as, seL4_Word vaddr, size_t sz,
         int rights, struct region* nregion)
 {
+    assert(as != NULL);
+
     nregion->vbase = vaddr;
     nregion->vtop = vaddr + sz;
     nregion->rights = rights;

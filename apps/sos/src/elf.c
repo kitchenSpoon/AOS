@@ -143,9 +143,13 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
 
-        /* Copy it across into the vspace. */
+        /* Define the region */
         dprintf(1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
-        as_define_region(as, vaddr, segment_size, AS_REGION_ALL);
+
+        err = as_define_region(as, vaddr, segment_size, AS_REGION_ALL);
+        conditional_panic(err, "Elf loading failed to define region\n");
+
+        /* Copy it across into the vspace. */
         err = load_segment_into_vspace(dest_as, source_addr, segment_size, file_size, vaddr,
                                        get_sel4_rights_from_elf(flags) & seL4_AllRights);
         conditional_panic(err != 0, "Elf loading failed!\n");

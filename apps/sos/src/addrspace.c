@@ -129,7 +129,7 @@ as_define_stack(addrspace_t *as, seL4_Word stack_top, int size) {
     if (stack == NULL) {
         return ENOMEM;
     }
-    int result = _region_init(as, stack_top, size, AS_REGION_ALL, stack);
+    int result = _region_init(as, stack_top-size, size, AS_REGION_ALL, stack);
     if (result) {
         free(stack);
         return result;

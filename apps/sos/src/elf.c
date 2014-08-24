@@ -55,13 +55,11 @@ static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
  * Inject data into the given vspace.
  * TODO: Don't keep these pages mapped in
  */
-static int load_segment_into_vspace(addrspace_t *as,
-                                    seL4_ARM_PageDirectory dest_as,
+static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest_as,
                                     char *src, unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
                                     unsigned long permissions) {
     assert(file_size <= segment_size);
-
     unsigned long pos;
 
     /* We work a page at a time in the destination vspace. */
@@ -75,8 +73,8 @@ static int load_segment_into_vspace(addrspace_t *as,
         int nbytes;
         int err;
 
-        vpage  = PAGE_ALIGN(dst);
-        err = sos_page_map(as, dest_as, cur_cspace, vpage, (seL4_Word*)&kdst);
+        vpage = PAGE_ALIGN(dst);
+        err = sos_page_map(as, dest_as, vpage, (seL4_Word*)&kdst);
         conditional_panic(err != PAGE_IS_OK, "Failed to do sos_map_page in elf_load\n");
 
         ///* First we need to create a frame */
@@ -118,7 +116,7 @@ static int load_segment_into_vspace(addrspace_t *as,
     return 0;
 }
 
-int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
+int elf_load(addrspace_t* as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
 
     int num_headers;
     int err;

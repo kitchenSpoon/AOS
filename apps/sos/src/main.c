@@ -28,6 +28,7 @@
 #include "clock.h"
 #include "vm.h"
 #include "addrspace.h"
+#include "proc.h"
 
 #include <autoconf.h>
 
@@ -58,24 +59,7 @@ extern char _cpio_archive[];
 
 const seL4_BootInfo* _boot_info;
 
-
-struct process {
-
-    seL4_Word tcb_addr;
-    seL4_TCB tcb_cap;
-
-    seL4_Word vroot_addr;
-    seL4_ARM_PageDirectory vroot;
-
-    seL4_Word ipc_buffer_addr;
-    seL4_CPtr ipc_buffer_cap;
-
-    cspace_t *croot;
-
-    addrspace_t *as;
-
-};
-struct process tty_test_process;
+extern process_t tty_test_process;
 
 
 #define SOS_SYSCALL_PRINT 0
@@ -135,6 +119,29 @@ void handle_syscall(seL4_Word badge, int num_args) {
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
+void handle_pagefault(void) {
+    dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
+            seL4_GetMR(0),
+            seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
+
+    seL4_CPtr reply_cap;
+    int result;
+
+    /* Save the caller */
+    reply_cap = cspace_save_reply_cap(cur_cspace);
+    assert(reply_cap != CSPACE_NULL);
+
+    result = sos_VMFaultHandler(seL4_GetMR(1), seL4_GetMR(2));
+    assert(result == 0);
+    printf("back!!\n");
+
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(100, 0, 0, 0);
+    seL4_Send(reply_cap, reply);
+
+    /* Free the saved reply cap */
+    cspace_free_slot(cur_cspace, reply_cap);
+}
+
 void syscall_loop(seL4_CPtr ep) {
 
     while (1) {
@@ -143,9 +150,11 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_MessageInfo_t message;
 
         message = seL4_Wait(ep, &badge);
+        printf("get message in syscall_loop\n");
         //printf("badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
+            printf("it's an interrupt\n");
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
                 network_irq();
@@ -158,15 +167,10 @@ void syscall_loop(seL4_CPtr ep) {
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
-            //TODO: add vm_fault handler here
-            dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
-                    seL4_GetMR(0),
-                    seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
-            
-                    sos_VMFaultHandler(seL4_GetMR(1), seL4_GetMR(2));
-                    
-                assert(!"Unable to handle vm faults");
+            handle_pagefault();
+
         }else if(label == seL4_NoFault) {
+            printf("it's a syscall\n");
             /* System call */
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 
@@ -320,24 +324,24 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(err, "Failed to load elf image");
 
     /* set up the stack & the heap */
-    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
-    as_define_heap(tty_test_process.as);
+    //as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    //as_define_heap(tty_test_process.as);
 
-    ///* Create a stack frame */
-    //stack_addr = ut_alloc(seL4_PageBits);
-    //conditional_panic(!stack_addr, "No memory for stack");
-    //err =  cspace_ut_retype_addr(stack_addr,
-    //                             seL4_ARM_SmallPageObject,
-    //                             seL4_PageBits,
-    //                             cur_cspace,
-    //                             &stack_cap);
-    //conditional_panic(err, "Unable to allocate page for stack");
+    /* Create a stack frame */
+    stack_addr = ut_alloc(seL4_PageBits);
+    conditional_panic(!stack_addr, "No memory for stack");
+    err =  cspace_ut_retype_addr(stack_addr,
+                                 seL4_ARM_SmallPageObject,
+                                 seL4_PageBits,
+                                 cur_cspace,
+                                 &stack_cap);
+    conditional_panic(err, "Unable to allocate page for stack");
 
-    ///* Map in the stack frame for the user app */
-    //err = map_page(stack_cap, tty_test_process.vroot,
-    //               PROCESS_STACK_TOP - (1 << seL4_PageBits),
-    //               seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    //conditional_panic(err, "Unable to map stack IPC buffer for user app");
+    /* Map in the stack frame for the user app */
+    err = map_page(stack_cap, tty_test_process.vroot,
+                   PROCESS_STACK_TOP - (1 << seL4_PageBits),
+                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    conditional_panic(err, "Unable to map stack IPC buffer for user app");
 
     /* Map in the IPC buffer for the thread */
     err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,

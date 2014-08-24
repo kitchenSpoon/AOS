@@ -10,6 +10,8 @@
 #include "vm.h"
 #include "mapping.h"
 #include "vmem_layout.h"
+#include "addrspace.h"
+#include "proc.h"
 
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
 
@@ -21,6 +23,10 @@
 
 #define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART) 
 #define VADDR_TO_ID(vaddr)  (((vaddr) - FRAME_VSTART) / PAGE_SIZE)
+
+#define PAGEMASK              ((PAGESIZE) - 1)
+#define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
+#define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
 
 /* Frame table entry structure */
 typedef struct {
@@ -146,6 +152,7 @@ seL4_Word frame_alloc(void){
     /* Update free frame list */
     first_free = frametable[ind].fte_next_free;
 
+    assert(IS_PAGESIZE_ALIGNED(vaddr));
     /* Now update the vaddr */
     return vaddr;
 }
@@ -202,8 +209,53 @@ frame_get_cap(seL4_Word vaddr) {
     return frametable[id].fte_cap;
 }
 
+static
+region_t*
+_region_probe(struct addrspace* as, seL4_Word addr) {
+    assert(as != NULL);
+    assert(addr != 0);
+
+    if(as->as_stack != NULL && as->as_stack->vbase <= addr && addr < as->as_stack->vtop)
+        return as->as_stack;
+
+    if(as->as_heap != NULL && as->as_heap->vbase <= addr && addr < as->as_heap->vtop)
+        return as->as_heap;
+
+    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
+        if (r->vbase <= addr && addr < r->vtop) {
+            return r;
+        }
+    }
+    return NULL;
+}
+
 int
-sos_VMFaultHandler(seL4_Word faultAddr, seL4_Word faultType){
-    //sos_map_page(,faultAddr,);
-    return 0;
+sos_VMFaultHandler(seL4_Word fault_addr, int fault_type){
+    if (fault_addr == 0) {
+        /* Derefenrecing NULL? */
+        return EINVAL;
+    }
+
+    addrspace_t *as = proc_getas();
+    if (as == NULL) {
+        /* Kernel is probably failed when bootstraping */
+        return EFAULT;
+    }
+
+    int result;
+
+    /* Check if the fault address is in a valid region */
+    region_t* reg = _region_probe(as, fault_addr);
+    if(reg != NULL){
+        /* If yes, map a page for this address to use */
+        seL4_Word kvaddr;
+        result = sos_page_map(as, proc_getvroot(), fault_addr, &kvaddr);
+        if (result) {
+            return result;
+        }
+
+        return 0;
+    }
+
+    return EFAULT;
 }

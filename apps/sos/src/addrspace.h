@@ -7,6 +7,8 @@
 #define PAGE_IS_OK         (0)
 #define PAGE_IS_FAIL       (-1)
 
+#define SEL4_N_PAGETABLES       (1<<12)
+
 typedef
 struct _pagetable_entry{
     int status;             // Either USED or FREE
@@ -29,7 +31,13 @@ struct region {
     uint32_t rights;
     region_t *next;
 };
-    
+
+typedef struct sel4_pt_node sel4_pt_node_t;
+struct sel4_pt_node {
+    seL4_ARM_PageTable pt;
+    sel4_pt_node_t *next;
+};
+
 typedef
 struct addrspace {
     pagedir_t as_pd;
@@ -37,6 +45,7 @@ struct addrspace {
     region_t *as_stack;
     region_t *as_heap;
     int as_loading;        // to ignore readonly permission on loading
+    sel4_pt_node_t* as_pthead;
 } addrspace_t;
 
 /*

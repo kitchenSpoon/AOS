@@ -33,6 +33,7 @@ addrspace_t
     as->as_stack   = NULL;
     as->as_heap    = NULL;
     as->as_loading = false;
+    as->as_pthead  = NULL;
 
     return as;
 }

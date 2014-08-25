@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <assert.h>
 #include <string.h>
+#include <ut_manager/ut.h>
 
 #include "vm.h"
 #include "addrspace.h"
@@ -24,14 +25,73 @@
 #define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
 #define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
 
-static
-int _create_pagetable(addrspace_t *as, int x) {
-    assert(as != NULL);
-    as->as_pd[x] = (pagetable_t)frame_alloc();
-    if (as->as_pd[x] == NULL) {
-        return PAGE_IS_FAIL;
+
+static void
+_insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap) {
+    sel4_pt_node_t* node = malloc(sizeof(sel4_pt_node_t));
+    node->pt = pt_cap;
+    node->next = as->as_pthead;
+    as->as_pthead = node;
+}
+
+/**
+ * Maps a page table into the root servers page directory
+ * @param vaddr The virtual address of the mapping
+ * @return 0 on success
+ */
+static int 
+_map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
+    seL4_Word pt_addr;
+    seL4_ARM_PageTable pt_cap;
+    int err;
+
+    /* Allocate a PT object */
+    pt_addr = ut_alloc(seL4_PageTableBits);
+    if(pt_addr == 0){
+        return !0;
     }
+    /* Create the frame cap */
+    err =  cspace_ut_retype_addr(pt_addr,
+                                 seL4_ARM_PageTableObject,
+                                 seL4_PageTableBits,
+                                 cur_cspace,
+                                 &pt_cap);
+    if(err){
+        ut_free(pt_addr, seL4_PageTableBits);
+        return !0;
+    }
+    /* Tell seL4 to map the PT in for us */
+    err = seL4_ARM_PageTable_Map(pt_cap,
+                                 pd,
+                                 vaddr,
+                                 seL4_ARM_Default_VMAttributes);
+    if (err) {
+        ut_free(pt_addr, seL4_PageTableBits);
+        cspace_delete_cap(cur_cspace, pt_cap);
+        return err;
+    }
+
+    _insert_pt(as, pt_cap);
     return 0;
+}
+
+static int 
+_map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_ARM_PageDirectory pd,
+          seL4_Word vaddr, seL4_CapRights rights, seL4_ARM_VMAttributes attr){
+    int err;
+
+    /* Attempt the mapping */
+    err = seL4_ARM_Page_Map(frame_cap, pd, vaddr, rights, attr);
+    if(err == seL4_FailedLookup){
+        /* Assume the error was because we have no page table */
+        err = _map_page_table(as, pd, vaddr);
+        if(!err){
+            /* Try the mapping again */
+            err = seL4_ARM_Page_Map(frame_cap, pd, vaddr, rights, attr);
+        }
+    }
+
+    return err;
 }
 
 int
@@ -46,9 +106,27 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
         return PAGE_IS_FAIL;
     }
 
-    int err;
+    int x, y, err;
     pagetable_entry_t pte;
-    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    seL4_Word vpage;
+
+    vpage = PAGE_ALIGN(vaddr);
+    x = INDEX_1(vpage);
+    y = INDEX_2(vpage);
+
+    if (as->as_pd[x] == NULL) {
+        /* Create pagetable if needed */
+        as->as_pd[x] = (pagetable_t)frame_alloc();
+        if (as->as_pd[x] == NULL) {
+            return PAGE_IS_FAIL;
+        }
+    }
+
+    if (as->as_pd[x][y] != NULL) {
+        /* page already exists */
+        return PAGE_IS_FAIL;
+    }
+
 
     /* First we create a frame in SOS */
     pte.kvaddr = frame_alloc();
@@ -66,8 +144,7 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
     }
 
     /* Map the frame into application's address spaces */
-    //todo: need to implement our own map_page if we want to free
-    err = map_page(pte.frame_cap, app_sel4_pd, vpage, 
+    err = _map_page(as, pte.frame_cap, app_sel4_pd, vpage, 
                    seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         frame_free(pte.kvaddr);
@@ -76,27 +153,6 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
     }
 
     /* Insert PTE into application's pagetable */
-    //TODO: move this step to above level and change the rollback steps
-    int x = INDEX_1(vpage);
-    int y = INDEX_2(vpage);
-
-    if (as->as_pd[x] == NULL) {
-        err = _create_pagetable(as, x);
-        if (err) {
-            frame_free(pte.kvaddr);
-            cspace_delete_cap(cur_cspace, pte.frame_cap);
-            //todo: unmap_page when implemented local map_page
-            return PAGE_IS_FAIL;
-        }
-    }
-
-    if (as->as_pd[x][y] != NULL) {
-        /* page already exists */
-        frame_free(pte.kvaddr);
-        cspace_delete_cap(cur_cspace, pte.frame_cap);
-        //todo: unmap_page when implemented local map_page
-        return PAGE_IS_FAIL;
-    }
     as->as_pd[x][y] = (pagetable_entry_t*)malloc(sizeof(pagetable_entry_t));
     if (as->as_pd[x][y] == NULL) {
         frame_free(pte.kvaddr);

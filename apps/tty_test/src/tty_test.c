@@ -69,11 +69,13 @@ pt_test( void )
     do_pt_test(buf1);
     printf("Passed!\n");
 
+    printf("Starting heap test...\n");
     /* heap test */
-    //buf2 = malloc(NPAGES * 4096);
-    //assert(buf2);
-    //do_pt_test(buf2);
-    //free(buf2);
+    buf2 = malloc(NPAGES * 4096);
+    assert(buf2);
+    do_pt_test(buf2);
+    free(buf2);
+    printf("Passed\n");
 }
 
 int main(void){

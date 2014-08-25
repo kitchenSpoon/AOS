@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <assert.h>
+//#include "vm.h"
 
 /*
  * Statically allocated morecore area.
@@ -22,7 +23,7 @@
  * This is rather terrible, but is the simplest option without a
  * huge amount of infrastructure.
  */
-#define MORECORE_AREA_BYTE_SIZE 0x100000
+#define MORECORE_AREA_BYTE_SIZE 0x10000
 char morecore_area[MORECORE_AREA_BYTE_SIZE];
 
 /* Pointer to free space in the morecore area. */
@@ -37,6 +38,7 @@ long
 sys_brk(va_list ap)
 {
 
+    //void *vaddr = (void*) frame_alloc();
     uintptr_t ret;
     uintptr_t newbrk = va_arg(ap, uintptr_t);
 

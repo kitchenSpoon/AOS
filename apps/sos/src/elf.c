@@ -106,8 +106,9 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
             memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - pos));
         }
 
+        seL4_CPtr sos_cap = sos_kframe_cap(as, vpage);
         /* Not observable to I-cache yet so flush the frame */
-        //seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
+        seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
         pos += nbytes;
         dst += nbytes;

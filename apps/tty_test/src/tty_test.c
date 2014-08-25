@@ -64,8 +64,10 @@ pt_test( void )
     /* check the stack is above phys mem */
     assert((void *) buf1 > (void *) 0x20000000);
 
+    printf("Starting stack test..\n");
     /* stack test */
     do_pt_test(buf1);
+    printf("Passed!\n");
 
     /* heap test */
     //buf2 = malloc(NPAGES * 4096);
@@ -75,7 +77,6 @@ pt_test( void )
 }
 
 int main(void){
-    dprintf(0, "dafaq\n");
     /* initialise communication */
     ttyout_init();
 

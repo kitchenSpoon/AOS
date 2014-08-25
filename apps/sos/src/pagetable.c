@@ -37,7 +37,6 @@ int _create_pagetable(addrspace_t *as, int x) {
 int
 sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
              seL4_Word vaddr, seL4_Word* kvaddr) {
-    printf("sos_page_page called for 0x%08x\n", vaddr);
     if (as == NULL) {
         return PAGE_IS_FAIL;
     }
@@ -134,4 +133,10 @@ sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
     cspace_delete_cap(cur_cspace, pte.frame_cap);
 */
     return 0;
+}
+
+seL4_CPtr sos_kframe_cap(addrspace_t *as, seL4_Word vaddr) {
+    int x = INDEX_1(vaddr);
+    int y = INDEX_2(vaddr);
+    return as->as_pd[x][y]->kframe_cap;
 }

@@ -95,4 +95,6 @@ int sos_page_map(addrspace_t *as,
  * Returns PAGE_IS_OK if successful
  */
 int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
+
+seL4_CPtr sos_kframe_cap(addrspace_t *as, seL4_Word vaddr);
 #endif /* _LIBOS_ADDRSPACE_H_ */

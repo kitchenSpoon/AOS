@@ -6,6 +6,10 @@
 #define N_PAGETABLES       (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 
+#define PAGEMASK              ((PAGE_SIZE) - 1)
+#define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
+#define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
+
 addrspace_t
 *as_create(void) {
     addrspace_t* as = malloc(sizeof(addrspace_t));
@@ -109,6 +113,12 @@ as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
     if (nregion == NULL) {
         return ENOMEM;
     }
+
+    /* Page align the page and the size */
+    vaddr = PAGE_ALIGN(vaddr);
+    sz = DIVROUNDUP(sz, PAGE_SIZE) * PAGE_SIZE;
+
+    /* Check region overlap */
     int result = _region_init(as, vaddr, sz, rights, nregion);
     if (result) {
         return result;
@@ -125,6 +135,10 @@ int
 as_define_stack(addrspace_t *as, seL4_Word stack_top, int size) {
     if (as == NULL)
         return EINVAL;
+
+    assert(IS_PAGESIZE_ALIGNED(stack_top));
+    size = DIVROUNDUP(size, PAGE_SIZE) * PAGE_SIZE;
+
     region_t *stack = malloc(sizeof(region_t));
     if (stack == NULL) {
         return ENOMEM;

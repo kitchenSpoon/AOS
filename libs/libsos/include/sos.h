@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <fcntl.h>
 #include <sel4/sel4.h>
 
 /* System calls for SOS */
@@ -28,24 +29,23 @@
 #define MAX_IO_BUF 0x1000
 #define N_NAME 32
 
-/* file modes */
-#define FM_EXEC  1
-#define FM_WRITE 2
-#define FM_READ  4
-typedef int fmode_t;
-
 /* stat file types */
 #define ST_FILE 1   /* plain file */
 #define ST_SPECIAL 2    /* special (console) file */
 typedef int st_type_t;
 
+typedef struct {
+  unsigned long seconds;
+  unsigned long useconds;
+} sos_time_t;
 
 typedef struct {
-  st_type_t st_type;    /* file type */
-  fmode_t   st_fmode;   /* access mode */
-  size_t    st_size;    /* file size in bytes */
-  long      st_ctime;   /* file creation time (ms since booting) */
-  long      st_atime;   /* file last access (open) time (ms since booting) */
+  st_type_t  st_type;    /* file type */
+  mode_t     st_mode;    /* protection - in SOS we use the user (owner)
+                            permissions only */
+  size_t     st_size;    /* file size in bytes */
+  sos_time_t st_mtime;   /* last modification time, seconds and microseconds
+                            since epoch (Jan 1 1970 GMT) */
 } sos_stat_t;
 
 typedef int fildes_t;
@@ -61,14 +61,15 @@ typedef struct {
 
 /* I/O system calls */
 
-fildes_t sos_sys_open(const char *path, fmode_t mode);
+fildes_t sos_sys_open(const char *path, int flags);
 /* Open file and return file descriptor, -1 if unsuccessful
  * (too many open files, console already open for reading).
- * A new file should be created if 'path' does not already exist.
+ * A new file should be created if 'path' does not already exist, with read
+ * and write permissions.
  * A failed attempt to open the console for reading (because it is already
  * open) will result in a context switch to reduce the cost of busy waiting
  * for the console.
- * "path" is file name, "mode" is one of O_RDONLY, O_WRONLY, O_RDWR.
+ * "path" is file name, "flags" is one of O_RDONLY, O_WRONLY, O_RDWR.
  */
 
 int sos_sys_close(fildes_t file);

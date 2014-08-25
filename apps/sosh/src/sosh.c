@@ -32,12 +32,12 @@ static sos_stat_t sbuf;
 
 static void prstat(const char *name) {
     /* print out stat buf */
-    printf("%c%c%c%c 0x%06x 0x%lx 0x%06lx %s\n",
+    printf("%c%c%c%c %8zu %8lu %s\n",
             sbuf.st_type == ST_SPECIAL ? 's' : '-',
-            sbuf.st_fmode & FM_READ ? 'r' : '-',
-            sbuf.st_fmode & FM_WRITE ? 'w' : '-',
-            sbuf.st_fmode & FM_EXEC ? 'x' : '-', sbuf.st_size, sbuf.st_ctime,
-            sbuf.st_atime, name);
+            sbuf.st_mode & S_IRUSR ? 'r' : '-',
+            sbuf.st_mode & S_IWUSR ? 'w' : '-',
+            sbuf.st_mode & S_IXUSR ? 'x' : '-',
+            sbuf.st_size, sbuf.st_mtime.seconds/60, name);
 }
 
 static int cat(int argc, char **argv) {
@@ -163,6 +163,23 @@ static int exec(int argc, char **argv) {
     return 0;
 }
 
+static int kill(int argc, char **argv) {
+    pid_t pid;
+
+    if (argc != 2) {
+        printf("Usage: %s <pid>\n", argv[0]);
+        return 1;
+    }
+
+    pid = (pid_t)atoi(argv[1]);
+    if (sos_process_delete(pid)) {
+        printf("invalid process\n");
+        return 1;
+    }
+
+    return 0;
+}
+
 static int dir(int argc, char **argv) {
     int i = 0, r;
     char buf[BUF_SIZ];
@@ -207,7 +224,7 @@ static int second_sleep(int argc,char *argv[]) {
         printf("Usage %s seconds\n", argv[0]);
         return 1;
     }
-    sleep(atoi(argv[0]));
+    sleep(atoi(argv[1]));
     return 0;
 }
 
@@ -218,7 +235,7 @@ static int milli_sleep(int argc,char *argv[]) {
         printf("Usage %s milliseconds\n", argv[0]);
         return 1;
     }
-    nanos = (uint64_t)atoi(argv[0]) * NS_IN_MS;
+    nanos = (uint64_t)atoi(argv[1]) * NS_IN_MS;
     /* Get whole seconds */
     tv.tv_sec = nanos / NS_IN_S;
     /* Get nanos remaining */
@@ -247,7 +264,7 @@ struct command {
 
 struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-        {"time", second_time}, {"mtime", micro_time} };
+        {"time", second_time}, {"mtime", micro_time}, {"kill", kill} };
 
 int main(void) {
     char buf[BUF_SIZ];
@@ -361,7 +378,7 @@ int main(void) {
             /* They might try to exec a program */
             if (sos_stat(argv[0], &sbuf) != 0) {
                 printf("Command \"%s\" not found\n", argv[0]);
-            } else if (!(sbuf.st_fmode & FM_EXEC)) {
+            } else if (!(sbuf.st_mode & S_IXUSR)) {
                 printf("File \"%s\" not executable\n", argv[0]);
             } else {
                 /* Execute the program */

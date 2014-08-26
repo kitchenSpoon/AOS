@@ -63,6 +63,7 @@ extern process_t tty_test_process;
 
 
 #define SOS_SYSCALL_PRINT 0
+#define SOS_SYSCALL_SYSBRK 1
 #define MAX_SERIAL_SEND 100
 
 seL4_CPtr _sos_ipc_ep_cap;
@@ -108,7 +109,16 @@ void handle_syscall(seL4_Word badge, int num_args) {
 
         break;
     }
-
+    case SOS_SYSCALL_SYSBRK:
+    {   
+        seL4_Word newbrk = (seL4_Word)seL4_GetMR(1);
+        newbrk = sos_sys_brk(newbrk, tty_test_process.as);
+        
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(newbrk, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+        
+        break;
+    }
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
@@ -321,7 +331,10 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
 
     /* set up the stack & the heap */
     as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
     as_define_heap(tty_test_process.as);
+    conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
+
 
     ///* Create a stack frame */
     //stack_addr = ut_alloc(seL4_PageBits);

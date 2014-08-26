@@ -71,7 +71,7 @@ _region_overlap(region_t* r1, region_t* r2) {
     assert(r1 != NULL && r2 != NULL);
 
     bool r1_left_r2 = (r1->vbase < r2->vbase && r1->vtop <= r2->vbase);
-    bool r1_right_r2 = (r1->vbase >= r2->vtop && r1->vtop > r2->vtop);
+    bool r1_right_r2 = (r1->vbase >= r2->vtop && r1->vtop >= r2->vtop);
     return !(r1_left_r2 || r1_right_r2);
 }
 
@@ -188,4 +188,35 @@ as_define_heap(addrspace_t *as) {
     as->as_heap = heap;
 
     return 0;
+}
+
+seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as){
+    //will this be Null or uninitialized?
+    //printf("vaddr = %d\n",(int)vaddr);
+    if(as == NULL || as->as_heap == NULL) return 0;
+    
+    if(vaddr == 0){
+        return as->as_heap->vbase;
+    }
+    if (vaddr < as->as_heap->vbase) {
+        return 0;
+    }
+    
+    seL4_Word oldtop = as->as_heap->vtop;
+    as->as_heap->vtop = vaddr;
+
+    if(as->as_stack != NULL && _region_overlap(as->as_heap, as->as_stack)){
+        as->as_heap->vtop = oldtop;
+        //printf("sysbrk region stack overlap\n");
+        return 0;
+    }
+
+    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
+        if (_region_overlap(as->as_heap, r)) {
+            as->as_heap->vtop = oldtop;
+            //printf("sysbrk region overlap\n");
+            return 0;
+        }
+    }
+    return vaddr;
 }

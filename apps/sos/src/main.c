@@ -130,28 +130,37 @@ void handle_syscall(seL4_Word badge, int num_args) {
 }
 
 void handle_pagefault(void) {
-    dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
-            seL4_GetMR(0),
-            seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
+    seL4_Word pc = seL4_GetMR(0);
+    seL4_Word fault_addr = seL4_GetMR(1);
+    bool ifault = (bool)seL4_GetMR(2);
+    seL4_Word fsr = seL4_GetMR(3);
+    dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", fault_addr, pc,
+            ifault ? "Instruction Fault" : "Data fault");
 
-    seL4_CPtr reply_cap;
-    int result;
-
-    /* Save the caller */
-    reply_cap = cspace_save_reply_cap(cur_cspace);
-    assert(reply_cap != CSPACE_NULL);
-
-    result = sos_VMFaultHandler(seL4_GetMR(1), seL4_GetMR(2));
-
-    if (result) {
-        //Kill the process
+    if (ifault) {
+        // we don't handle this
     } else {
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-        seL4_Send(reply_cap, reply);
-    }
+        seL4_CPtr reply_cap;
+        int err;
 
-    /* Free the saved reply cap */
-    cspace_free_slot(cur_cspace, reply_cap);
+        /* Save the caller */
+        reply_cap = cspace_save_reply_cap(cur_cspace);
+        assert(reply_cap != CSPACE_NULL);
+
+        err = sos_VMFaultHandler(fault_addr, fsr);
+        if (err) {
+            /* SOS doesn't handle the fault, the process is doing something
+             * wrong, kill it! */
+            // Just not replying to it for now
+            printf("Process is (pretend to be) killed\n");
+        } else {
+            seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+            seL4_Send(reply_cap, reply);
+        }
+
+        /* Free the saved reply cap */
+        cspace_free_slot(cur_cspace, reply_cap);
+    }
 }
 
 void syscall_loop(seL4_CPtr ep) {

@@ -112,9 +112,9 @@ as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
     sz = DIVROUNDUP(sz, PAGE_SIZE) * PAGE_SIZE;
 
     /* Check region overlap */
-    int result = _region_init(as, vaddr, sz, rights, nregion);
-    if (result) {
-        return result;
+    int err = _region_init(as, vaddr, sz, rights, nregion);
+    if (err) {
+        return err;
     }
 
     /* Add the new region to addrspace's region list */
@@ -136,10 +136,10 @@ as_define_stack(addrspace_t *as, seL4_Word stack_top, int size) {
     if (stack == NULL) {
         return ENOMEM;
     }
-    int result = _region_init(as, stack_top-size, size, seL4_AllRights, stack);
-    if (result) {
+    int err = _region_init(as, stack_top-size, size, seL4_AllRights, stack);
+    if (err) {
         free(stack);
-        return result;
+        return err;
     }
 
     as->as_stack = stack;
@@ -171,10 +171,10 @@ as_define_heap(addrspace_t *as) {
         return ENOMEM;
     }
 
-    int result = _region_init(as, heap_base, 0, seL4_AllRights, heap);
-    if (result) {
+    int err = _region_init(as, heap_base, 0, seL4_AllRights, heap);
+    if (err) {
         free(heap);
-        return result;
+        return err;
     }
 
     as->as_heap = heap;

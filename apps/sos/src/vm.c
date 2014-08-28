@@ -14,6 +14,7 @@
 #include "addrspace.h"
 #include "proc.h"
 
+#define RW_BIT    (1<<11)
 static
 region_t*
 _region_probe(struct addrspace* as, seL4_Word addr) {
@@ -35,7 +36,7 @@ _region_probe(struct addrspace* as, seL4_Word addr) {
 }
 
 int
-sos_VMFaultHandler(seL4_Word fault_addr, int fault_type){
+sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr){
     if (fault_addr == 0) {
         /* Derefenrecing NULL? */
         return EINVAL;
@@ -48,11 +49,14 @@ sos_VMFaultHandler(seL4_Word fault_addr, int fault_type){
     }
 
     int err;
+    bool fault_when_write = (bool)(fsr & RW_BIT);
 
     /* Check if the fault address is in a valid region */
     region_t* reg = _region_probe(as, fault_addr);
     if(reg != NULL){
-        /* If yes, map a page for this address to use */
+        if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
+            return EACCES;
+        }
         err = sos_page_map(as, proc_getvroot(), fault_addr, reg->rights);
         if (err) {
             return err;

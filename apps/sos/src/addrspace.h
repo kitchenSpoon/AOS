@@ -6,43 +6,41 @@
 
 #define SEL4_N_PAGETABLES       (1<<12)
 
+/* Pagetable related defs */
 typedef
 struct _pagetable_entry{
-    int status;             // Either USED or FREE
-    seL4_CPtr kframe_cap;    // frame cap of the allocated frame or NULL
-    seL4_CPtr frame_cap;    // frame cap of the allocated frame or NULL
-    seL4_Word kvaddr;
+    int status;              // Either USED or FREE
+    seL4_CPtr kframe_cap;    // frame cap of SOS's memory
+    seL4_CPtr frame_cap;     // frame cap of the user application's memory
+    seL4_Word kvaddr;        // virtual address of SOS relates to this pte
 } pagetable_entry_t;
 
 typedef pagetable_entry_t** pagetable_t;
 typedef pagetable_t* pagedir_t;
 
-
-#define AS_REGION_R     (1)
-#define AS_REGION_W     (2)
-#define AS_REGION_ALL   (3)
-
+/* Region defs */
 typedef struct region region_t;
 struct region {
-    seL4_Word vbase, vtop; /* valid addr in this region [vabase, vtop) */
-    uint32_t rights;
-    region_t *next;
+    seL4_Word vbase, vtop;  // valid addr in this region [vabase, vtop)
+    uint32_t rights;        // same format as seL4's seL4_CapRights for frame caps
+    region_t *next;         // link to the next region
 };
 
+/* sel4's pagetable link list nodes */
 typedef struct sel4_pt_node sel4_pt_node_t;
 struct sel4_pt_node {
     seL4_ARM_PageTable pt;
     sel4_pt_node_t *next;
 };
 
+/* The address space used in every user process */
 typedef
 struct addrspace {
     pagedir_t as_pd;
     region_t *as_rhead;
     region_t *as_stack;
     region_t *as_heap;
-    int as_loading;        // to ignore readonly permission on loading
-    sel4_pt_node_t* as_pthead;
+    sel4_pt_node_t* as_pt_head;
 } addrspace_t;
 
 /*
@@ -84,26 +82,39 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
 /*
  * Functions in pagetable.c:
  *
- *    sos_map_page - create and map a page
+ *    sos_map_page - create and map a page into indicated address for user
+ *              level application
  *
  *    sos_unmap_page - unmap a page
+ *    
+ *    sos_get_kframe_cap - get kframe_cap
+ *    
+ *    sos_get_kvaddr - get kvaddr
  */
 
 /*
- * Map a page in into the page table
- * Returns 0 if succesful
+ * Map a page in into the shadow Pagetable
+ * @param as - The addrspace we will perform the mapping
+ * @param app_sel4_pd - the sel4 page directory of the user level app
+ * @param vaddr - the user level virtual address that need to be mapped
+ * 
+ * @Returns 0 if succesful
  */
-int sos_page_map(addrspace_t *as,
-                 seL4_ARM_PageDirectory app_sel4_pd,
-                 seL4_Word vaddr, seL4_Word* kvaddr);
+int sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vaddr, uint32_t permissions);
+
 /*
  * Unmap a page in into the page table
  * Returns 0 if successful
  */
 int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
 
-seL4_CPtr sos_kframe_cap(addrspace_t *as, seL4_Word vaddr);
+/* Get the kframe_cap from the given ADDR in AS */
+seL4_CPtr sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr);
 
+/* Get the SOS's vaddr from the given application's ADDR in AS */
+seL4_CPtr sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr);
+
+/* SOS's handler for sys_brk system call */
 seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as);
 
 #endif /* _LIBOS_ADDRSPACE_H_ */

@@ -53,8 +53,7 @@ sos_VMFaultHandler(seL4_Word fault_addr, int fault_type){
     region_t* reg = _region_probe(as, fault_addr);
     if(reg != NULL){
         /* If yes, map a page for this address to use */
-        seL4_Word kvaddr;
-        err = sos_page_map(as, proc_getvroot(), fault_addr, &kvaddr);
+        err = sos_page_map(as, proc_getvroot(), fault_addr, reg->rights);
         if (err) {
             return err;
         }

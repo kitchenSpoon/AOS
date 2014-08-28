@@ -31,7 +31,7 @@ extern seL4_ARM_PageDirectory dest_as;
 /*
  * Convert ELF permissions into seL4 permissions.
  */
-static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
+static inline unsigned long get_sel4_rights_from_elf(unsigned long permissions) {
     seL4_Word result = 0;
 
     if (permissions & PF_R)
@@ -58,15 +58,16 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
     pos = 0;
     while(pos < segment_size) {
         seL4_Word vpage;
-        unsigned long kdst;
+        seL4_Word kdst;
         int nbytes;
         int err;
 
         vpage = PAGE_ALIGN(dst);
-        err = sos_page_map(as, dest_as, vpage, (seL4_Word*)&kdst);
+        err = sos_page_map(as, dest_as, vpage, permissions);
         if (err) {
             return err;
         }
+        kdst = sos_get_kvaddr(as, vpage);
 
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);
@@ -74,7 +75,7 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
             memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - pos));
         }
 
-        seL4_CPtr sos_cap = sos_kframe_cap(as, vpage);
+        seL4_CPtr sos_cap = sos_get_kframe_cap(as, vpage);
         /* Not observable to I-cache yet so flush the frame */
         seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
@@ -100,7 +101,7 @@ int elf_load(addrspace_t* as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
     num_headers = elf_getNumProgramHeaders(elf_file);
     for (i = 0; i < num_headers; i++) {
         char *source_addr;
-        unsigned long flags, file_size, segment_size, vaddr;
+        unsigned long flags, file_size, segment_size, vaddr, rights;
 
         /* Skip non-loadable segments (such as debugging data). */
         if (elf_getProgramHeaderType(elf_file, i) != PT_LOAD)
@@ -112,16 +113,17 @@ int elf_load(addrspace_t* as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         segment_size = elf_getProgramHeaderMemorySize(elf_file, i);
         vaddr = elf_getProgramHeaderVaddr(elf_file, i);
         flags = elf_getProgramHeaderFlags(elf_file, i);
+        rights = get_sel4_rights_from_elf(flags) & seL4_AllRights;
 
         /* Define the region */
         dprintf(1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
 
-        err = as_define_region(as, vaddr, segment_size, AS_REGION_ALL);
+        err = as_define_region(as, vaddr, segment_size, rights);
         conditional_panic(err, "Elf loading failed to define region\n");
 
         /* Copy it across into the vspace. */
-        err = load_segment_into_vspace(as, dest_as, source_addr, segment_size, file_size, vaddr,
-                                       get_sel4_rights_from_elf(flags) & seL4_AllRights);
+        err = load_segment_into_vspace(as, dest_as, source_addr,
+                                       segment_size, file_size, vaddr, rights);
         if (err) {
             return EFAULT;
         }

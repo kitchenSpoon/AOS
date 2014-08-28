@@ -29,8 +29,7 @@ addrspace_t
     as->as_rhead   = NULL;
     as->as_stack   = NULL;
     as->as_heap    = NULL;
-    as->as_loading = false;
-    as->as_pthead  = NULL;
+    as->as_pt_head  = NULL;
 
     return as;
 }
@@ -42,10 +41,6 @@ as_destroy(addrspace_t *as) {
     if(as == NULL){
         return;
     }
-
-    //if(as_loading){
-        //do something??
-    //}
 
     //Free page directory
     if(as->as_pd != NULL){
@@ -141,7 +136,7 @@ as_define_stack(addrspace_t *as, seL4_Word stack_top, int size) {
     if (stack == NULL) {
         return ENOMEM;
     }
-    int result = _region_init(as, stack_top-size, size, AS_REGION_ALL, stack);
+    int result = _region_init(as, stack_top-size, size, seL4_AllRights, stack);
     if (result) {
         free(stack);
         return result;
@@ -176,7 +171,7 @@ as_define_heap(addrspace_t *as) {
         return ENOMEM;
     }
 
-    int result = _region_init(as, heap_base, 0, AS_REGION_ALL, heap);
+    int result = _region_init(as, heap_base, 0, seL4_AllRights, heap);
     if (result) {
         free(heap);
         return result;
@@ -188,15 +183,13 @@ as_define_heap(addrspace_t *as) {
 }
 
 seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as){
-    //will this be Null or uninitialized?
-    //printf("vaddr = %d\n",(int)vaddr);
     if(as == NULL || as->as_heap == NULL) return 0;
     
     if(vaddr == 0){
         return as->as_heap->vbase;
     }
     if (vaddr < as->as_heap->vbase) {
-        return 0;
+        return as->as_heap->vtop = as->as_heap->vbase;
     }
     
     seL4_Word oldtop = as->as_heap->vtop;
@@ -204,14 +197,12 @@ seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as){
 
     if(as->as_stack != NULL && _region_overlap(as->as_heap, as->as_stack)){
         as->as_heap->vtop = oldtop;
-        //printf("sysbrk region stack overlap\n");
         return 0;
     }
 
     for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
         if (_region_overlap(as->as_heap, r)) {
             as->as_heap->vtop = oldtop;
-            //printf("sysbrk region overlap\n");
             return 0;
         }
     }

@@ -4,9 +4,6 @@
 #include <sel4/sel4.h>
 #include <cspace/cspace.h>
 
-#define PAGE_IS_OK         (0)
-#define PAGE_IS_FAIL       (-1)
-
 #define SEL4_N_PAGETABLES       (1<<12)
 
 typedef
@@ -94,14 +91,14 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
 
 /*
  * Map a page in into the page table
- * Returns PAGE_IS_OK if succesful
+ * Returns 0 if succesful
  */
 int sos_page_map(addrspace_t *as,
                  seL4_ARM_PageDirectory app_sel4_pd,
                  seL4_Word vaddr, seL4_Word* kvaddr);
 /*
  * Unmap a page in into the page table
- * Returns PAGE_IS_OK if successful
+ * Returns 0 if successful
  */
 int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
 

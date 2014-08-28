@@ -3,13 +3,10 @@
 
 #include <errno.h>
 
-#define FRAME_IS_OK         0
-#define FRAME_IS_UNINT      (-1)
-#define FRAME_IS_FAIL       (-2)
 /*
  * Initialise frame table. Reserve memory and initialise values for frame table 
  *
- * Returns FRAME_IS_OK iff successful
+ * Returns 0 iff successful
  */
 int frame_init(void);
 
@@ -23,14 +20,14 @@ seL4_Word frame_alloc(void);
 /*
  * Free the frame with this SOS's vaddr
  *
- * Returns FRAME_IS_OK only if successul
+ * Returns 0 only if successul
  */ 
 int frame_free(seL4_Word vaddr);
 
 /*
- * Get the capability of the frame pointed by vaddr
+ * Get the frame's cap associated with this sos's vaddr
  */
-seL4_CPtr frame_get_cap(seL4_Word vaddr);
+int frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap);
 
 int sos_VMFaultHandler(seL4_Word fault_addr, int fault_type);
 

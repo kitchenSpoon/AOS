@@ -142,10 +142,13 @@ void handle_pagefault(void) {
     assert(reply_cap != CSPACE_NULL);
 
     result = sos_VMFaultHandler(seL4_GetMR(1), seL4_GetMR(2));
-    assert(result == 0);
 
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-    seL4_Send(reply_cap, reply);
+    if (result) {
+        //Kill the process
+    } else {
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+    }
 
     /* Free the saved reply cap */
     cspace_free_slot(cur_cspace, reply_cap);
@@ -435,7 +438,7 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
 
     /* Initialise frame table */
     err = frame_init();
-    conditional_panic(err != FRAME_IS_OK, "Failed to initialise frame table\n");
+    conditional_panic(err, "Failed to initialise frame table\n");
 }
 
 #define TEST_1      1

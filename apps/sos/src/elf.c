@@ -12,9 +12,11 @@
 #include <elf/elf.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
 #include <cspace/cspace.h>
 
 #include "addrspace.h"
+#include "utility.h"
 
 #include <vmem_layout.h>
 #include <ut_manager/ut.h>
@@ -23,15 +25,6 @@
 #define verbose 2
 #include <sys/debug.h>
 #include <sys/panic.h>
-
-/* Minimum of two values. */
-#define MIN(a,b) (((a)<(b))?(a):(b))
-
-#define PAGESIZE              (1 << (seL4_PageBits))
-#define PAGEMASK              ((PAGESIZE) - 1)
-#define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
-#define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
-
 
 extern seL4_ARM_PageDirectory dest_as;
 
@@ -53,7 +46,6 @@ static inline seL4_Word get_sel4_rights_from_elf(unsigned long permissions) {
 
 /*
  * Inject data into the given vspace.
- * TODO: Don't keep these pages mapped in
  */
 static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest_as,
                                     char *src, unsigned long segment_size,
@@ -65,9 +57,6 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
     /* We work a page at a time in the destination vspace. */
     pos = 0;
     while(pos < segment_size) {
-        //seL4_Word paddr;
-        //seL4_CPtr sos_cap, tty_cap;
-        //seL4_Word vpage, kvpage;
         seL4_Word vpage;
         unsigned long kdst;
         int nbytes;
@@ -75,30 +64,9 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
 
         vpage = PAGE_ALIGN(dst);
         err = sos_page_map(as, dest_as, vpage, (seL4_Word*)&kdst);
-        conditional_panic(err != PAGE_IS_OK, "Failed to do sos_map_page in elf_load\n");
-
-        ///* First we need to create a frame */
-        //paddr = ut_alloc(seL4_PageBits);
-        //conditional_panic(!paddr, "Out of memory - could not allocate frame");
-        //err = cspace_ut_retype_addr(paddr,
-        //                            seL4_ARM_SmallPageObject,
-        //                            seL4_PageBits,
-        //                            cur_cspace,
-        //                            &tty_cap);
-        //conditional_panic(err, "Failed to retype to a frame object");
-
-        ///* Copy the frame cap as we need to map it into 2 address spaces */
-        //sos_cap = cspace_copy_cap(cur_cspace, cur_cspace, tty_cap, seL4_AllRights);
-        //conditional_panic(sos_cap == 0, "Failed to copy frame cap");
-
-        ///* Map the frame into tty_test address spaces */
-        //err = map_page(tty_cap, dest_as, vpage, permissions, 
-        //               seL4_ARM_Default_VMAttributes);
-        //conditional_panic(err, "Failed to map to tty address space");
-        ///* Map the frame into sos address spaces */
-        //err = map_page(sos_cap, seL4_CapInitThreadPD, kvpage, seL4_AllRights, 
-        //               seL4_ARM_Default_VMAttributes);
-        //conditional_panic(err, "Failed to map sos address space");
+        if (err) {
+            return err;
+        }
 
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);
@@ -154,7 +122,9 @@ int elf_load(addrspace_t* as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         /* Copy it across into the vspace. */
         err = load_segment_into_vspace(as, dest_as, source_addr, segment_size, file_size, vaddr,
                                        get_sel4_rights_from_elf(flags) & seL4_AllRights);
-        conditional_panic(err != 0, "Elf loading failed!\n");
+        if (err) {
+            return EFAULT;
+        }
     }
     printf("Finished elf_load\n");
 

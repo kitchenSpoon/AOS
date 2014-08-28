@@ -2,13 +2,10 @@
 #include <limits.h>
 #include "addrspace.h"
 #include "vm.h"
+#include "utility.h"
 
 #define N_PAGETABLES       (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
-
-#define PAGEMASK              ((PAGE_SIZE) - 1)
-#define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
-#define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
 
 addrspace_t
 *as_create(void) {

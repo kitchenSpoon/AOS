@@ -3,11 +3,13 @@
 #include <limits.h>
 #include <assert.h>
 #include <string.h>
+#include <strings.h>
 #include <ut_manager/ut.h>
 
 #include "vm.h"
 #include "addrspace.h"
 #include "mapping.h"
+#include "utility.h"
 
 #define STATUS_USED     0
 #define STATUS_FREE     1
@@ -18,13 +20,8 @@
 
 #define INDEX_1_MASK        (0xffc00000)
 #define INDEX_2_MASK        (0x003ff000)
-#define INDEX_1(a)          (((a) & INDEX_1_MASK) >> 22)
-#define INDEX_2(a)          (((a) & INDEX_2_MASK) >> 12)
-
-#define PAGEMASK              ((PAGE_SIZE) - 1)
-#define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
-#define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
-
+#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
+#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
 
 static void
 _insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap) {
@@ -48,7 +45,7 @@ _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
     /* Allocate a PT object */
     pt_addr = ut_alloc(seL4_PageTableBits);
     if(pt_addr == 0){
-        return !0;
+        return ENOMEM;
     }
     /* Create the frame cap */
     err =  cspace_ut_retype_addr(pt_addr,
@@ -58,7 +55,7 @@ _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
                                  &pt_cap);
     if(err){
         ut_free(pt_addr, seL4_PageTableBits);
-        return !0;
+        return EFAULT;
     }
     /* Tell seL4 to map the PT in for us */
     err = seL4_ARM_PageTable_Map(pt_cap,
@@ -68,7 +65,7 @@ _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
     if (err) {
         ut_free(pt_addr, seL4_PageTableBits);
         cspace_delete_cap(cur_cspace, pt_cap);
-        return err;
+        return EFAULT;
     }
 
     _insert_pt(as, pt_cap);
@@ -91,19 +88,19 @@ _map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_ARM_PageDirectory pd,
         }
     }
 
-    return err;
+    return err ? EFAULT : 0;
 }
 
 int
 sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
              seL4_Word vaddr, seL4_Word* kvaddr) {
     if (as == NULL) {
-        return PAGE_IS_FAIL;
+        return EINVAL;
     }
 
     if (as->as_pd == NULL) {
         /* Did you even call as_create? */
-        return PAGE_IS_FAIL;
+        return EFAULT;
     }
 
     int x, y, err;
@@ -111,36 +108,37 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
     seL4_Word vpage;
 
     vpage = PAGE_ALIGN(vaddr);
-    x = INDEX_1(vpage);
-    y = INDEX_2(vpage);
+    x = PT_L1_INDEX(vpage);
+    y = PT_L2_INDEX(vpage);
 
     if (as->as_pd[x] == NULL) {
         /* Create pagetable if needed */
         as->as_pd[x] = (pagetable_t)frame_alloc();
         if (as->as_pd[x] == NULL) {
-            return PAGE_IS_FAIL;
+            return ENOMEM;
         }
     }
 
     if (as->as_pd[x][y] != NULL) {
         /* page already exists */
-        return PAGE_IS_FAIL;
+        return EINVAL;
     }
 
 
     /* First we create a frame in SOS */
     pte.kvaddr = frame_alloc();
     if (!pte.kvaddr) {
-        return PAGE_IS_FAIL;
+        return ENOMEM;
     }
-    pte.kframe_cap = frame_get_cap(pte.kvaddr);
+    err = frame_get_cap(pte.kvaddr, &pte.kframe_cap);
+    assert(!err); // There should be no error
 
 
     /* Copy the frame cap as we need to map it into 2 address spaces */
     pte.frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, pte.kframe_cap, seL4_AllRights);
     if (pte.frame_cap == CSPACE_NULL) {
         frame_free(pte.kvaddr);
-        return PAGE_IS_FAIL;
+        return EFAULT;
     }
 
     /* Map the frame into application's address spaces */
@@ -149,7 +147,7 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
     if (err) {
         frame_free(pte.kvaddr);
         cspace_delete_cap(cur_cspace, pte.frame_cap);
-        return PAGE_IS_FAIL;
+        return err;
     }
 
     /* Insert PTE into application's pagetable */
@@ -158,11 +156,12 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd,
         frame_free(pte.kvaddr);
         cspace_delete_cap(cur_cspace, pte.frame_cap);
         //todo: unmap_page when implemented local map_page
-        return PAGE_IS_FAIL;
+        return ENOMEM;
     }
     *(as->as_pd[x][y]) = pte;
     *kvaddr = pte.kvaddr;
 
+    bzero((void*)pte.kvaddr, PAGE_SIZE);
     return 0;
 }
 
@@ -173,8 +172,8 @@ sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
     //TODO
     
     //remove PTE from application's pagetable
-    int x = INDEX_1(vaddr);
-    int y = INDEX_2(vaddr);
+    int x = PT_L1_INDEX(vaddr);
+    int y = PT_L2_INDEX(vaddr);
     
     if (as->as_pd[x] != NULL) {
         pagetable_entry_t *pte = as->as_pd[x][y];
@@ -192,7 +191,19 @@ sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
 }
 
 seL4_CPtr sos_kframe_cap(addrspace_t *as, seL4_Word vaddr) {
-    int x = INDEX_1(vaddr);
-    int y = INDEX_2(vaddr);
+    if (as == NULL) {
+        return EINVAL;
+    }
+    if (as->as_pd == NULL) {
+        /* Did you even call as_create? */
+        return EFAULT;
+    }
+
+    int x = PT_L1_INDEX(vaddr);
+    int y = PT_L2_INDEX(vaddr);
+    if (as->as_pd[x] == NULL || as->as_pd[x][y] == NULL) {
+        return EINVAL;
+    }
+
     return as->as_pd[x][y]->kframe_cap;
 }

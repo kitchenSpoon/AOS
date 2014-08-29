@@ -6,18 +6,11 @@
 
 #define SEL4_N_PAGETABLES       (1<<12)
 
-#define PTE_STATUS_BIT          (1)
+#define PTE_IN_USE_BIT          (1)
 #define PTE_KVADDR_MASK         (0xfffff000)
 
 /* Pagetable related defs */
-typedef
-struct _pagetable_entry{
-    seL4_CPtr pte_frame_cap; // frame cap of the user application's memory
-    seL4_Word pte_reg;       // bit 0 is the status, 1 means used, 0 means free
-                             // bits [31-12] are vaddr of SOS
-} pagetable_entry_t;
-
-typedef pagetable_entry_t** pagetable_t;
+typedef seL4_Word* pagetable_t;
 typedef pagetable_t* pagedir_t;
 
 /* Region defs */
@@ -38,7 +31,8 @@ struct sel4_pt_node {
 /* The address space used in every user process */
 typedef
 struct addrspace {
-    pagedir_t as_pd;
+    pagedir_t as_pd_caps;
+    pagedir_t as_pd_regs;
     region_t *as_rhead;
     region_t *as_stack;
     region_t *as_heap;

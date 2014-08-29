@@ -97,30 +97,37 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vadd
         return EINVAL;
     }
 
-    if (as->as_pd == NULL) {
+    if (as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         /* Did you even call as_create? */
         return EFAULT;
     }
 
     int x, y, err;
-    pagetable_entry_t pte;
     seL4_Word vpage, kvaddr;
-    seL4_CPtr kframe_cap;
+    seL4_CPtr kframe_cap, frame_cap;
 
 
     vpage = PAGE_ALIGN(vaddr);
     x = PT_L1_INDEX(vpage);
     y = PT_L2_INDEX(vpage);
 
-    if (as->as_pd[x] == NULL) {
+    if (as->as_pd_regs[x] == NULL) {
+        assert(as->as_pd_caps[x] == NULL);
+
         /* Create pagetable if needed */
-        as->as_pd[x] = (pagetable_t)frame_alloc();
-        if (as->as_pd[x] == NULL) {
+        as->as_pd_regs[x] = (pagetable_t)frame_alloc();
+        if (as->as_pd_regs[x] == NULL) {
+            return ENOMEM;
+        }
+
+        as->as_pd_caps[x] = (pagetable_t)frame_alloc();
+        if (as->as_pd_caps[x] == 0) {
+            frame_free((seL4_Word)as->as_pd_regs[x]);
             return ENOMEM;
         }
     }
 
-    if ((as->as_pd[x][y] != NULL) && (as->as_pd[x][y]->pte_reg & PTE_STATUS_BIT)) {
+    if (as->as_pd_regs[x][y] & PTE_IN_USE_BIT) {
         /* page already mapped */
         return EINVAL;
     }
@@ -136,58 +143,29 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vadd
 
 
     /* Copy the frame cap as we need to map it into 2 address spaces */
-    pte.pte_frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, permissions);
-    if (pte.pte_frame_cap == CSPACE_NULL) {
+    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, permissions);
+    if (frame_cap == CSPACE_NULL) {
         frame_free(kvaddr);
         return EFAULT;
     }
 
     /* Map the frame into application's address spaces */
-    err = _map_page(as, pte.pte_frame_cap, app_sel4_pd, vpage, 
+    err = _map_page(as, frame_cap, app_sel4_pd, vpage, 
                    permissions, seL4_ARM_Default_VMAttributes);
     if (err) {
         frame_free(kvaddr);
-        cspace_delete_cap(cur_cspace, pte.pte_frame_cap);
+        cspace_delete_cap(cur_cspace, frame_cap);
         return err;
     }
 
     /* Insert PTE into application's pagetable */
-    as->as_pd[x][y] = (pagetable_entry_t*)malloc(sizeof(pagetable_entry_t));
-    if (as->as_pd[x][y] == NULL) {
-        frame_free(kvaddr);
-        cspace_delete_cap(cur_cspace, pte.pte_frame_cap);
-        //todo: unmap_page when implemented local map_page
-        return ENOMEM;
-    }
-    bzero((void*)kvaddr, PAGE_SIZE);
-
-    pte.pte_reg = kvaddr | PTE_STATUS_BIT;
-    *(as->as_pd[x][y]) = pte;
+    as->as_pd_regs[x][y] = kvaddr | PTE_IN_USE_BIT;
+    as->as_pd_caps[x][y] = frame_cap;
     return 0;
 }
 
 int
 sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
-/*
-
-    //TODO
-    
-    //remove PTE from application's pagetable
-    int x = PT_L1_INDEX(vaddr);
-    int y = PT_L2_INDEX(vaddr);
-    
-    if (as->as_pd[x] != NULL) {
-        pagetable_entry_t *pte = as->as_pd[x][y];
-        as->as_pd[x][y] = NULL;
-        free(pte);
-    }
-    
-    //unmap page from application's pd?
-    
-    //frame_free
-    frame_free(pte.pte_reg);
-    cspace_delete_cap(cur_cspace, pte.pte_frame_cap);
-*/
     return 0;
 }
 
@@ -196,7 +174,7 @@ int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap) 
     if (as == NULL) {
         return EINVAL;
     }
-    if (as->as_pd == NULL) {
+    if (as->as_pd_regs == NULL || as->as_pd_caps == NULL) {
         /* Did you even call as_create? */
         return EFAULT;
     }
@@ -204,12 +182,11 @@ int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap) 
     int err;
     int x = PT_L1_INDEX(vaddr);
     int y = PT_L2_INDEX(vaddr);
-    if (as->as_pd[x] == NULL || as->as_pd[x][y] == NULL ||
-            (as->as_pd[x][y]->pte_reg & PTE_STATUS_BIT) == 0) {
+    if (as->as_pd_regs[x] == NULL || !(as->as_pd_regs[x][y] & PTE_IN_USE_BIT)) {
         return EINVAL;
     }
 
-    seL4_Word kvaddr = as->as_pd[x][y]->pte_reg & PTE_KVADDR_MASK;
+    seL4_Word kvaddr = as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
     err = frame_get_cap(kvaddr, kframe_cap);
     if (err) {
         return err;
@@ -221,18 +198,17 @@ int sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr, seL4_Word *kvaddr) {
     if (as == NULL) {
         return EINVAL;
     }
-    if (as->as_pd == NULL) {
+    if (as->as_pd_regs == NULL || as->as_pd_caps == NULL) {
         /* Did you even call as_create? */
         return EFAULT;
     }
 
     int x = PT_L1_INDEX(vaddr);
     int y = PT_L2_INDEX(vaddr);
-    if (as->as_pd[x] == NULL || as->as_pd[x][y] == NULL ||
-            (as->as_pd[x][y]->pte_reg & PTE_STATUS_BIT) == 0) {
+    if (as->as_pd_regs[x] == NULL || !(as->as_pd_regs[x][y] & PTE_IN_USE_BIT)) {
         return EINVAL;
     }
 
-    *kvaddr = (as->as_pd[x][y]->pte_reg & PTE_KVADDR_MASK);
+    *kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
     return 0;
 }

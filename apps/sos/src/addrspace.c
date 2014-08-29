@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <strings.h>
 #include <limits.h>
 #include "addrspace.h"
 #include "vm.h"
@@ -13,17 +14,23 @@ addrspace_t
     if (as == NULL)
         return as;
     
-    /* Initialise page directory */
+    /* Initialise page directories */
     seL4_Word vaddr = frame_alloc();
-    as->as_pd = (pagedir_t)vaddr;
-    if (as->as_pd == NULL) {
+    if (vaddr == 0) {
         free(as);
         return NULL;
     }
+    as->as_pd_caps = (pagedir_t)vaddr;
 
-    for (int i=0; i<N_PAGETABLES; i++) {
-        as->as_pd[i] = NULL;
+    vaddr = frame_alloc();
+    if (vaddr == 0) {
+        free(as);
+        return NULL;
     }
+    as->as_pd_regs = (pagedir_t)vaddr;
+
+    bzero((void*)as->as_pd_caps, PAGE_SIZE);
+    bzero((void*)as->as_pd_regs, PAGE_SIZE);
 
     /* Initialise the remaining values */
     as->as_rhead   = NULL;
@@ -43,11 +50,11 @@ as_destroy(addrspace_t *as) {
     }
 
     //Free page directory
-    if(as->as_pd != NULL){
+    if(as->as_pd_regs != NULL){
         //TODO actually free them
         for(int i = 0; i < N_PAGETABLES; i++){
-            if(as->as_pd[i] != NULL){
-                frame_free((seL4_Word)as->as_pd[i]);
+            if(as->as_pd_regs[i] != NULL){
+                frame_free((seL4_Word)as->as_pd_regs[i]);
             }
         }
     }

@@ -48,13 +48,22 @@ sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr){
         return EFAULT;
     }
 
+    if (sos_page_is_mapped(as, fault_addr)) {
+        /* This must be a readonly fault */
+        return EACCES;
+    }
+
     int err;
     bool fault_when_write = (bool)(fsr & RW_BIT);
+    bool fault_when_read = !fault_when_write;
 
     /* Check if the fault address is in a valid region */
     region_t* reg = _region_probe(as, fault_addr);
     if(reg != NULL){
         if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
+            return EACCES;
+        }
+        if (fault_when_read && !(reg->rights & seL4_CanRead)) {
             return EACCES;
         }
         err = sos_page_map(as, proc_getvroot(), fault_addr, reg->rights);

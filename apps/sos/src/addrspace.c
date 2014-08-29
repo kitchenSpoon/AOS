@@ -139,17 +139,39 @@ as_define_stack(addrspace_t *as, seL4_Word stack_top, int size) {
     assert(IS_PAGESIZE_ALIGNED(stack_top));
     size = DIVROUNDUP(size, PAGE_SIZE) * PAGE_SIZE;
 
-    region_t *stack = malloc(sizeof(region_t));
+    region_t *stack, *page_guard;
+    int stack_base;
+    int err;
+    stack = malloc(sizeof(region_t));
     if (stack == NULL) {
         return ENOMEM;
     }
-    int err = _region_init(as, stack_top-size, size, seL4_AllRights, stack);
+    page_guard = malloc(sizeof(region_t));
+    if (page_guard == NULL) {
+        free(stack);
+        return ENOMEM;
+    }
+
+    stack_base = stack_top - size;
+    err = _region_init(as, stack_base, size, seL4_AllRights, stack);
     if (err) {
         free(stack);
+        free(page_guard);
+        return err;
+    }
+
+    err = _region_init(as, stack_base - PAGE_SIZE, PAGE_SIZE, 0, page_guard);
+    if (err) {
+        free(stack);
+        free(page_guard);
         return err;
     }
 
     as->as_stack = stack;
+
+    page_guard->next = as->as_rhead;
+    as->as_rhead = page_guard->next;
+
     return 0;
 }
 

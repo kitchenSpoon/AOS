@@ -82,11 +82,30 @@ static void
 readonly_test(void) {
     printf("Start readonly permission test..\n");
     printf("btw, The process will be killed so you won't see any more notice\n");
-    int* addr = 0x9000;
+    int* addr = (int*)0x9000;
     
-    *addr = (int*)0x42;
+    *addr = 0x42;
     
     printf("You should not see this!!!\n");
+}
+
+#define STACK_START     (0x90000000)
+#define STACK_SIZE      (1<<24)
+static void
+stack_overflow_test(void) {
+    printf("Start stack overflow test..\n");
+    printf("stacktop = 0x%08x, stackbase = 0x%08x\n", STACK_START, STACK_START-STACK_SIZE);
+
+    int* addr = (int*)(STACK_START - (1<<24) + 4);
+    printf("accessing addr = 0x%08x\n", addr);
+    *addr = 0x42;
+
+    addr = (int*)(STACK_START - STACK_SIZE - 4);
+    printf("accessing addr = 0x%08x\n", addr);
+    printf("Should die after this\n");
+    *addr = 0x42;
+
+    printf("NOOOO, test failed\n");
 }
 
 int main(void){
@@ -96,7 +115,8 @@ int main(void){
     do {
         printf("task:\tHello world, I'm\ttty_test!\n");
         pt_test();
-        readonly_test();
+        //readonly_test();
+        stack_overflow_test();
         thread_block();
         // sleep(1);	// Implement this as a syscall
     } while(1);

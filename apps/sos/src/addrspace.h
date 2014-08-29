@@ -104,6 +104,9 @@ int sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word 
  */
 int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
 
+/* Check if page at address VADDR is mapped */
+bool sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr);
+
 /* Get the kframe_cap from the given ADDR in AS */
 int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap);
 

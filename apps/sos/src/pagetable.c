@@ -169,6 +169,17 @@ sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
     return 0;
 }
 
+bool
+sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr) {
+    if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
+        return false;
+    }
+
+    int x = PT_L1_INDEX(vaddr);
+    int y = PT_L2_INDEX(vaddr);
+    return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_IN_USE_BIT));
+}
+
 int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap) {
     *kframe_cap = 0;
     if (as == NULL) {

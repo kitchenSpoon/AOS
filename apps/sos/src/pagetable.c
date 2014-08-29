@@ -104,7 +104,9 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vadd
 
     int x, y, err;
     pagetable_entry_t pte;
-    seL4_Word vpage;
+    seL4_Word vpage, kvaddr;
+    seL4_CPtr kframe_cap;
+
 
     vpage = PAGE_ALIGN(vaddr);
     x = PT_L1_INDEX(vpage);
@@ -118,48 +120,49 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vadd
         }
     }
 
-    if (as->as_pd[x][y] != NULL) {
-        /* page already exists */
+    if ((as->as_pd[x][y] != NULL) && (as->as_pd[x][y]->pte_reg & PTE_STATUS_BIT)) {
+        /* page already mapped */
         return EINVAL;
     }
 
 
     /* First we create a frame in SOS */
-    pte.kvaddr = frame_alloc();
-    if (!pte.kvaddr) {
+    kvaddr = frame_alloc();
+    if (!kvaddr) {
         return ENOMEM;
     }
-    err = frame_get_cap(pte.kvaddr, &pte.kframe_cap);
+    err = frame_get_cap(kvaddr, &kframe_cap);
     assert(!err); // There should be no error
 
 
     /* Copy the frame cap as we need to map it into 2 address spaces */
-    pte.frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, pte.kframe_cap, permissions);
-    if (pte.frame_cap == CSPACE_NULL) {
-        frame_free(pte.kvaddr);
+    pte.pte_frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, permissions);
+    if (pte.pte_frame_cap == CSPACE_NULL) {
+        frame_free(kvaddr);
         return EFAULT;
     }
 
     /* Map the frame into application's address spaces */
-    err = _map_page(as, pte.frame_cap, app_sel4_pd, vpage, 
+    err = _map_page(as, pte.pte_frame_cap, app_sel4_pd, vpage, 
                    permissions, seL4_ARM_Default_VMAttributes);
     if (err) {
-        frame_free(pte.kvaddr);
-        cspace_delete_cap(cur_cspace, pte.frame_cap);
+        frame_free(kvaddr);
+        cspace_delete_cap(cur_cspace, pte.pte_frame_cap);
         return err;
     }
 
     /* Insert PTE into application's pagetable */
     as->as_pd[x][y] = (pagetable_entry_t*)malloc(sizeof(pagetable_entry_t));
     if (as->as_pd[x][y] == NULL) {
-        frame_free(pte.kvaddr);
-        cspace_delete_cap(cur_cspace, pte.frame_cap);
+        frame_free(kvaddr);
+        cspace_delete_cap(cur_cspace, pte.pte_frame_cap);
         //todo: unmap_page when implemented local map_page
         return ENOMEM;
     }
-    *(as->as_pd[x][y]) = pte;
+    bzero((void*)kvaddr, PAGE_SIZE);
 
-    bzero((void*)pte.kvaddr, PAGE_SIZE);
+    pte.pte_reg = kvaddr | PTE_STATUS_BIT;
+    *(as->as_pd[x][y]) = pte;
     return 0;
 }
 
@@ -182,13 +185,14 @@ sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
     //unmap page from application's pd?
     
     //frame_free
-    frame_free(pte.kvaddr);
-    cspace_delete_cap(cur_cspace, pte.frame_cap);
+    frame_free(pte.pte_reg);
+    cspace_delete_cap(cur_cspace, pte.pte_frame_cap);
 */
     return 0;
 }
 
-seL4_CPtr sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr) {
+int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap) {
+    *kframe_cap = 0;
     if (as == NULL) {
         return EINVAL;
     }
@@ -197,16 +201,23 @@ seL4_CPtr sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr) {
         return EFAULT;
     }
 
+    int err;
     int x = PT_L1_INDEX(vaddr);
     int y = PT_L2_INDEX(vaddr);
-    if (as->as_pd[x] == NULL || as->as_pd[x][y] == NULL) {
+    if (as->as_pd[x] == NULL || as->as_pd[x][y] == NULL ||
+            (as->as_pd[x][y]->pte_reg & PTE_STATUS_BIT) == 0) {
         return EINVAL;
     }
 
-    return as->as_pd[x][y]->kframe_cap;
+    seL4_Word kvaddr = as->as_pd[x][y]->pte_reg & PTE_KVADDR_MASK;
+    err = frame_get_cap(kvaddr, kframe_cap);
+    if (err) {
+        return err;
+    }
+    return 0;
 }
 
-seL4_Word sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr) {
+int sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr, seL4_Word *kvaddr) {
     if (as == NULL) {
         return EINVAL;
     }
@@ -217,9 +228,11 @@ seL4_Word sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr) {
 
     int x = PT_L1_INDEX(vaddr);
     int y = PT_L2_INDEX(vaddr);
-    if (as->as_pd[x] == NULL || as->as_pd[x][y] == NULL) {
+    if (as->as_pd[x] == NULL || as->as_pd[x][y] == NULL ||
+            (as->as_pd[x][y]->pte_reg & PTE_STATUS_BIT) == 0) {
         return EINVAL;
     }
 
-    return as->as_pd[x][y]->kvaddr;
+    *kvaddr = (as->as_pd[x][y]->pte_reg & PTE_KVADDR_MASK);
+    return 0;
 }

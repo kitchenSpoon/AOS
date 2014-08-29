@@ -6,13 +6,15 @@
 
 #define SEL4_N_PAGETABLES       (1<<12)
 
+#define PTE_STATUS_BIT          (1)
+#define PTE_KVADDR_MASK         (0xfffff000)
+
 /* Pagetable related defs */
 typedef
 struct _pagetable_entry{
-    int status;              // Either USED or FREE
-    seL4_CPtr kframe_cap;    // frame cap of SOS's memory
-    seL4_CPtr frame_cap;     // frame cap of the user application's memory
-    seL4_Word kvaddr;        // virtual address of SOS relates to this pte
+    seL4_CPtr pte_frame_cap; // frame cap of the user application's memory
+    seL4_Word pte_reg;       // bit 0 is the status, 1 means used, 0 means free
+                             // bits [31-12] are vaddr of SOS
 } pagetable_entry_t;
 
 typedef pagetable_entry_t** pagetable_t;
@@ -109,10 +111,10 @@ int sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word 
 int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
 
 /* Get the kframe_cap from the given ADDR in AS */
-seL4_CPtr sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr);
+int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap);
 
 /* Get the SOS's vaddr from the given application's ADDR in AS */
-seL4_CPtr sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr);
+int sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr, seL4_Word *kvaddr);
 
 /* SOS's handler for sys_brk system call */
 seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as);

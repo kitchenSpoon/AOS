@@ -59,6 +59,7 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
     while(pos < segment_size) {
         seL4_Word vpage;
         seL4_Word kdst;
+        seL4_CPtr sos_cap;
         int nbytes;
         int err;
 
@@ -67,7 +68,10 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
         if (err) {
             return err;
         }
-        kdst = sos_get_kvaddr(as, vpage);
+        err = sos_get_kvaddr(as, vpage, &kdst);
+        if (err) {
+            return err;
+        }
 
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);
@@ -75,7 +79,10 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
             memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - pos));
         }
 
-        seL4_CPtr sos_cap = sos_get_kframe_cap(as, vpage);
+        err = sos_get_kframe_cap(as, vpage, &sos_cap);
+        if (err) {
+            return err;
+        }
         /* Not observable to I-cache yet so flush the frame */
         seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 

@@ -15,6 +15,8 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <assert.h>
+//#include "vm.h"
+#include <sel4/sel4.h>
 
 /*
  * Statically allocated morecore area.
@@ -22,8 +24,16 @@
  * This is rather terrible, but is the simplest option without a
  * huge amount of infrastructure.
  */
-#define MORECORE_AREA_BYTE_SIZE 0x100000
+#define MORECORE_AREA_BYTE_SIZE 0x10000
 char morecore_area[MORECORE_AREA_BYTE_SIZE];
+
+/* Syscall sysbreak id */
+#define SOS_SYSCALL_SYSBRK (1)
+
+/**
+ * This is our system call endpoint cap, as defined by the root server
+ */
+#define SYSCALL_ENDPOINT_SLOT (1)
 
 /* Pointer to free space in the morecore area. */
 static uintptr_t morecore_base = (uintptr_t) &morecore_area;
@@ -36,20 +46,18 @@ static uintptr_t morecore_top = (uintptr_t) &morecore_area[MORECORE_AREA_BYTE_SI
 long
 sys_brk(va_list ap)
 {
-
-    uintptr_t ret;
+    //printf("sysbrk\n");
     uintptr_t newbrk = va_arg(ap, uintptr_t);
+    //printf("newbrk before = %d\n",newbrk);
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_SYSBRK);
+    seL4_SetMR(1, newbrk);
+    seL4_MessageInfo_t message = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    newbrk = seL4_MessageInfo_get_label(message); 
+    //printf("newbrk result = %d\n",newbrk);
 
-    /*if the newbrk is 0, return the bottom of the heap*/
-    if (!newbrk) {
-        ret = morecore_base;
-    } else if (newbrk < morecore_top && newbrk > (uintptr_t)&morecore_area[0]) {
-        ret = morecore_base = newbrk;
-    } else {
-        ret = 0;
-    }
-
-    return ret;
+    return newbrk;
 }
 
 /* Large mallocs will result in muslc calling mmap, so we do a minimal implementation

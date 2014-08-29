@@ -21,14 +21,14 @@
 #include <serial/serial.h>
 
 #include "network.h"
-#include "elf.h"
 
 #include "ut_manager/ut.h"
 #include "vmem_layout.h"
 #include "mapping.h"
 #include "clock.h"
-#include "frametable.h"
-#include "pagetable.h"
+#include "vm.h"
+#include "addrspace.h"
+#include "proc.h"
 
 #include <autoconf.h>
 
@@ -59,24 +59,11 @@ extern char _cpio_archive[];
 
 const seL4_BootInfo* _boot_info;
 
-
-struct {
-
-    seL4_Word tcb_addr;
-    seL4_TCB tcb_cap;
-
-    seL4_Word vroot_addr;
-    seL4_ARM_PageDirectory vroot;
-
-    seL4_Word ipc_buffer_addr;
-    seL4_CPtr ipc_buffer_cap;
-
-    cspace_t *croot;
-
-} tty_test_process;
+extern process_t tty_test_process;
 
 
 #define SOS_SYSCALL_PRINT 0
+#define SOS_SYSCALL_SYSBRK 1
 #define MAX_SERIAL_SEND 100
 
 seL4_CPtr _sos_ipc_ep_cap;
@@ -122,7 +109,16 @@ void handle_syscall(seL4_Word badge, int num_args) {
 
         break;
     }
-
+    case SOS_SYSCALL_SYSBRK:
+    {   
+        seL4_Word newbrk = (seL4_Word)seL4_GetMR(1);
+        newbrk = sos_sys_brk(newbrk, tty_test_process.as);
+        
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(newbrk, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+        
+        break;
+    }
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
@@ -131,6 +127,40 @@ void handle_syscall(seL4_Word badge, int num_args) {
 
     /* Free the saved reply cap */
     cspace_free_slot(cur_cspace, reply_cap);
+}
+
+void handle_pagefault(void) {
+    seL4_Word pc = seL4_GetMR(0);
+    seL4_Word fault_addr = seL4_GetMR(1);
+    bool ifault = (bool)seL4_GetMR(2);
+    seL4_Word fsr = seL4_GetMR(3);
+    dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", fault_addr, pc,
+            ifault ? "Instruction Fault" : "Data fault");
+
+    if (ifault) {
+        // we don't handle this
+    } else {
+        seL4_CPtr reply_cap;
+        int err;
+
+        /* Save the caller */
+        reply_cap = cspace_save_reply_cap(cur_cspace);
+        assert(reply_cap != CSPACE_NULL);
+
+        err = sos_VMFaultHandler(fault_addr, fsr);
+        if (err) {
+            /* SOS doesn't handle the fault, the process is doing something
+             * wrong, kill it! */
+            // Just not replying to it for now
+            printf("Process is (pretend to be) killed\n");
+        } else {
+            seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+            seL4_Send(reply_cap, reply);
+        }
+
+        /* Free the saved reply cap */
+        cspace_free_slot(cur_cspace, reply_cap);
+    }
 }
 
 void syscall_loop(seL4_CPtr ep) {
@@ -151,16 +181,13 @@ void syscall_loop(seL4_CPtr ep) {
             if (badge & IRQ_BADGE_TIMER) {
                 int ret = timer_interrupt();
                 if (ret != CLOCK_R_OK) {
-                    //TODO: What now??
+                    //What now?
                 }
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
-            dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", seL4_GetMR(1),
-                    seL4_GetMR(0),
-                    seL4_GetMR(2) ? "Instruction Fault" : "Data fault");
+            handle_pagefault();
 
-            assert(!"Unable to handle vm faults");
         }else if(label == seL4_NoFault) {
             /* System call */
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
@@ -237,8 +264,8 @@ static void print_bootinfo(const seL4_BootInfo* info) {
 void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     int err;
 
-    seL4_Word stack_addr;
-    seL4_CPtr stack_cap;
+    //seL4_Word stack_addr;
+    //seL4_CPtr stack_cap;
     seL4_CPtr user_ep_cap;
 
     /* These required for setting up the TCB */
@@ -306,26 +333,36 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
+    /* initialise address space */
+    tty_test_process.as = as_create();
+    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
+
     /* load the elf image */
-    err = elf_load(tty_test_process.vroot, elf_base);
+    err = elf_load(tty_test_process.as, tty_test_process.vroot, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
+    /* set up the stack & the heap */
+    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
+    as_define_heap(tty_test_process.as);
+    conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
 
-    /* Create a stack frame */
-    stack_addr = ut_alloc(seL4_PageBits);
-    conditional_panic(!stack_addr, "No memory for stack");
-    err =  cspace_ut_retype_addr(stack_addr,
-                                 seL4_ARM_SmallPageObject,
-                                 seL4_PageBits,
-                                 cur_cspace,
-                                 &stack_cap);
-    conditional_panic(err, "Unable to allocate page for stack");
 
-    /* Map in the stack frame for the user app */
-    err = map_page(stack_cap, tty_test_process.vroot,
-                   PROCESS_STACK_TOP - (1 << seL4_PageBits),
-                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    conditional_panic(err, "Unable to map stack IPC buffer for user app");
+    ///* Create a stack frame */
+    //stack_addr = ut_alloc(seL4_PageBits);
+    //conditional_panic(!stack_addr, "No memory for stack");
+    //err =  cspace_ut_retype_addr(stack_addr,
+    //                             seL4_ARM_SmallPageObject,
+    //                             seL4_PageBits,
+    //                             cur_cspace,
+    //                             &stack_cap);
+    //conditional_panic(err, "Unable to allocate page for stack");
+
+    ///* Map in the stack frame for the user app */
+    //err = map_page(stack_cap, tty_test_process.vroot,
+    //               PROCESS_STACK_TOP - (1 << seL4_PageBits),
+    //               seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    //conditional_panic(err, "Unable to map stack IPC buffer for user app");
 
     /* Map in the IPC buffer for the thread */
     err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,
@@ -410,7 +447,7 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
 
     /* Initialise frame table */
     err = frame_init();
-    conditional_panic(err != FRAME_IS_OK, "Failed to initialise frame table\n");
+    conditional_panic(err, "Failed to initialise frame table\n");
 }
 
 #define TEST_1      1
@@ -423,8 +460,7 @@ frametable_test(uint32_t test_mask) {
         /* Allocate 10 pages and make sure you can touch them all */
         for (int i = 0; i < 10; i++) {
             /* Allocate a page */
-            seL4_Word vaddr;
-            frame_alloc(&vaddr);
+            seL4_Word vaddr = frame_alloc();
             assert(vaddr);
 
             /* Test you can touch the page */
@@ -442,8 +478,7 @@ frametable_test(uint32_t test_mask) {
         int i = 0;
         for (;;i++) {
             /* Allocate a page */
-            seL4_Word vaddr;
-            frame_alloc(&vaddr);
+            seL4_Word vaddr = frame_alloc();
             //printf("vaddr = 0x%08x\n", vaddr);
             if (!vaddr) {
                 printf("Out of memory!\n");
@@ -463,8 +498,7 @@ frametable_test(uint32_t test_mask) {
            This loop should never finish */
         for (int i = 0;; i++) {
             /* Allocate a page */
-            seL4_Word vaddr;
-            int page = frame_alloc(&vaddr);
+            seL4_Word vaddr = frame_alloc();
             assert(vaddr != 0);
 
             /* Test you can touch the page */
@@ -473,7 +507,7 @@ frametable_test(uint32_t test_mask) {
 
             printf("Page #%d allocated at %p\n",  i, (int*) vaddr);
 
-            frame_free(page);
+            frame_free(vaddr);
         }
         printf("Done!!!\n");
 
@@ -506,8 +540,7 @@ int main(void) {
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
-    printf("before test\n");
-    frametable_test(TEST_1 | TEST_2);
+    //frametable_test(TEST_1 | TEST_3);
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

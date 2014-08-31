@@ -29,6 +29,7 @@
 #include "vm.h"
 #include "addrspace.h"
 #include "proc.h"
+#include "syscall.h"
 
 #include <autoconf.h>
 
@@ -62,8 +63,6 @@ const seL4_BootInfo* _boot_info;
 extern process_t tty_test_process;
 
 
-#define SOS_SYSCALL_PRINT 0
-#define SOS_SYSCALL_SYSBRK 1
 #define MAX_SERIAL_SEND 100
 
 seL4_CPtr _sos_ipc_ep_cap;

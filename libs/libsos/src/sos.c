@@ -86,6 +86,10 @@ pid_t sos_process_create(const char *path) {
     printf("System call not implemented\n");
     return -1;
 }
+int sos_process_delete(pid_t pid) {
+    printf("System call not implemented\n");
+    return -1;
+}
 
 int sos_process_status(sos_process_t *processes, unsigned max) {
     printf("System call not implemented\n");

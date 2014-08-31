@@ -11,6 +11,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sos.h>
 
@@ -19,7 +20,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define FAIL_TOLERANCE  10
 
-fildes_t sos_sys_open(const char *path, fmode_t mode) {
+fildes_t sos_sys_open(const char *path, int flags) {
     assert(!"You need to implement this");
     return -1;
 }

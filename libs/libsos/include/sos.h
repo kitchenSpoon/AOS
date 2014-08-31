@@ -88,6 +88,11 @@ int sos_sys_write(fildes_t file, const char *buf, size_t nbyte);
  * Returns -1 on error (invalid file).
  */
 
+size_t sos_write(void *vData, size_t count);
+/* Send "count" bytes of data from "vData" directly to the console.
+ * Returns the amount of data sent.
+ */
+
 int sos_getdirent(int pos, char *name, size_t nbyte);
 /* Reads name of entry "pos" in directory into "name", max "nbyte" bytes.
  * Returns number of bytes returned, zero if "pos" is next free entry,

@@ -13,10 +13,16 @@
 struct openfile {
 	struct vnode *of_vnode;
 	
-	off_t of_offset;
+	uint64_t of_offset;
 	int of_accmode;	/* from open: O_RDONLY, O_WRONLY, or O_RDWR */
 	int of_refcount;
 };
+
+/* opens a file (must be kernel pointers in the args) */
+int file_open(char *filename, int flags, int mode, int *retfd);
+
+/* closes a file */
+int file_close(int fd);
 
 /*** file table section ***/
 
@@ -27,11 +33,13 @@ struct openfile {
  * inheritance in fork, the table is copied).
  */
 struct filetable {
-	struct openfile *ft_openfiles[PROCESS_MAX_FILE];
+	struct openfile *ft_openfiles[PROCESS_MAX_FILES];
 };
 
 /* these all have an implicit arg of the curthread's filetable */
-int filetable_init(const char *inpath, const char *outpath, 
-		   const char *errpath);
+int filetable_init(const char *inpath, const char *outpath, const char *errpath);
+void filetable_destroy(struct filetable *ft);
+int filetable_findfile(int fd, struct openfile **file);
+int filetable_placefile(struct openfile *file, int *fd);
 
 #endif /* _SOS_FILE_H_ */

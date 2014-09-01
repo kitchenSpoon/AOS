@@ -76,6 +76,7 @@ extern fhandle_t mnt_point;
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
+    int err;
 
 
     syscall_number = seL4_GetMR(0);
@@ -138,6 +139,23 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_WRITE:
     {
+		break;
+	}
+    case SOS_SYSCALL_SLEEP:
+    {
+        err = serv_sys_sleep(seL4_GetMR(1));
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+        break;
+    }
+    case SOS_SYSCALL_TIMESTAMP:
+    {
+        timestamp_t ts;
+        err = serv_sys_timestamp(&ts);
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 2);
+        seL4_SetMR(0, (uint32_t)(ts & TIMESTAMP_LOW_MASK));
+        seL4_SetMR(1, (uint32_t)((ts & TIMESTAMP_HIGH_MASK)>>32));
+        seL4_Send(reply_cap, reply);
         break;
     }
     default:

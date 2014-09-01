@@ -1,7 +1,10 @@
 #ifndef _SOS_FILE_H_
 #define _SOS_FILE_H_
 
+#include "vnode.h"
+
 #define PROCESS_MAX_FILES 16
+
 /*** openfile section ***/
 
 /* 
@@ -19,7 +22,7 @@ struct openfile {
 };
 
 /* opens a file (must be kernel pointers in the args) */
-int file_open(char *filename, int flags, int mode, int *retfd);
+int file_open(char *filename, int flags, int *retfd);
 
 /* closes a file */
 int file_close(int fd);

@@ -1,7 +1,70 @@
 #include <errno.h>
+#include <string.h>
+#include <fcntl.h>
+
 #include "proc.h"
 #include "file.h"
 #include "vnode.h"
+#include "console.h"
+
+/*** openfile functions ***/
+
+/*
+ * file_open
+ * opens a file, places it in the filetable, sets RETFD to the file
+ * descriptor. the pointer arguments must be kernel pointers.
+ * NOTE -- the passed in filename must be a mutable string.
+ */
+int
+file_open(char *filename, int flags, int *retfd)
+{
+	struct vnode *vn;
+	struct openfile *file;
+	int err;
+	
+    if (strcmp(filename, "console") == 0) {
+        if (con_vnode == NULL) {
+            err = create_con_vnode(con_vnode);
+        }
+        vn = con_vnode;
+    } else {
+        // Don't handle it for now
+        vn = NULL;
+        return EFAULT;
+        //err = vfs_open(filename, flags, mode, &vn);
+        //if (err) {
+        //    return err;
+        //}
+    }
+
+	file = malloc(sizeof(struct openfile));
+	if (file == NULL) {
+        vnode_decref(vn);
+		//vfs_close(vn);
+		return ENOMEM;
+	}
+
+	file->of_vnode = vn;
+	file->of_offset = 0;
+	file->of_accmode = flags & O_ACCMODE;
+	file->of_refcount = 1;
+
+	/* vfs_open checks for invalid access modes */
+	assert(file->of_accmode==O_RDONLY ||
+		file->of_accmode==O_WRONLY ||
+		file->of_accmode==O_RDWR);
+
+	/* place the file in the filetable, getting the file descriptor */
+	err = filetable_placefile(file, retfd);
+	if (err) {
+		free(file);
+        vnode_decref(vn);
+		//vfs_close(vn);
+		return err;
+	}
+
+	return 0;
+}
 
 /*
  * file_doclose

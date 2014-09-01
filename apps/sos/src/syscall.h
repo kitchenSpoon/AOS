@@ -15,7 +15,10 @@
 #define TIMESTAMP_LOW_MASK      (0x00000000ffffffffULL)
 #define TIMESTAMP_HIGH_MASK     (0xffffffff00000000ULL)
 
-int serv_sys_open(seL4_Word path, seL4_Word flags);
+int serv_sys_open(seL4_Word path, seL4_Word flags, seL4_Word* fd, seL4_Word nbyte);
+int serv_sys_close(seL4_Word fd);
+int serv_sys_read(seL4_Word fd, seL4_Word buf, seL4_Word nbyte, seL4_Word* len);
+int serv_sys_write(seL4_Word fd, seL4_Word buf, seL4_Word nbyte, seL4_Word* len);
 
 /* Syscall timestamp handler */
 int serv_sys_timestamp(timestamp_t *ts);

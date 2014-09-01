@@ -220,6 +220,7 @@ int sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr, seL4_Word *kvaddr) {
         return EINVAL;
     }
 
-    *kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+    *kvaddr = as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
+    *kvaddr += vaddr - PAGE_ALIGN(vaddr);
     return 0;
 }

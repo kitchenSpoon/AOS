@@ -123,10 +123,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
     {
         seL4_Word path = (seL4_Word)seL4_GetMR(1);
         seL4_Word flags = (seL4_Word)seL4_GetMR(2);
-        int err = serv_sys_open(path, flags);
-        if(err){
-            
-        }
+        seL4_Word nbyte = (seL4_Word)seL4_GetMR(3);
+        seL4_Word fd;
+        int err = serv_sys_open(path, flags, &fd, nbyte);
+        
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0,fd);
+        seL4_Send(reply_cap, reply);
+
         break;
     }
     case SOS_SYSCALL_CLOSE:
@@ -135,10 +139,30 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_READ:
     {
+        seL4_Word fd        = (seL4_Word)seL4_GetMR(1);
+        seL4_Word buf       = (seL4_Word)seL4_GetMR(2);
+        seL4_Word nbyte     = (seL4_Word)seL4_GetMR(3);
+        seL4_Word len;
+        int err = serv_sys_read(fd, buf, nbyte, &len);
+        
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0,len);
+        seL4_Send(reply_cap, reply);
+        
         break;
     }
     case SOS_SYSCALL_WRITE:
     {
+        seL4_Word fd        = (seL4_Word)seL4_GetMR(1);
+        seL4_Word buf       = (seL4_Word)seL4_GetMR(2);
+        seL4_Word nbyte     = (seL4_Word)seL4_GetMR(3);
+        seL4_Word len;
+        int err = serv_sys_write(fd, buf, nbyte, &len);
+        
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0,len);
+        seL4_Send(reply_cap, reply);
+        
 		break;
 	}
     case SOS_SYSCALL_SLEEP:

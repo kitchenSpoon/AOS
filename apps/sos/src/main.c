@@ -118,6 +118,28 @@ void handle_syscall(seL4_Word badge, int num_args) {
         
         break;
     }
+    case SOS_SYSCALL_OPEN:
+    {
+        seL4_Word path = (seL4_Word)seL4_GetMR(1);
+        seL4_Word flags = (seL4_Word)seL4_GetMR(2);
+        int err = serv_sys_open(path, flags);
+        if(err){
+            
+        }
+        break;
+    }
+    case SOS_SYSCALL_CLOSE:
+    {
+        break;
+    }
+    case SOS_SYSCALL_READ:
+    {
+        break;
+    }
+    case SOS_SYSCALL_WRITE:
+    {
+        break;
+    }
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */

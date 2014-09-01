@@ -22,7 +22,16 @@
 
 fildes_t sos_sys_open(const char *path, int flags) {
     assert(!"You need to implement this");
-    return -1;
+    //check path to path + min(endof path, MAX_IO_BUF) is mapped;
+    seL4_MessageInfo_t tag seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_OPEN);
+    seL4_SetMR(1, path);
+    seL4_SetMR(2, flags);
+    seL4_MessageInfo_t message = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
+    int err = seL4_MessageInfo_get_label(message); 
+    fildes_t fd = seL4_GetMR(0);
+    return fd;
 }
 
 int sos_sys_read(fildes_t file, char *buf, size_t nbyte) {

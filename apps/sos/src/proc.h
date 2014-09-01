@@ -4,6 +4,7 @@
 #include <sel4/sel4.h>
 #include <cspace/cspace.h>
 #include "addrspace.h"
+#include "file.h"
 
 typedef struct process process_t;
 struct process {
@@ -21,9 +22,12 @@ struct process {
 
     addrspace_t *as;
 
+    struct filetable* p_filetable;
 };
 
 process_t tty_test_process;
+
+#define curproc     (cur_proc())
 
 process_t* cur_proc(void);
 addrspace_t* proc_getas(void);

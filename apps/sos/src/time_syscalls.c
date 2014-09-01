@@ -14,13 +14,13 @@ serv_sys_timestamp(timestamp_t *ts) {
 
 static void
 sleep_callback(uint32_t id, void *data) {
-    return 0;
+    return;
 }
 
 int
 serv_sys_sleep(const int msec) {
     //register for the clock
     uint64_t delay = (uint64_t)msec * 1000;
-    int clock_id = register_timer(delay, sleep_callback, NULL);
+    register_timer(delay, sleep_callback, NULL);
     return 0;
 }

@@ -20,6 +20,15 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define FAIL_TOLERANCE  10
 
+#define SOS_SYSCALL_PRINT       0
+#define SOS_SYSCALL_SYSBRK      1
+#define SOS_SYSCALL_OPEN        2
+#define SOS_SYSCALL_CLOSE       3
+#define SOS_SYSCALL_READ        4
+#define SOS_SYSCALL_WRITE       5
+#define SOS_SYSCALL_TIMESTAMP   6
+#define SOS_SYSCALL_SLEEP       7
+
 fildes_t sos_sys_open(const char *path, int flags) {
     assert(!"You need to implement this");
     return -1;
@@ -64,12 +73,40 @@ size_t sos_write(void *vData, size_t count) {
 }
 
 void sos_sys_usleep(int msec) {
-    assert(!"You need to implement this");
+    seL4_MessageInfo_t send_tag;
+
+    send_tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
+    seL4_SetTag(send_tag);
+    seL4_SetMR(0, SOS_SYSCALL_SLEEP);
+    seL4_SetMR(1, msec);
+
+    seL4_Call(SOS_IPC_EP_CAP, send_tag);
 }
 
 int64_t sos_sys_time_stamp(void) {
-    assert(!"You need to implement this");
-    return -1;
+    seL4_MessageInfo_t send_tag, reply_tag;
+    int err;
+    uint64_t highbits, lowbits;
+    int64_t timestamp;
+
+    /* Prepare the request */
+    send_tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+    seL4_SetTag(send_tag);
+    seL4_SetMR(0, SOS_SYSCALL_TIMESTAMP);
+
+    /* Send the request & wait for answer */
+    reply_tag = seL4_Call(SOS_IPC_EP_CAP, send_tag);
+    err = (int)seL4_MessageInfo_get_label(reply_tag);
+    if (err) {
+        return -1;
+    }
+
+    /* Extract the timestamp */
+    highbits = (uint64_t)seL4_GetMR(1) << 32;
+    lowbits  = (uint64_t)seL4_GetMR(0);
+    timestamp = (int64_t)(highbits | lowbits);
+
+    return timestamp;
 }
 
 int sos_getdirent(int pos, char *name, size_t nbyte) {

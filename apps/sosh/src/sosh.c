@@ -302,7 +302,10 @@ int main(void) {
         while (!found && !done) {
             /* Make sure to flush so anything is visible while waiting for user input */
             fflush(stdout);
-            r = read(in, bp, BUF_SIZ - 1 + buf - bp);
+            printf("sosh before\n");
+            //r = read(in, bp, BUF_SIZ - 1 + buf - bp);
+            r = read(in, bp, 2);
+            printf("sosh after\n");
             if (r < 0) {
                 printf("Console read failed!\n");
                 done = 1;

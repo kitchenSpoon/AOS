@@ -13,7 +13,6 @@
  * file_open
  * opens a file, places it in the filetable, sets RETFD to the file
  * descriptor. the pointer arguments must be kernel pointers.
- * NOTE -- the passed in filename must be a mutable string.
  */
 int
 file_open(char *filename, int flags, int *retfd)
@@ -25,6 +24,9 @@ file_open(char *filename, int flags, int *retfd)
     if (strcmp(filename, "console") == 0) {
         if (con_vnode == NULL) {
             err = con_create_vnode();
+            if (err) {
+                return err;
+            }
         }
         vn = con_vnode;
     } else {
@@ -37,6 +39,7 @@ file_open(char *filename, int flags, int *retfd)
         //}
     }
 
+    vn->vn_ops->vop_open(vn, flags);
     file = malloc(sizeof(struct openfile));
     if (file == NULL) {
         vnode_decref(vn);

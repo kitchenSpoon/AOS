@@ -65,23 +65,25 @@ con_destroy_vnode(void) {
 }
 
 static void read_handler(struct serial * serial , char c){
+    printf("read_handler called\n");
     if(console.buf_size < MAX_IO_BUF){
         console.buf[console.buf_size++] = c;
     }
 }
 
 int con_open(struct vnode *file, int flags){
+    printf("con_open called\n");
     struct serial* serial = serial_init();
-    if(!console.is_init){
+    if(!console.is_init) {
         console.serial = serial_init();
         if(console.serial == NULL){
-            return -1;
+            return EFAULT;
         }
 
         int err = serial_register_handler(serial, read_handler);
         if(err){
             console.serial = NULL;
-            return -1;
+            return EFAULT;
         }
         console.is_init = 1;
     }
@@ -91,6 +93,7 @@ int con_open(struct vnode *file, int flags){
 
 int con_close(struct vnode *file){
     console.serial = NULL;
+    console.buf_size = 0;
     console.is_init = 0;
     return 0;
 }
@@ -111,13 +114,15 @@ int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
 }
 
 int con_read(struct vnode *file, char* buf, size_t nbytes, size_t *len){
-    /* we need to register handler when we open console */
     size_t bytes_left = nbytes;
+    printf("bytes_left = %d\n", bytes_left);
+    printf("con_read called\n");
     /*
      * while there are bytes left to be read,
      * we block waiting for more content to come
      */
-    while(bytes_left > 0){
+    while(bytes_left > 0) {
+        printf("bytes_left = %d\n", bytes_left);
         if(console.buf_size > 0){
             //copy console_buf to user's buf
             int i = 0;
@@ -133,8 +138,10 @@ int con_read(struct vnode *file, char* buf, size_t nbytes, size_t *len){
             //set correct buffer size
             console.buf_size -= i;
             len += i;
+            bytes_left -= i;
         }
     }
+    printf("con_read out\n");
 
     return 0;
 }

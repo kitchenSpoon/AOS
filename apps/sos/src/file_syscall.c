@@ -1,21 +1,28 @@
 #include <stdio.h>
 #include <assert.h>
-#include <sel4/sel4.h>
-#include <limits.h>
+#include <string.h>
 #include <errno.h>
+#include <limits.h>
+#include <sel4/sel4.h>
+#include <serial/serial.h>
 
 #include "utility.h"
 #include "addrspace.h"
 #include "proc.h"
 #include "syscall.h"
+#include "copyinout.h"
 
-#define MAX_IO_BUF 0x1000
+#define MAX_SERIAL_TRY  0x100
+#define MAX_IO_BUF      0x1000
 
+/*
+ * Check if the user pages from VADDR to VADDR+NBYTE are mapped
+ */
 static bool
-check_range_page_mapped(seL4_Word vaddr, size_t nbyte) {
+validate_user_mem(seL4_Word vaddr, size_t nbyte) {
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     while (vpage < vaddr+nbyte) {
-        bool mapped = sos_page_is_mapped(proc_getas(), PAGE_ALIGN(vpage));
+        bool mapped = sos_page_is_mapped(proc_getas(), vpage);
         if (!mapped) {
             return false;
         }
@@ -24,107 +31,118 @@ check_range_page_mapped(seL4_Word vaddr, size_t nbyte) {
     return true;
 }
 
-int serv_sys_open(seL4_Word path, seL4_Word flags, seL4_Word* fd, seL4_Word nbyte){
-    //path is a address
-    //translate path
 
-    if(!check_range_page_mapped(path, nbyte)){
+int serv_sys_print(char* message, size_t len, size_t *sent) {
+    struct serial* serial = serial_init(); //serial_init does the cacheing
+
+    *sent = 0;
+    int tries = 0;
+    while (*sent < len && tries < MAX_SERIAL_TRY) {
+        *sent += serial_send(serial, message+*sent, len-*sent);
+        tries++;
+    }
+    return 0;
+}
+
+int serv_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd){
+    if (nbyte >= MAX_IO_BUF) {
+        return EINVAL;
+    }
+    if (!validate_user_mem(path, nbyte)){
         return EINVAL;
     }
 
-    seL4_Word kvaddr;
-    int err = sos_get_kvaddr(proc_getas(), path, &kvaddr);
+    int err;
+    char kbuf[MAX_IO_BUF];
+    err = copyin((seL4_Word)kbuf, (seL4_Word)path, (size_t)nbyte);
     if (err) {
         return err;
     }
 
-    char* kpath = (char*) kvaddr;
-    char kbuf[MAX_IO_BUF];
-    int i = 0;
-    for(i = 0; i < (int)nbyte && kpath[i]!='\0'; i++){
-        kbuf[i] = kpath[i];
-    }
-    if (i != nbyte) {
+    size_t len;
+    for(len = 0; len < nbyte && kbuf[len]!='\0'; len++);
+    if (len != nbyte) {
         return EINVAL;
     }
-    kbuf[i] = '\0';
+    kbuf[len] = '\0'; // could cause overflow
 
-    err = file_open(kbuf, (int)flags, (int*)fd);
-    if(err)
+    err = file_open(kbuf, (int)flags, fd);
+    if(err) {
         return err;
+    }
 
     return 0;
 }
 
-int serv_sys_close(seL4_Word fd){
+int serv_sys_close(int fd){
+    if (fd < 0 || fd >= PROCESS_MAX_FILES) {
+        return EINVAL;
+    }
     int err = file_close(fd);
-    if(err)
+    if(err) {
         return err;
+    }
     return 0;
 }
 
-int serv_sys_read(seL4_Word fd, seL4_Word buf, seL4_Word nbyte, seL4_Word* len){
-    //path is a address
-    //translate path
-    seL4_Word kvaddr;
-    int err;
-    err = sos_get_kvaddr(proc_getas(), buf, &kvaddr);
-    if (err) {
-        return err;
+int serv_sys_read(int fd, seL4_Word buf, size_t nbyte, size_t* len){
+    if (fd < 0 || fd >= PROCESS_MAX_FILES || nbyte >= MAX_IO_BUF) {
+        return EINVAL;
     }
-    if (nbyte > MAX_IO_BUF) {
+    if(!validate_user_mem(buf, nbyte)){
         return EINVAL;
     }
 
+    int err;
+    struct openfile *file;
     char kbuf[MAX_IO_BUF];
 
-    if(!check_range_page_mapped(buf, nbyte)){
-        return EINVAL;
-    }
-
-    //check if fd is valid
-    struct openfile *file;
     err = filetable_findfile(fd, &file);
     if (err) {
         return err;
     }
 
-    file->of_vnode->vn_ops->vop_read(file->of_vnode, kbuf, nbyte, len);
+    err = file->of_vnode->vn_ops->vop_read(file->of_vnode, kbuf, nbyte, len);
+    if (err) {
+        return err;
+    }
 
-    //copy mem from kbuf out to kvaddr page by page
+    err = copyout((seL4_Word)buf, (seL4_Word)kbuf, *len);
+    if (err) {
+        return err;
+    }
 
     return 0;
 }
 
 
-int serv_sys_write(seL4_Word fd, seL4_Word buf, seL4_Word nbyte, seL4_Word* len){
-    //path is a address
-    //translate path
-    seL4_Word kvaddr;
-    int err;
-    err = sos_get_kvaddr(proc_getas(), buf, &kvaddr);
-    if (err) {
-        return err;
+int serv_sys_write(int fd, seL4_Word buf, size_t nbyte, size_t* len){
+    if (fd < 0 || fd >= PROCESS_MAX_FILES || nbyte >= MAX_IO_BUF) {
+        return EINVAL;
     }
-    if (nbyte > MAX_IO_BUF) {
+    if(!validate_user_mem(buf, nbyte)){
         return EINVAL;
     }
 
+    int err;
+    struct openfile *file;
     char kbuf[MAX_IO_BUF];
 
-    if(!check_range_page_mapped(buf, nbyte)){
+    err = copyin((seL4_Word)kbuf, (seL4_Word)buf, nbyte);
+    if (err) {
         return EINVAL;
     }
-    //copy from buf to kbuf
 
-    //check if fd is valid
-    struct openfile *file;
     err = filetable_findfile(fd, &file);
     if (err) {
         return err;
     }
 
-    file->of_vnode->vn_ops->vop_write(file->of_vnode, kbuf, nbyte, len);
+    err = file->of_vnode->vn_ops->vop_write(file->of_vnode, kbuf, nbyte, len);
+    //VOP_WRITE(file->of_vnode, kbuf, nbyte, len);
+    if (err) {
+        return err;
+    }
 
     return 0;
 }

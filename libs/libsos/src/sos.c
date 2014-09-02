@@ -30,19 +30,19 @@
 #define SOS_SYSCALL_SLEEP       7
 
 fildes_t sos_sys_open(const char *path, int flags) {
-    //find path length
     int len = 0;
-    while(len < MAX_IO_BUF && path[len] != '\0') 
+    while(len < MAX_IO_BUF && path[len] != '\0') {
         len++;
-        
+    }
+
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_OPEN);
     seL4_SetMR(1, (seL4_Word)path);
-    seL4_SetMR(2, flags);
-    seL4_SetMR(3, len);
+    seL4_SetMR(2, len);
+    seL4_SetMR(3, flags);
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
-    int err = seL4_MessageInfo_get_label(message); 
+    int err = seL4_MessageInfo_get_label(message);
     int fd;
     if(!err){
         fd = seL4_GetMR(0);
@@ -60,7 +60,7 @@ int sos_sys_read(fildes_t file, char *buf, size_t nbyte) {
     seL4_SetMR(2, (seL4_Word)buf);
     seL4_SetMR(3, (seL4_Word)nbyte);
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
-    int err = seL4_MessageInfo_get_label(message); 
+    int err = seL4_MessageInfo_get_label(message);
     int len = 0;
     if(!err){
         len = seL4_GetMR(1);
@@ -79,7 +79,7 @@ int sos_sys_write(fildes_t file, const char *buf, size_t nbyte) {
     seL4_SetMR(2, (seL4_Word)buf);
     seL4_SetMR(3, (seL4_Word)nbyte);
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
-    int err = seL4_MessageInfo_get_label(message); 
+    int err = seL4_MessageInfo_get_label(message);
     int len = 0;
     if(!err){
         len = seL4_GetMR(1);

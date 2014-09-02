@@ -41,6 +41,7 @@ fildes_t sos_sys_open(const char *path, int flags) {
     seL4_SetMR(1, (seL4_Word)path);
     seL4_SetMR(2, len);
     seL4_SetMR(3, flags);
+
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
     int err = seL4_MessageInfo_get_label(message);
     int fd;
@@ -53,48 +54,51 @@ fildes_t sos_sys_open(const char *path, int flags) {
 }
 
 int sos_sys_read(fildes_t file, char *buf, size_t nbyte) {
-    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
+    int err;
+    seL4_MessageInfo_t tag, message;
+
+    tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_READ);
     seL4_SetMR(1, (seL4_Word)file);
     seL4_SetMR(2, (seL4_Word)buf);
     seL4_SetMR(3, (seL4_Word)nbyte);
-    seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
-    int err = seL4_MessageInfo_get_label(message);
-    int len = 0;
-    if(!err){
-        len = seL4_GetMR(1);
-    } else {
-        len = -1;
+
+    message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    err = seL4_MessageInfo_get_label(message);
+    if (err) {
+        return -1;
     }
 
+    int len = seL4_GetMR(0);
     return len;
 }
 
 int sos_sys_write(fildes_t file, const char *buf, size_t nbyte) {
-    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
+    int err;
+    seL4_MessageInfo_t tag, message;
+
+    tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_WRITE);
     seL4_SetMR(1, (seL4_Word)file);
     seL4_SetMR(2, (seL4_Word)buf);
     seL4_SetMR(3, (seL4_Word)nbyte);
-    seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
-    int err = seL4_MessageInfo_get_label(message);
-    int len = 0;
-    if(!err){
-        len = seL4_GetMR(1);
-    } else {
-        len = -1;
+
+    message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    err = seL4_MessageInfo_get_label(message);
+    if (err) {
+        return -1;
     }
 
+    int len = seL4_GetMR(0);
     return len;
-    return -1;
 }
 
 size_t sos_write(void *vData, size_t count) {
     const char *realdata = vData;
     int tot_sent = 0;
-    //printf("sos_write\n");
+
     /*
      * We break the data into messages of size maximum seL4_MsgMaxLength-1
      * The first slot is used to indicate syscall number
@@ -136,7 +140,7 @@ void sos_sys_usleep(int msec) {
 }
 
 int64_t sos_sys_time_stamp(void) {
-    seL4_MessageInfo_t send_tag, reply_tag;
+    seL4_MessageInfo_t send_tag, receive_tag;
     int err;
     uint64_t highbits, lowbits;
     int64_t timestamp;
@@ -147,8 +151,8 @@ int64_t sos_sys_time_stamp(void) {
     seL4_SetMR(0, SOS_SYSCALL_TIMESTAMP);
 
     /* Send the request & wait for answer */
-    reply_tag = seL4_Call(SOS_IPC_EP_CAP, send_tag);
-    err = (int)seL4_MessageInfo_get_label(reply_tag);
+    receive_tag = seL4_Call(SOS_IPC_EP_CAP, send_tag);
+    err = (int)seL4_MessageInfo_get_label(receive_tag);
     if (err) {
         return -1;
     }

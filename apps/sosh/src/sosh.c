@@ -266,6 +266,15 @@ struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
         {"time", second_time}, {"mtime", micro_time}, {"kill", kill} };
 
+static void test_write(void) {
+    int fd = open("console", O_RDWR);
+    assert(fd >= 0);
+
+    char buf[] = "This is cool!!\n";
+    int ret = write(fd, buf, sizeof(buf));
+    assert(ret == sizeof(buf));
+}
+
 int main(void) {
     char buf[BUF_SIZ];
     char *argv[MAX_ARGS];
@@ -274,6 +283,8 @@ int main(void) {
 
     in = open("console", O_RDONLY);
     assert(in >= 0);
+
+    test_write();
 
     bp = buf;
     done = 0;

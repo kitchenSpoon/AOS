@@ -18,25 +18,27 @@ struct console{
 } console;
 
 int
-create_con_vnode(struct vnode* vn) {
-    if (vn == NULL) {
-        vn = malloc(sizeof(struct vnode));
-        if (vn == NULL) {
+con_create_vnode(void) {
+    if (con_vnode == NULL) {
+        con_vnode = malloc(sizeof(struct vnode));
+        if (con_vnode == NULL) {
             return ENOMEM;
         }
-        vn->vn_refcount  = 1;
-        vn->vn_opencount = 1;
-        vn->vn_data      = NULL;
+        con_vnode->vn_refcount  = 1;
+        con_vnode->vn_opencount = 1;
+        con_vnode->vn_data      = NULL;
 
         struct vnode_ops *vops = malloc(sizeof(struct vnode_ops));
         if (vops == NULL) {
-            free(vn);
+            free(con_vnode);
             return ENOMEM;
         }
-        vops->vop_read  = NULL;
-        vops->vop_write = NULL;
+        vops->vop_open  = con_open;
+        vops->vop_close = con_close;
+        vops->vop_read  = con_read;
+        vops->vop_write = con_write;
 
-        vn->vn_ops = vops;
+        con_vnode->vn_ops = vops;
 
         //initalize console buf
         console.buf_size = 0;
@@ -47,18 +49,18 @@ create_con_vnode(struct vnode* vn) {
 }
 
 int
-destroy_con_vnode(struct vnode *vn) {
-    if (vn == NULL) {
+con_destroy_vnode(void) {
+    if (con_vnode == NULL) {
         return EINVAL;
     }
     /* If any of these fails, that means we have a bug */
-    assert(vn->vn_ops != NULL);
-    if (vn->vn_refcount != 1 || vn->vn_opencount != 1) {
+    assert(con_vnode->vn_ops != NULL);
+    if (con_vnode->vn_refcount != 1 || con_vnode->vn_opencount != 1) {
         return EINVAL;
     }
 
-    free(vn->vn_ops);
-    free(vn);
+    free(con_vnode->vn_ops);
+    free(con_vnode);
     return 0;
 }
 
@@ -68,7 +70,7 @@ static void read_handler(struct serial * serial , char c){
     }
 }
 
-size_t con_open(struct vnode *file, int flags){
+int con_open(struct vnode *file, int flags){
     struct serial* serial = serial_init();
     if(!console.is_init){
         console.serial = serial_init();
@@ -87,20 +89,20 @@ size_t con_open(struct vnode *file, int flags){
     return 0;
 }
 
-size_t con_close(struct vnode *file){
+int con_close(struct vnode *file){
     console.serial = NULL;
     console.is_init = 0;
     return 0;
 }
 
-size_t con_write(struct vnode *file, char* buf, size_t nbytes, size_t *len) {
+int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
     struct serial* serial = serial_init(); //serial_init does the cacheing
 
     //TODO CHECK ME
     size_t tot_sent = 0;
     int tries = 0;
     while (tot_sent < nbytes && tries < MAX_SERIAL_SEND) {
-        tot_sent += serial_send(serial, buf+tot_sent, nbytes-tot_sent);
+        tot_sent += serial_send(serial, (char*)buf+tot_sent, nbytes-tot_sent);
         tries++;
     }
 
@@ -108,7 +110,7 @@ size_t con_write(struct vnode *file, char* buf, size_t nbytes, size_t *len) {
     return 0;
 }
 
-size_t con_read(struct vnode *file, char* buf, size_t nbytes, size_t *len){
+int con_read(struct vnode *file, char* buf, size_t nbytes, size_t *len){
     /* we need to register handler when we open console */
     size_t bytes_left = nbytes;
     /*

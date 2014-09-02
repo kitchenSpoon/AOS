@@ -118,7 +118,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         size_t nbyte   = (size_t)seL4_GetMR(2);
         uint32_t flags = (uint32_t)seL4_GetMR(3);
         int fd;
-        int err = serv_sys_open(path, nbyte, flags, &fd);
+        err = serv_sys_open(path, nbyte, flags, &fd);
 
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, fd);
@@ -136,7 +136,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
         size_t len;
-        int err = serv_sys_read(fd, buf, nbyte, &len);
+        err = serv_sys_read(fd, buf, nbyte, &len);
 
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)len);
@@ -146,11 +146,11 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_WRITE:
     {
-        int fd    = (int)seL4_GetMR(1);
+        int fd          = (int)seL4_GetMR(1);
         seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
-        size_t nbyte = (size_t)seL4_GetMR(3);
+        size_t nbyte    = (size_t)seL4_GetMR(3);
         size_t len;
-        int err = serv_sys_write(fd, buf, nbyte, &len);
+        err = serv_sys_write(fd, buf, nbyte, &len);
 
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)len);
@@ -401,23 +401,6 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
     as_define_heap(tty_test_process.as);
     conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
-
-
-    ///* Create a stack frame */
-    //stack_addr = ut_alloc(seL4_PageBits);
-    //conditional_panic(!stack_addr, "No memory for stack");
-    //err =  cspace_ut_retype_addr(stack_addr,
-    //                             seL4_ARM_SmallPageObject,
-    //                             seL4_PageBits,
-    //                             cur_cspace,
-    //                             &stack_cap);
-    //conditional_panic(err, "Unable to allocate page for stack");
-
-    ///* Map in the stack frame for the user app */
-    //err = map_page(stack_cap, tty_test_process.vroot,
-    //               PROCESS_STACK_TOP - (1 << seL4_PageBits),
-    //               seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    //conditional_panic(err, "Unable to map stack IPC buffer for user app");
 
     /* Map in the IPC buffer for the thread */
     err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,

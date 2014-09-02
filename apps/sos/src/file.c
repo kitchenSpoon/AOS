@@ -24,7 +24,7 @@ file_open(char *filename, int flags, int *retfd)
 
     if (strcmp(filename, "console") == 0) {
         if (con_vnode == NULL) {
-            err = create_con_vnode(con_vnode);
+            err = con_create_vnode();
         }
         vn = con_vnode;
     } else {
@@ -139,9 +139,9 @@ filetable_init(const char *inpath, const char *outpath,
 
     /* Initialise stdin, stdout & stderr */
     //TODO: Change these numbers to use constants
-    curproc->p_filetable->ft_openfiles[0] = 1;
-    curproc->p_filetable->ft_openfiles[1] = 1;
-    curproc->p_filetable->ft_openfiles[2] = 1;
+    curproc->p_filetable->ft_openfiles[0] = (struct openfile *)1;
+    curproc->p_filetable->ft_openfiles[1] = (struct openfile *)1;
+    curproc->p_filetable->ft_openfiles[2] = (struct openfile *)1;
 
 
     return 0;

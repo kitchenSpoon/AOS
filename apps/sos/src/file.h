@@ -7,15 +7,15 @@
 
 /*** openfile section ***/
 
-/* 
- * openfile struct 
+/*
+ * openfile struct
  * note that there's not too much to keep track of, since the vnode does most
  * of that.  note that it does require synchronization, because a single
  * openfile can be shared between processes (filetable inheritance).
  */
 struct openfile {
 	struct vnode *of_vnode;
-	
+
 	uint64_t of_offset;
 	int of_accmode;	/* from open: O_RDONLY, O_WRONLY, or O_RDWR */
 	int of_refcount;

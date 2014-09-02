@@ -62,9 +62,6 @@ const seL4_BootInfo* _boot_info;
 
 extern process_t tty_test_process;
 
-
-#define MAX_SERIAL_SEND 100
-
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 
@@ -76,6 +73,7 @@ extern fhandle_t mnt_point;
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
+    seL4_MessageInfo_t reply;
     int err;
 
 
@@ -89,46 +87,41 @@ void handle_syscall(seL4_Word badge, int num_args) {
     switch (syscall_number) {
     case SOS_SYSCALL_PRINT:
     {
-        int len = num_args;
+        size_t msg_len = num_args;
         char data[seL4_MsgMaxLength];
-        for (int i=0; i<len; i++) {
+        for (size_t i=0; i<msg_len; i++) {
             data[i] = (char)seL4_GetMR(i+1);
         }
 
-        struct serial* serial = serial_init(); //serial_init does the cacheing
+        size_t sent;
+        err = serv_sys_print(data, msg_len, &sent);
 
-        size_t tot_sent = 0;
-        int tries = 0;
-        while (tot_sent < len && tries < MAX_SERIAL_SEND) {
-            tot_sent += serial_send(serial, data+tot_sent, len-tot_sent);
-            tries++;
-        }
-
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(tot_sent, 0, 0, 0);
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)sent);
         seL4_Send(reply_cap, reply);
 
         break;
     }
     case SOS_SYSCALL_SYSBRK:
-    {   
+    {
         seL4_Word newbrk = (seL4_Word)seL4_GetMR(1);
         newbrk = sos_sys_brk(newbrk, tty_test_process.as);
-        
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(newbrk, 0, 0, 0);
+
+        reply = seL4_MessageInfo_new(newbrk, 0, 0, 0);
         seL4_Send(reply_cap, reply);
-        
+
         break;
     }
     case SOS_SYSCALL_OPEN:
     {
         seL4_Word path = (seL4_Word)seL4_GetMR(1);
-        seL4_Word flags = (seL4_Word)seL4_GetMR(2);
-        seL4_Word nbyte = (seL4_Word)seL4_GetMR(3);
-        seL4_Word fd;
-        int err = serv_sys_open(path, flags, &fd, nbyte);
-        
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0,fd);
+        size_t nbyte   = (size_t)seL4_GetMR(2);
+        uint32_t flags = (uint32_t)seL4_GetMR(3);
+        int fd;
+        int err = serv_sys_open(path, nbyte, flags, &fd);
+
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, fd);
         seL4_Send(reply_cap, reply);
 
         break;
@@ -139,36 +132,36 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_READ:
     {
-        seL4_Word fd        = (seL4_Word)seL4_GetMR(1);
-        seL4_Word buf       = (seL4_Word)seL4_GetMR(2);
-        seL4_Word nbyte     = (seL4_Word)seL4_GetMR(3);
-        seL4_Word len;
+        int fd        = (int)seL4_GetMR(1);
+        seL4_Word buf = (seL4_Word)seL4_GetMR(2);
+        size_t nbyte  = (size_t)seL4_GetMR(3);
+        size_t len;
         int err = serv_sys_read(fd, buf, nbyte, &len);
-        
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0,len);
+
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)len);
         seL4_Send(reply_cap, reply);
-        
+
         break;
     }
     case SOS_SYSCALL_WRITE:
     {
-        seL4_Word fd        = (seL4_Word)seL4_GetMR(1);
-        seL4_Word buf       = (seL4_Word)seL4_GetMR(2);
-        seL4_Word nbyte     = (seL4_Word)seL4_GetMR(3);
-        seL4_Word len;
+        int fd    = (int)seL4_GetMR(1);
+        seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
+        size_t nbyte = (size_t)seL4_GetMR(3);
+        size_t len;
         int err = serv_sys_write(fd, buf, nbyte, &len);
-        
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0,len);
+
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)len);
         seL4_Send(reply_cap, reply);
-        
-		break;
-	}
+
+        break;
+    }
     case SOS_SYSCALL_SLEEP:
     {
         err = serv_sys_sleep(seL4_GetMR(1));
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
+        reply = seL4_MessageInfo_new(err, 0, 0, 0);
         seL4_Send(reply_cap, reply);
         break;
     }
@@ -176,7 +169,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     {
         timestamp_t ts;
         err = serv_sys_timestamp(&ts);
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 2);
+        reply = seL4_MessageInfo_new(err, 0, 0, 2);
         seL4_SetMR(0, (uint32_t)(ts & TIMESTAMP_LOW_MASK));
         seL4_SetMR(1, (uint32_t)((ts & TIMESTAMP_HIGH_MASK)>>32));
         seL4_Send(reply_cap, reply);
@@ -185,7 +178,6 @@ void handle_syscall(seL4_Word badge, int num_args) {
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
-
     }
 
     /* Free the saved reply cap */
@@ -276,11 +268,11 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"\nCap details:\n");
     dprintf(1,"Type              Start      End\n");
     dprintf(1,"Empty             0x%08x 0x%08x\n", info->empty.start, info->empty.end);
-    dprintf(1,"Shared frames     0x%08x 0x%08x\n", info->sharedFrames.start, 
+    dprintf(1,"Shared frames     0x%08x 0x%08x\n", info->sharedFrames.start,
                                                    info->sharedFrames.end);
-    dprintf(1,"User image frames 0x%08x 0x%08x\n", info->userImageFrames.start, 
+    dprintf(1,"User image frames 0x%08x 0x%08x\n", info->userImageFrames.start,
                                                    info->userImageFrames.end);
-    dprintf(1,"User image PTs    0x%08x 0x%08x\n", info->userImagePTs.start, 
+    dprintf(1,"User image PTs    0x%08x 0x%08x\n", info->userImagePTs.start,
                                                    info->userImagePTs.end);
     dprintf(1,"Untypeds          0x%08x 0x%08x\n", info->untyped.start, info->untyped.end);
 
@@ -340,7 +332,7 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
 
     /* Create a VSpace */
     tty_test_process.vroot_addr = ut_alloc(seL4_PageDirBits);
-    conditional_panic(!tty_test_process.vroot_addr, 
+    conditional_panic(!tty_test_process.vroot_addr,
                       "No memory for new Page Directory");
     err = cspace_ut_retype_addr(tty_test_process.vroot_addr,
                                 seL4_ARM_PageDirectoryObject,
@@ -367,7 +359,7 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     user_ep_cap = cspace_mint_cap(tty_test_process.croot,
                                   cur_cspace,
                                   fault_ep,
-                                  seL4_AllRights, 
+                                  seL4_AllRights,
                                   seL4_CapData_Badge_new(TTY_EP_BADGE));
     /* should be the first slot in the space, hack I know */
     assert(user_ep_cap == 1);
@@ -462,7 +454,7 @@ static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     /* Create an endpoint for user application IPC */
     ep_addr = ut_alloc(seL4_EndpointBits);
     conditional_panic(!ep_addr, "No memory for endpoint");
-    err = cspace_ut_retype_addr(ep_addr, 
+    err = cspace_ut_retype_addr(ep_addr,
                                 seL4_EndpointObject,
                                 seL4_EndpointBits,
                                 cur_cspace,
@@ -557,7 +549,7 @@ frametable_test(uint32_t test_mask) {
     }
     if (test_mask & TEST_3) {
         printf("Starting test 3...\n");
-        /* Test that you never run out of memory if you always free frames. 
+        /* Test that you never run out of memory if you always free frames.
            This loop should never finish */
         for (int i = 0;; i++) {
             /* Allocate a page */

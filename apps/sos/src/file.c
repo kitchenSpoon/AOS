@@ -18,10 +18,10 @@
 int
 file_open(char *filename, int flags, int *retfd)
 {
-	struct vnode *vn;
-	struct openfile *file;
-	int err;
-	
+    struct vnode *vn;
+    struct openfile *file;
+    int err;
+
     if (strcmp(filename, "console") == 0) {
         if (con_vnode == NULL) {
             err = create_con_vnode(con_vnode);
@@ -37,33 +37,33 @@ file_open(char *filename, int flags, int *retfd)
         //}
     }
 
-	file = malloc(sizeof(struct openfile));
-	if (file == NULL) {
+    file = malloc(sizeof(struct openfile));
+    if (file == NULL) {
         vnode_decref(vn);
-		//vfs_close(vn);
-		return ENOMEM;
-	}
+        //vfs_close(vn);
+        return ENOMEM;
+    }
 
-	file->of_vnode = vn;
-	file->of_offset = 0;
-	file->of_accmode = flags & O_ACCMODE;
-	file->of_refcount = 1;
+    file->of_vnode = vn;
+    file->of_offset = 0;
+    file->of_accmode = flags & O_ACCMODE;
+    file->of_refcount = 1;
 
-	/* vfs_open checks for invalid access modes */
-	assert(file->of_accmode==O_RDONLY ||
-		file->of_accmode==O_WRONLY ||
-		file->of_accmode==O_RDWR);
+    /* vfs_open checks for invalid access modes */
+    assert(file->of_accmode==O_RDONLY ||
+            file->of_accmode==O_WRONLY ||
+            file->of_accmode==O_RDWR);
 
-	/* place the file in the filetable, getting the file descriptor */
-	err = filetable_placefile(file, retfd);
-	if (err) {
-		free(file);
+    /* place the file in the filetable, getting the file descriptor */
+    err = filetable_placefile(file, retfd);
+    if (err) {
+        free(file);
         vnode_decref(vn);
-		//vfs_close(vn);
-		return err;
-	}
+        //vfs_close(vn);
+        return err;
+    }
 
-	return 0;
+    return 0;
 }
 
 /*
@@ -171,18 +171,18 @@ filetable_findfile(int fd, struct openfile **file)
 int
 filetable_placefile(struct openfile *file, int *fd)
 {
-	struct filetable *ft = curproc->p_filetable;
-	int i;
-	
-	for (i = 0; i < PROCESS_MAX_FILES; i++) {
-		if (ft->ft_openfiles[i] == NULL) {
-			ft->ft_openfiles[i] = file;
-			*fd = i;
-			return 0;
-		}
-	}
+    struct filetable *ft = curproc->p_filetable;
+    int i;
 
-	return EMFILE;
+    for (i = 0; i < PROCESS_MAX_FILES; i++) {
+        if (ft->ft_openfiles[i] == NULL) {
+            ft->ft_openfiles[i] = file;
+            *fd = i;
+            return 0;
+        }
+    }
+
+    return EMFILE;
 }
 
 /*
@@ -204,4 +204,4 @@ filetable_destroy(struct filetable *ft)
     }
 
     free(ft);
-}	
+}

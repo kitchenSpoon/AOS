@@ -94,6 +94,7 @@ int sos_sys_write(fildes_t file, const char *buf, size_t nbyte) {
 size_t sos_write(void *vData, size_t count) {
     const char *realdata = vData;
     int tot_sent = 0;
+    //printf("sos_write\n");
     /*
      * We break the data into messages of size maximum seL4_MsgMaxLength-1
      * The first slot is used to indicate syscall number
@@ -104,13 +105,17 @@ size_t sos_write(void *vData, size_t count) {
         int len = min(count - tot_sent, seL4_MsgMaxLength-1);
         seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1+len);
         seL4_SetTag(tag);
-        seL4_SetMR(0, 0); // Call syscall 0
+        seL4_SetMR(0, SOS_SYSCALL_PRINT);
 
         for (int i=0; i<len; i++) {
             seL4_SetMR(i+1, realdata[i+tot_sent]);
         }
         seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
-        int sent = (int)seL4_MessageInfo_get_label(message);
+        int err = (int)seL4_MessageInfo_get_label(message);
+        if (err) {
+            break;
+        }
+        int sent = (int)seL4_GetMR(0);
         if (sent < len) { /* some error handling? */ }
         tot_sent += sent;
         tries++;

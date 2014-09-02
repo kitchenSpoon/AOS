@@ -117,7 +117,6 @@ file_close(int fd)
 /*
  * filetable_init
  * pretty straightforward -- allocate the space, initialize to NULL.
- * Note: Not initializing stdin, stdout & stderr
  */
 int
 filetable_init(const char *inpath, const char *outpath,
@@ -137,6 +136,13 @@ filetable_init(const char *inpath, const char *outpath,
     for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
         curproc->p_filetable->ft_openfiles[fd] = NULL;
     }
+
+    /* Initialise stdin, stdout & stderr */
+    //TODO: Change these numbers to use constants
+    curproc->p_filetable->ft_openfiles[0] = 1;
+    curproc->p_filetable->ft_openfiles[1] = 1;
+    curproc->p_filetable->ft_openfiles[2] = 1;
+
 
     return 0;
 }

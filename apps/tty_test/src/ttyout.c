@@ -66,7 +66,10 @@ static size_t sos_call_print(const void *vData, size_t count) {
             seL4_SetMR(i+1, realdata[i+tot_sent]);
         }
         seL4_MessageInfo_t message = seL4_Call(SYSCALL_ENDPOINT_SLOT, tag);
-        int sent = (int)seL4_MessageInfo_get_label(message);
+        int err = (int)seL4_MessageInfo_get_label(message);
+        (void)err;
+        int sent = seL4_GetMR(0);
+
         if (sent < len) { /* some error handling? */ }
         tot_sent += sent;
         tries++;

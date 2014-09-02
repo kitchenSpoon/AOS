@@ -64,7 +64,8 @@ int serv_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd){
     if (len != nbyte) {
         return EINVAL;
     }
-    kbuf[len] = '\0'; // could cause overflow
+    printf("len = %u\n", len);
+    kbuf[len] = '\0';
 
     err = file_open(kbuf, (int)flags, fd);
     if(err) {

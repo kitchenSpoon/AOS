@@ -425,6 +425,10 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
                    seL4_AllRights, seL4_ARM_Default_VMAttributes);
     conditional_panic(err, "Unable to map IPC buffer for user app");
 
+    /* Initialise filetable for this process */
+    err = filetable_init(NULL, NULL, NULL);
+    conditional_panic(err, "Unable to initialise filetable for user app");
+
     /* Start the new process */
     memset(&context, 0, sizeof(context));
     context.pc = elf_getEntryPoint(elf_base);

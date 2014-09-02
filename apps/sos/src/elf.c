@@ -57,7 +57,7 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
     /* We work a page at a time in the destination vspace. */
     pos = 0;
     while(pos < segment_size) {
-        seL4_Word vpage, kpage;
+        seL4_Word vpage;
         seL4_Word kdst;
         seL4_CPtr sos_cap;
         int nbytes;
@@ -68,11 +68,10 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
         if (err) {
             return err;
         }
-        err = sos_get_kvaddr(as, vpage, &kpage);
+        err = sos_get_kvaddr(as, dst, &kdst);
         if (err) {
             return err;
         }
-        kdst = kpage + (dst - vpage);
 
         /* Now copy our data into the destination vspace. */
         nbytes = PAGESIZE - (dst & PAGEMASK);

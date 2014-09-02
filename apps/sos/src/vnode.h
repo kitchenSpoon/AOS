@@ -10,6 +10,8 @@ struct vnode {
 };
 
 struct vnode_ops {
+    int (*vop_open)(struct vnode *file, int flags);
+    int (*vop_close)(struct vnode *file);
     int (*vop_read)(struct vnode *file, char* buf, size_t nbytes, size_t *len);
     int (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
 };

@@ -47,6 +47,10 @@ copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte) {
         /* Get the user buffer's corresponding kernel address */
         err = sos_get_kvaddr(proc_getas(), PAGE_ALIGN(buf), &kdst);
         if (err) {
+            printf("In copyinout.c : copyout : sos_get_kvaddr failed err = %d\n", err);
+            //page is not mapped
+            //hmmm
+            //sos_page_map(proc_getas(), ,PAGE_ALIGN(buf), seL4_AllRights );
             return err;
         }
         kdst = kdst + (buf - PAGE_ALIGN(buf));

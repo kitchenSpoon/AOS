@@ -136,11 +136,10 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
         size_t len;
-        err = serv_sys_read(fd, buf, nbyte, &len);
-
-        reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)len);
-        seL4_Send(reply_cap, reply);
+        err = serv_sys_read(reply_cap, fd, buf, nbyte, &len);
+        if(err){
+            //do something
+        }
 
         break;
     }
@@ -160,9 +159,12 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_SLEEP:
     {
-        err = serv_sys_sleep(seL4_GetMR(1));
-        reply = seL4_MessageInfo_new(err, 0, 0, 0);
-        seL4_Send(reply_cap, reply);
+        err = serv_sys_sleep(reply_cap, seL4_GetMR(1));
+        //reply = seL4_MessageInfo_new(err, 0, 0, 0);
+        //seL4_Send(reply_cap, reply);
+        if(err){
+            //do something
+        }
         break;
     }
     case SOS_SYSCALL_TIMESTAMP:
@@ -181,7 +183,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
 
     /* Free the saved reply cap */
-    cspace_free_slot(cur_cspace, reply_cap);
+    //cspace_free_slot(cur_cspace, reply_cap);
 }
 
 void handle_pagefault(void) {
@@ -226,12 +228,14 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_MessageInfo_t message;
 
         message = seL4_Wait(ep, &badge);
-        //printf("badge=0x%x\n", badge);
+        printf("badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
+                printf("before network_irq\n");
                 network_irq();
+                printf("after network_irq\n");
             }
             if (badge & IRQ_BADGE_TIMER) {
                 int ret = timer_interrupt();

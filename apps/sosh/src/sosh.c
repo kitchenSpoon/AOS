@@ -307,6 +307,7 @@ int main(void) {
             r = read(in, bp, 2);
             printf("sosh after\n");
             if (r < 0) {
+                printf("Console read r = %d!\n",r);
                 printf("Console read failed!\n");
                 done = 1;
                 break;

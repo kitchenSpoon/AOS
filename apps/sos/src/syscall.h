@@ -60,7 +60,7 @@ int serv_sys_close(int fd);
  * @param len - The length of the data read
  * Returns 0 if successful
  */
-int serv_sys_read(int fd, seL4_Word buf, size_t nbyte, size_t* len);
+int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte, size_t* len);
 
 /*
  * Write data to a file
@@ -85,5 +85,5 @@ int serv_sys_timestamp(timestamp_t *ts);
  * @param msec - The number of milisecond the process will sleep for
  * Returns 0 if successful
  */
-int serv_sys_sleep(const int msec);
+int serv_sys_sleep(seL4_CPtr reply_cap, const int msec);
 #endif /* _SOS_SYSCALL_H_ */

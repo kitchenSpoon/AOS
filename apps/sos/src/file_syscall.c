@@ -85,7 +85,7 @@ int serv_sys_close(int fd){
     return 0;
 }
 
-int serv_sys_read(int fd, seL4_Word buf, size_t nbyte, size_t* len){
+int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte, size_t* len){
     if (fd < 0 || fd >= PROCESS_MAX_FILES || nbyte >= MAX_IO_BUF) {
         return EINVAL;
     }
@@ -102,12 +102,7 @@ int serv_sys_read(int fd, seL4_Word buf, size_t nbyte, size_t* len){
         return err;
     }
 
-    err = file->of_vnode->vn_ops->vop_read(file->of_vnode, kbuf, nbyte, len);
-    if (err) {
-        return err;
-    }
-
-    err = copyout((seL4_Word)buf, (seL4_Word)kbuf, *len);
+    err = file->of_vnode->vn_ops->vop_read(file->of_vnode, kbuf, nbyte, len, reply_cap);
     if (err) {
         return err;
     }

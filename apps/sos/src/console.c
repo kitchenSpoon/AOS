@@ -7,6 +7,7 @@
 #include <cspace/cspace.h>
 #include <fcntl.h>
 
+#include "utility.h"
 #include "console.h"
 #include "vnode.h"
 #include "copyinout.h"
@@ -18,6 +19,8 @@
 struct console{
     char buf[MAX_IO_BUF];
     int buf_size;
+    int start;
+    int end;
     int is_init;
     struct serial * serial;
 } console;
@@ -63,6 +66,8 @@ con_init(void) {
         }
 
         console.buf_size = 0;
+        console.start = 0;
+        console.end= 0;
         con_read_state.opened_for_reading = 0;
 
         console.is_init = 1;
@@ -83,6 +88,8 @@ con_destroy_vnode(void) {
 
     console.serial = NULL;
     console.buf_size = 0;
+    console.start = 0;
+    console.end= 0;
     console.is_init = 0;
 
     free(con_vnode->vn_ops);
@@ -93,7 +100,9 @@ con_destroy_vnode(void) {
 static void read_handler(struct serial * serial , char c){
     //printf("read_handler called, c = %d\n", (int)c);
     if(console.buf_size < MAX_IO_BUF){
-        console.buf[console.buf_size++] = c;
+        console.buf[console.end++] = c;
+        console.end %= MAX_IO_BUF;
+        console.buf_size++;
     }
 
     if(con_read_state.is_blocked && c == '\n'){
@@ -168,29 +177,49 @@ int con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
     int err;
 
     if(console.buf_size > 0){
-        size_t len;
-        for(len = 0; len < nbytes && len < console.buf_size; len++){
-            if(console.buf[len] == '\n') {
-                len++;
+        size_t len = 0;
+        for(size_t cur = console.start; len < nbytes && len < console.buf_size; cur++, cur%=MAX_IO_BUF){
+            len++;
+            if(console.buf[cur] == '\n') {
                 break;
             }
         }
+
         //printf("copying out %d bytes, buffer size = %u\n", len, console.buf_size);
-        err = copyout((seL4_Word)buf, (seL4_Word)console.buf, len);
-        if (err) {
+
+        //save the original start value, so that we can restore this when theres an error
+        int console_start_ori = console.start;
+
+        //Since we are using a circular buffer, we need to split our copy into two chunkcs
+        //because our buffer may start and wrap over the buffer, also copyout should not
+        //know that we are using a circular buffer.
+
+        //copy first half of circular buffer
+        int first_half_size = MIN(MAX_IO_BUF, console.start + len) - console.start;
+        err = copyout((seL4_Word)buf, (seL4_Word)console.buf + console.start, first_half_size);
+        console.start += first_half_size;
+        console.start %= MAX_IO_BUF;
+
+        //copy second half of circular buffer
+        int second_half_size = len - first_half_size > 0 ? len - first_half_size : 0;
+        int err2 = copyout((seL4_Word)buf + first_half_size, (seL4_Word)console.buf + console.start, second_half_size);
+        console.start += second_half_size;
+        console.start %= MAX_IO_BUF;
+        if (err || err2) {
             seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
             seL4_SetMR(0, (seL4_Word)-1); // This value can be anything
             seL4_Send(reply_cap, reply);
             cspace_free_slot(cur_cspace, reply_cap);
 
+            console.start = console_start_ori;
             con_read_state.is_blocked = 0;
             return EFAULT;
         }
 
         //copy remaing buf foward
-        for(size_t i = 0; i < console.buf_size - len; i++){
+        /*for(size_t i = 0; i < console.buf_size - len; i++){
             console.buf[i] = console.buf[len+i];
-        }
+        }*/
 
         console.buf_size -= len;
 

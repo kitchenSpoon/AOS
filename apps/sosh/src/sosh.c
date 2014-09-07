@@ -329,7 +329,7 @@ int main(void) {
     printf("\nsleep begin 10 second\n");
     second_time(0,NULL);
     micro_time(0,NULL);
-    sleep(10);
+    sleep(1);
     micro_time(0,NULL);
     second_time(0,NULL);
     printf("\nwake up\n");

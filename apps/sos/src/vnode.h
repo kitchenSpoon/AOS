@@ -11,12 +11,19 @@ struct vnode {
 };
 
 struct vnode_ops {
-    int (*vop_open)(struct vnode *file, int flags);
-    int (*vop_close)(struct vnode *file);
+    int (*vop_eachopen)(struct vnode *file, int flags);
+    int (*vop_lastclose)(struct vnode *file, int flags);
     int (*vop_read)(struct vnode *file, char* buf, size_t nbytes, size_t *len, seL4_CPtr reply_cap);
     int (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
 };
 
+#define __VOP(vn, sym) ((vn)->vn_ops->vop_##sym)
+
+#define VOP_EACHOPEN(vn, flags)         (__VOP(vn, eachopen)(vn, flags))
+#define VOP_LASTCLOSE(vn)               (__VOP(vn, lastclose)(vn))
+
+#define VOP_READ(vn, uio)               (__VOP(vn, read)(vn, uio))
+#define VOP_READ(vn, uio)               (__VOP(vn, read)(vn, uio))
 /*
  * Reference count manipulation
  */

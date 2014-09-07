@@ -82,24 +82,28 @@ void handle_syscall(seL4_Word badge, int num_args) {
     /* Save the caller */
     reply_cap = cspace_save_reply_cap(cur_cspace);
     assert(reply_cap != CSPACE_NULL);
-
+    printf("syscall = %d\n", syscall_number);
     /* Process system call */
     switch (syscall_number) {
     case SOS_SYSCALL_PRINT:
     {
+        printf("syscall = %d ends\n", syscall_number);
         size_t msg_len = num_args;
         char data[seL4_MsgMaxLength];
         for (size_t i=0; i<msg_len; i++) {
             data[i] = (char)seL4_GetMR(i+1);
         }
 
+        printf("syscall = %d ends2\n", syscall_number);
         size_t sent;
         err = serv_sys_print(data, msg_len, &sent);
 
+        printf("syscall = %d ends3\n", syscall_number);
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)sent);
         seL4_Send(reply_cap, reply);
 
+        printf("syscall = %d ends4\n", syscall_number);
         break;
     }
     case SOS_SYSCALL_SYSBRK:
@@ -123,11 +127,19 @@ void handle_syscall(seL4_Word badge, int num_args) {
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, fd);
         seL4_Send(reply_cap, reply);
-
+        printf("sos_open_end\n");
+        cspace_free_slot(cur_cspace, reply_cap);
         break;
     }
     case SOS_SYSCALL_CLOSE:
     {
+        printf("sos_syscall_close_in_main\n");
+        int fd = seL4_GetMR(1);
+        err = serv_sys_close(fd);
+
+        reply = seL4_MessageInfo_new(err, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
         break;
     }
     case SOS_SYSCALL_READ:
@@ -154,6 +166,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)len);
         seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
 
         break;
     }
@@ -223,14 +236,16 @@ void handle_pagefault(void) {
 void syscall_loop(seL4_CPtr ep) {
 
     while (1) {
+        printf("looping\n");
         seL4_Word badge;
         seL4_Word label;
         seL4_MessageInfo_t message;
 
         message = seL4_Wait(ep, &badge);
-        printf("badge=0x%x\n", badge);
+        //printf("badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
+            printf("interrupt\n");
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
                 printf("before network_irq\n");
@@ -244,10 +259,12 @@ void syscall_loop(seL4_CPtr ep) {
                 }
             }
         }else if(label == seL4_VMFault){
+            printf("vmfault\n");
             /* Page fault */
             handle_pagefault();
 
         }else if(label == seL4_NoFault) {
+            printf("syscall\n");
             /* System call */
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 

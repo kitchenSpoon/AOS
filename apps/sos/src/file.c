@@ -20,39 +20,39 @@ file_open(char *filename, int flags, int *retfd)
     struct vnode *vn;
     struct openfile *file;
     int err;
+    printf("file_open1\n");
 
-    if (strcmp(filename, "console") == 0) {
-        if (con_vnode == NULL) {
-            err = con_create_vnode();
-            if (err) {
-                return err;
-            }
-        }
-        vn = con_vnode;
-    } else {
-        // Don't handle it for now
-        vn = NULL;
-        return EFAULT;
-        //err = vfs_open(filename, flags, mode, &vn);
-        //if (err) {
-        //    return err;
-        //}
+    err = vfs_open();
+    if (err) {
+        return err;
     }
 
-    vn->vn_ops->vop_open(vn, flags);
+    assert(vn != NULL);
+
+    printf("file_open2\n");
+
     file = malloc(sizeof(struct openfile));
     if (file == NULL) {
-        vnode_decref(vn);
-        //vfs_close(vn);
+        vfs_close();
         return ENOMEM;
     }
+
+    printf("file_open3\n");
+
+    err = vn->vn_ops->vop_open(vn, flags);
+    if(err){
+        free(file);
+        return err;
+    }
+
+    printf("file_open4\n");
 
     file->of_vnode = vn;
     file->of_offset = 0;
     file->of_accmode = flags & O_ACCMODE;
     file->of_refcount = 1;
 
-    /* vfs_open checks for invalid access modes */
+    /* Make sure the accmode are correct */
     assert(file->of_accmode==O_RDONLY ||
             file->of_accmode==O_WRONLY ||
             file->of_accmode==O_RDWR);
@@ -61,11 +61,11 @@ file_open(char *filename, int flags, int *retfd)
     err = filetable_placefile(file, retfd);
     if (err) {
         free(file);
-        vnode_decref(vn);
-        //vfs_close(vn);
+        vn->vn_ops->vop_close(vn, flags);
         return err;
     }
 
+    printf("file_open5\n");
     return 0;
 }
 
@@ -75,17 +75,35 @@ file_open(char *filename, int flags, int *retfd)
  */
 static
 int
-file_doclose(struct openfile *file)
+file_doclose(struct openfile *file, int flags)
 {
+    if(file == NULL){
+        return EINVAL;
+    }
+    printf("file_doclose\n");
+    struct vnode *vn = file->of_vnode;
+    int err = 0;
+
+    if(vn == NULL)
+        printf("vn is NULL\n");
+    if(vn->vn_ops == NULL)
+        printf("vn_ops is NULL\n");
+
+    err = vn->vn_ops->vop_close(vn, flags);
+    if(err){
+        return err;
+    }
+
+    printf("file_doclose3\n");
     /* if this is the last close of this file, free it up */
     if (file->of_refcount == 1) {
-        vnode_decref(file->of_vnode);
         free(file);
     } else {
         assert(file->of_refcount > 1);
         file->of_refcount--;
     }
 
+    printf("file_doclose4444\n");
     return 0;
 }
 
@@ -96,6 +114,7 @@ file_doclose(struct openfile *file)
 int
 file_close(int fd)
 {
+    printf("file_close\n");
     struct openfile *file;
     int result;
 
@@ -105,12 +124,13 @@ file_close(int fd)
         return result;
     }
 
-    result = file_doclose(file);
+    result = file_doclose(file, file->of_accmode);
     if (result) {
         /* leave file open for possible retry */
         return result;
     }
     curproc->p_filetable->ft_openfiles[fd] = NULL;
+    printf("file_close_out\n");
 
     return 0;
 }
@@ -207,7 +227,7 @@ filetable_destroy(struct filetable *ft)
 
     for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
         if (ft->ft_openfiles[fd]) {
-            result = file_doclose(ft->ft_openfiles[fd]);
+            result = file_doclose(ft->ft_openfiles[fd], ft->ft_openfiles[fd]->of_accmode);
             assert(result == 0);
         }
     }

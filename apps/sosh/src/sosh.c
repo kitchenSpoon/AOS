@@ -273,6 +273,32 @@ static void test_write(void) {
     char buf[] = "This is cool!!\n";
     int ret = write(fd, buf, sizeof(buf));
     assert(ret == sizeof(buf));
+    printf("First write success, as expected\n");
+    close(fd);
+    ret = write(fd, buf, sizeof(buf)); // should fail
+    assert(ret < 0);
+    printf("Second write failed, as expected\n");
+    fd = open("console", O_RDONLY);
+    printf("fd = %d\n",fd);
+    assert(fd >= 0);
+    printf("Second open success , as expected\n");
+    ret = write(fd, buf, sizeof(buf)); // should fail
+    assert(ret < 0);
+    printf("Third write failed, as expected\n");
+    close(fd);
+
+
+    printf("Test opening read two times\n");
+    fd = open("console", O_RDWR);
+    assert(fd > 0);
+    int fd2 = open("console", O_RDONLY);
+    assert(fd2 < 0);
+    printf("Failed to open console for reading twice, as expected\n");
+
+    close(fd);
+    printf("closed fd\n");
+    close(fd2);
+    printf("closed fd2\n");
 }
 
 int main(void) {
@@ -281,16 +307,33 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
 
+    test_write();
+
     in = open("console", O_RDONLY);
     assert(in >= 0);
 
-    test_write();
 
     bp = buf;
     done = 0;
     new = 1;
 
     printf("\n[SOS Starting]\n");
+
+    printf("\nsleep begin 1 second\n");
+    second_time(0,NULL);
+    micro_time(0,NULL);
+    sleep(1);
+    micro_time(0,NULL);
+    second_time(0,NULL);
+    printf("\nwake up\n");
+    printf("\nsleep begin 10 second\n");
+    second_time(0,NULL);
+    micro_time(0,NULL);
+    sleep(10);
+    micro_time(0,NULL);
+    second_time(0,NULL);
+    printf("\nwake up\n");
+
 
     while (!done) {
         if (new) {

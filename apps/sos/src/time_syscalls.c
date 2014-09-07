@@ -20,8 +20,10 @@ serv_sys_timestamp(timestamp_t *ts) {
 static void
 sleep_callback(uint32_t id, void *data) {
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(0,0,0,0);
-    seL4_Send(((struct sleep_state*)data)->reply_cap, reply);
-    cspace_free_slot(cur_cspace, ((struct sleep_state*)data)->reply_cap);
+    struct sleep_state *state = (struct sleep_state*)data;
+    seL4_Send(state->reply_cap, reply);
+    cspace_free_slot(cur_cspace, state->reply_cap);
+    free(state);
     return;
 }
 

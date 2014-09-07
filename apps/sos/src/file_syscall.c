@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <sel4/sel4.h>
 #include <serial/serial.h>
+#include <fcntl.h>
 
 #include "utility.h"
 #include "addrspace.h"
@@ -70,7 +71,7 @@ int serv_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd){
     if(err) {
         return err;
     }
-
+    printf("serv_sys_open\n");
     return 0;
 }
 
@@ -78,6 +79,7 @@ int serv_sys_close(int fd){
     if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         return EINVAL;
     }
+
     int err = file_close(fd);
     if(err) {
         return err;
@@ -100,6 +102,12 @@ int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte, size
     err = filetable_findfile(fd, &file);
     if (err) {
         return err;
+    }
+
+    //check read permissions
+    if(file->of_accmode != O_RDWR &&
+        file->of_accmode != O_RDONLY){
+        return EACCES;
     }
 
     err = file->of_vnode->vn_ops->vop_read(file->of_vnode, kbuf, nbyte, len, reply_cap);
@@ -131,6 +139,12 @@ int serv_sys_write(int fd, seL4_Word buf, size_t nbyte, size_t* len){
     err = filetable_findfile(fd, &file);
     if (err) {
         return err;
+    }
+
+    //check write permissions
+    if(file->of_accmode != O_RDWR &&
+        file->of_accmode != O_WRONLY){
+        return EACCES;
     }
 
     err = file->of_vnode->vn_ops->vop_write(file->of_vnode, kbuf, nbyte, len);

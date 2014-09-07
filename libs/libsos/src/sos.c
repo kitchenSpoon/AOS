@@ -53,6 +53,18 @@ fildes_t sos_sys_open(const char *path, int flags) {
     return fd;
 }
 
+int sos_sys_close(fildes_t fd) {
+
+    printf("libsos_sys_close\n");
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_CLOSE);
+    seL4_SetMR(1, fd);
+
+    seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    int err = seL4_MessageInfo_get_label(message);
+    return err;
+}
 int sos_sys_read(fildes_t file, char *buf, size_t nbyte) {
     int err;
     seL4_MessageInfo_t tag, message;
@@ -93,6 +105,7 @@ int sos_sys_write(fildes_t file, const char *buf, size_t nbyte) {
     message = seL4_Call(SOS_IPC_EP_CAP, tag);
     err = seL4_MessageInfo_get_label(message);
     if (err) {
+        printf("sys_write_libsos_err\n");
         return -1;
     }
 

@@ -5,6 +5,7 @@
 #include <serial/serial.h>
 #include <sel4/sel4.h>
 #include <cspace/cspace.h>
+#include <fcntl.h>
 
 #include "console.h"
 #include "vnode.h"
@@ -22,6 +23,7 @@ struct console{
 
 struct con_read_state{
     seL4_CPtr reply_cap;
+    bool opened_for_reading;
     int is_blocked;
     struct vnode *file;
     char* buf;
@@ -30,14 +32,13 @@ struct con_read_state{
 } con_read_state;
 
 int
-con_create_vnode(void) {
-    if (con_vnode == NULL) {
+con_init(void) {
+    if (!console.is_init) {
         con_vnode = malloc(sizeof(struct vnode));
         if (con_vnode == NULL) {
             return ENOMEM;
         }
-        con_vnode->vn_refcount  = 1;
-        con_vnode->vn_opencount = 1;
+        con_vnode->vn_refcount  = 0;
         con_vnode->vn_data      = NULL;
 
         struct vnode_ops *vops = malloc(sizeof(struct vnode_ops));
@@ -52,10 +53,18 @@ con_create_vnode(void) {
 
         con_vnode->vn_ops = vops;
 
-        //initalize console buf
+        /* initalize console buf */
+        console.serial = serial_init();
+        if (console.serial == NULL) {
+            free(con_vnode);
+            free(vops);
+            return EFAULT;
+        }
+
         console.buf_size = 0;
-        console.is_init = 0;
-        console.serial = NULL;
+        con_read_state.opened_for_reading = 0;
+
+        console.is_init = 1;
     }
     return 0;
 }
@@ -67,9 +76,13 @@ con_destroy_vnode(void) {
     }
     /* If any of these fails, that means we have a bug */
     assert(con_vnode->vn_ops != NULL);
-    if (con_vnode->vn_refcount != 1 || con_vnode->vn_opencount != 1) {
+    if (con_vnode->vn_refcount != 1) {
         return EINVAL;
     }
+
+    console.serial = NULL;
+    console.buf_size = 0;
+    console.is_init = 0;
 
     free(con_vnode->vn_ops);
     free(con_vnode);
@@ -96,33 +109,51 @@ static void read_handler(struct serial * serial , char c){
 
 int con_open(struct vnode *file, int flags){
     printf("con_open called\n");
-    struct serial* serial = serial_init();
-    if(!console.is_init) {
-        console.serial = serial_init();
-        if(console.serial == NULL){
-            return EFAULT;
-        }
+    int err;
 
-        int err = serial_register_handler(serial, read_handler);
-        if(err){
-            console.serial = NULL;
+    if(flags == O_RDWR || flags == O_RDONLY){
+        if(!con_read_state.opened_for_reading){
+            err = serial_register_handler(serial, read_handler);
+            if(err){
+                console.serial = NULL;
+                return EFAULT;
+            }
+            con_read_state.opened_for_reading = 1;
+        } else {
             return EFAULT;
         }
-        console.is_init = 1;
     }
+
+    err = vnode_incref(file);
+
+    printf("con_open succeed\n");
 
     return 0;
 }
 
-int con_close(struct vnode *file){
-    console.serial = NULL;
-    console.buf_size = 0;
-    console.is_init = 0;
+int con_close(struct vnode *file, int flags){
+    printf("con_close\n");
+    if(flags == O_RDWR || flags == O_RDONLY) {
+        if(console.serial == NULL) {
+            return EFAULT;
+        }
+        int err = serial_register_handler(console.serial, NULL);
+        if(err){ // should not happen
+            return EFAULT;
+        }
+
+        console.buf_size = 0;
+        con_read_state.opened_for_reading = 0;
+    }
+    file->vn_ops->
+    if (file->vn_refcnt == 1) {
+        con_destroy_vnode();
+    }
     return 0;
 }
 
 int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
-    struct serial* serial = serial_init(); //serial_init does the cacheing
+    struct serial* serial = serial_init(); //serial_init does the caching
 
     //TODO CHECK ME
     size_t tot_sent = 0;

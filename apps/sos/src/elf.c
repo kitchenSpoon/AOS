@@ -26,8 +26,6 @@
 #include <sys/debug.h>
 #include <sys/panic.h>
 
-extern seL4_ARM_PageDirectory dest_as;
-
 /*
  * Convert ELF permissions into seL4 permissions.
  */
@@ -47,8 +45,8 @@ static inline unsigned long get_sel4_rights_from_elf(unsigned long permissions) 
 /*
  * Inject data into the given vspace.
  */
-static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest_as,
-                                    char *src, unsigned long segment_size,
+static int load_segment_into_vspace(addrspace_t *as, char *src,
+                                    unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
                                     unsigned long permissions) {
     assert(file_size <= segment_size);
@@ -64,7 +62,7 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
         int err;
 
         vpage = PAGE_ALIGN(dst);
-        err = sos_page_map(as, dest_as, vpage, permissions);
+        err = sos_page_map(as, vpage, permissions);
         if (err) {
             return err;
         }
@@ -93,7 +91,7 @@ static int load_segment_into_vspace(addrspace_t *as, seL4_ARM_PageDirectory dest
     return 0;
 }
 
-int elf_load(addrspace_t* as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
+int elf_load(addrspace_t* as, char *elf_file) {
 
     int num_headers;
     int err;
@@ -129,8 +127,8 @@ int elf_load(addrspace_t* as, seL4_ARM_PageDirectory dest_as, char *elf_file) {
         conditional_panic(err, "Elf loading failed to define region\n");
 
         /* Copy it across into the vspace. */
-        err = load_segment_into_vspace(as, dest_as, source_addr,
-                                       segment_size, file_size, vaddr, rights);
+        err = load_segment_into_vspace(as, source_addr, segment_size, file_size,
+                                       vaddr, rights);
         if (err) {
             return EFAULT;
         }

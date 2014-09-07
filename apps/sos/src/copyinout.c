@@ -39,21 +39,27 @@ copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte) {
 int
 copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte) {
     unsigned long pos = 0;
+    addrspace_t* as = proc_getas();
+    uint32_t permissions = 0;
+
+    /* Ensure that the user buffer range is valid */
+    if (!as_is_valid_memory(as, buf, nbyte, &permissions)) {
+        return EINVAL;
+    }
+
     while (pos < nbyte) {
         seL4_Word kdst;
         size_t cpy_sz;
         int err;
+        if(!sos_page_is_mapped(as, PAGE_ALIGN(buf))) {
+            sos_page_map(as, PAGE_ALIGN(buf), permissions);
+        }
 
         /* Get the user buffer's corresponding kernel address */
-        err = sos_get_kvaddr(proc_getas(), PAGE_ALIGN(buf), &kdst);
+        err = sos_get_kvaddr(as, buf, &kdst);
         if (err) {
-            printf("In copyinout.c : copyout : sos_get_kvaddr failed err = %d\n", err);
-            //page is not mapped
-            //hmmm
-            //sos_page_map(proc_getas(), ,PAGE_ALIGN(buf), seL4_AllRights );
             return err;
         }
-        kdst = kdst + (buf - PAGE_ALIGN(buf));
 
         /* Copy the data over */
         cpy_sz = PAGE_SIZE - (kdst & PAGEMASK);

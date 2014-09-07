@@ -20,7 +20,7 @@
  * Check if the user pages from VADDR to VADDR+NBYTE are mapped
  */
 static bool
-validate_user_mem(seL4_Word vaddr, size_t nbyte) {
+is_range_mapped(seL4_Word vaddr, size_t nbyte) {
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     while (vpage < vaddr+nbyte) {
         bool mapped = sos_page_is_mapped(proc_getas(), vpage);
@@ -49,7 +49,7 @@ int serv_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd){
     if (nbyte >= MAX_IO_BUF) {
         return EINVAL;
     }
-    if (!validate_user_mem(path, nbyte)){
+    if (!is_range_mapped(path, nbyte)){
         return EINVAL;
     }
 
@@ -87,17 +87,21 @@ int serv_sys_close(int fd){
     return 0;
 }
 
-int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte, size_t* len){
-    if (fd < 0 || fd >= PROCESS_MAX_FILES || nbyte >= MAX_IO_BUF) {
+int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
+    //printf("serv_sys_read called\n");
+    if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         return EINVAL;
     }
-    if(!validate_user_mem(buf, nbyte)){
+    /* Read doesn't check buffer if mapped like open & write,
+     * just check if the memory is valid. It will map page when copyout */
+    uint32_t permissions = 0;
+    if(!as_is_valid_memory(proc_getas(), buf, nbyte, &permissions) ||
+            !(permissions & seL4_CanWrite)){
         return EINVAL;
     }
 
     int err;
     struct openfile *file;
-    char kbuf[MAX_IO_BUF];
 
     err = filetable_findfile(fd, &file);
     if (err) {
@@ -109,8 +113,7 @@ int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte, size
         file->of_accmode != O_RDONLY){
         return EACCES;
     }
-
-    err = file->of_vnode->vn_ops->vop_read(file->of_vnode, kbuf, nbyte, len, reply_cap);
+    err = VOP_READ(file->of_vnode, (char*)buf, nbyte, reply_cap);
     if (err) {
         return err;
     }
@@ -123,7 +126,7 @@ int serv_sys_write(int fd, seL4_Word buf, size_t nbyte, size_t* len){
     if (fd < 0 || fd >= PROCESS_MAX_FILES || nbyte >= MAX_IO_BUF) {
         return EINVAL;
     }
-    if(!validate_user_mem(buf, nbyte)){
+    if(!is_range_mapped(buf, nbyte)){
         return EINVAL;
     }
 

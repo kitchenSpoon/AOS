@@ -36,6 +36,7 @@ struct addrspace {
     region_t *as_rhead;
     region_t *as_stack;
     region_t *as_heap;
+    seL4_ARM_PageDirectory as_sel4_pd;
     sel4_pt_node_t* as_pt_head;
 } addrspace_t;
 
@@ -58,22 +59,28 @@ struct addrspace {
  *                back the initial stack pointer for the new process.
  *
  *    as_define_heap - set up the heap region in the address space.
+ *
+ *    as_valid_memory - check if the given user buffer is a valid memory range
+ *
  */
-addrspace_t      *as_create(void);
-void              as_destroy(addrspace_t *as);
-int               as_define_region(addrspace_t *as,
-                                   seL4_Word vaddr,
-                                   size_t sz,
-                                   int32_t rights);
-int               as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
-int               as_define_heap(addrspace_t *as);
+addrspace_t *as_create(seL4_ARM_PageDirectory sel4_pd);
+void         as_destroy(addrspace_t *as);
+int          as_define_region(addrspace_t *as,
+                              seL4_Word vaddr,
+                              size_t sz,
+                              int32_t rights);
+int          as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
+int          as_define_heap(addrspace_t *as);
+
+bool         as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
+                                uint32_t* permission);
 
 /*
  * Functions in elf.c
  *    elf_load - load an ELF user program executable into the current
  *               address space. (i.e. the only one address space )
  */
-int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
+int elf_load(addrspace_t *as, char* elf_file);
 
 /*
  * Functions in pagetable.c:
@@ -82,9 +89,9 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
  *              level application
  *
  *    sos_unmap_page - unmap a page
- *    
+ *
  *    sos_get_kframe_cap - get kframe_cap
- *    
+ *
  *    sos_get_kvaddr - get kvaddr
  */
 
@@ -93,10 +100,10 @@ int elf_load(addrspace_t *as, seL4_ARM_PageDirectory dest_pd, char* elf_file);
  * @param as - The addrspace we will perform the mapping
  * @param app_sel4_pd - the sel4 page directory of the user level app
  * @param vaddr - the user level virtual address that need to be mapped
- * 
+ *
  * @Returns 0 if succesful
  */
-int sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vaddr, uint32_t permissions);
+int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions);
 
 /*
  * Unmap a page in into the page table

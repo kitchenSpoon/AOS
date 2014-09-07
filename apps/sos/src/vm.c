@@ -66,7 +66,7 @@ sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr){
         if (fault_when_read && !(reg->rights & seL4_CanRead)) {
             return EACCES;
         }
-        err = sos_page_map(as, proc_getvroot(), fault_addr, reg->rights);
+        err = sos_page_map(as, fault_addr, reg->rights);
         if (err) {
             return err;
         }

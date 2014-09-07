@@ -69,7 +69,6 @@ int sos_sys_read(fildes_t file, char *buf, size_t nbyte) {
     int err;
     seL4_MessageInfo_t tag, message;
 
-    //will have to create a paged buffer and pass to sos
     tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_READ);
@@ -80,14 +79,11 @@ int sos_sys_read(fildes_t file, char *buf, size_t nbyte) {
     message = seL4_Call(SOS_IPC_EP_CAP, tag);
     err = seL4_MessageInfo_get_label(message);
     if (err) {
-        printf("sos client len = -1\n");
         return -1;
     }
 
     int len = seL4_GetMR(0);
-    printf("sos client len = %d\n",len);
-    //have to copy paged buffer content to user buffer,
-    //user buffer is in stack
+    //printf("sos_sys_read client len = %d\n",len);
     return len;
 }
 

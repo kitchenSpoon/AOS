@@ -11,8 +11,9 @@
 int copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte);
 
 /*
- * Copy memory from kernel space to user's address space
- * @precond user buffer need to be large enough to store the data
+ * Copy memory from kernel space to user's address space.
+ * Will map pages they are valid but unmapped.
+ * @precond user buffer is large enough and the memory is valid
  * @param buf - the user buffer address
  * @param kbuf - the kernel buffer address
  * @param nbyte - the size of kernel buffer memory need to be copied in

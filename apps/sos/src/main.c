@@ -82,28 +82,24 @@ void handle_syscall(seL4_Word badge, int num_args) {
     /* Save the caller */
     reply_cap = cspace_save_reply_cap(cur_cspace);
     assert(reply_cap != CSPACE_NULL);
-    printf("syscall = %d\n", syscall_number);
+
     /* Process system call */
     switch (syscall_number) {
     case SOS_SYSCALL_PRINT:
     {
-        printf("syscall = %d ends\n", syscall_number);
         size_t msg_len = num_args;
         char data[seL4_MsgMaxLength];
         for (size_t i=0; i<msg_len; i++) {
             data[i] = (char)seL4_GetMR(i+1);
         }
 
-        printf("syscall = %d ends2\n", syscall_number);
         size_t sent;
         err = serv_sys_print(data, msg_len, &sent);
 
-        printf("syscall = %d ends3\n", syscall_number);
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)sent);
         seL4_Send(reply_cap, reply);
 
-        printf("syscall = %d ends4\n", syscall_number);
         break;
     }
     case SOS_SYSCALL_SYSBRK:
@@ -127,7 +123,6 @@ void handle_syscall(seL4_Word badge, int num_args) {
         reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, fd);
         seL4_Send(reply_cap, reply);
-        printf("sos_open_end\n");
         cspace_free_slot(cur_cspace, reply_cap);
         break;
     }
@@ -147,8 +142,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         int fd        = (int)seL4_GetMR(1);
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
-        size_t len;
-        err = serv_sys_read(reply_cap, fd, buf, nbyte, &len);
+        err = serv_sys_read(reply_cap, fd, buf, nbyte);
         if(err){
             //do something
         }
@@ -245,12 +239,9 @@ void syscall_loop(seL4_CPtr ep) {
         //printf("badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
-            printf("interrupt\n");
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
-                printf("before network_irq\n");
                 network_irq();
-                printf("after network_irq\n");
             }
             if (badge & IRQ_BADGE_TIMER) {
                 int ret = timer_interrupt();
@@ -259,12 +250,10 @@ void syscall_loop(seL4_CPtr ep) {
                 }
             }
         }else if(label == seL4_VMFault){
-            printf("vmfault\n");
             /* Page fault */
             handle_pagefault();
 
         }else if(label == seL4_NoFault) {
-            printf("syscall\n");
             /* System call */
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 
@@ -410,11 +399,11 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
     /* initialise address space */
-    tty_test_process.as = as_create();
+    tty_test_process.as = as_create(tty_test_process.vroot);
     conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
 
     /* load the elf image */
-    err = elf_load(tty_test_process.as, tty_test_process.vroot, elf_base);
+    err = elf_load(tty_test_process.as, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
     /* set up the stack & the heap */

@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdio.h>
 #include <strings.h>
 #include <limits.h>
 #include "addrspace.h"
@@ -9,11 +10,11 @@
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 
 addrspace_t
-*as_create(void) {
+*as_create(seL4_ARM_PageDirectory sel4_pd) {
     addrspace_t* as = malloc(sizeof(addrspace_t));
     if (as == NULL)
         return as;
-    
+
     /* Initialise page directories */
     seL4_Word vaddr = frame_alloc();
     if (vaddr == 0) {
@@ -36,7 +37,8 @@ addrspace_t
     as->as_rhead   = NULL;
     as->as_stack   = NULL;
     as->as_heap    = NULL;
-    as->as_pt_head  = NULL;
+    as->as_sel4_pd = sel4_pd;
+    as->as_pt_head = NULL;
 
     return as;
 }
@@ -213,14 +215,14 @@ as_define_heap(addrspace_t *as) {
 
 seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as){
     if(as == NULL || as->as_heap == NULL) return 0;
-    
+
     if(vaddr == 0){
         return as->as_heap->vbase;
     }
     if (vaddr < as->as_heap->vbase) {
         return as->as_heap->vtop = as->as_heap->vbase;
     }
-    
+
     seL4_Word oldtop = as->as_heap->vtop;
     as->as_heap->vtop = vaddr;
 
@@ -236,4 +238,27 @@ seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as){
         }
     }
     return vaddr;
+}
+
+bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
+                        uint32_t* permission) {
+    seL4_Word range_start = vaddr;
+    seL4_Word range_end   = vaddr + (seL4_Word)size;
+    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
+        if (r->vbase <= range_start && range_end <= r->vtop) {
+            *permission = r->rights;
+            return true;
+        }
+    }
+
+    if (as->as_stack->vbase <= range_start && range_end <= as->as_stack->vtop) {
+        *permission = as->as_stack->rights;
+        return true;
+    }
+    if (as->as_heap->vbase <= range_start && range_end <= as->as_heap->vtop) {
+        *permission = as->as_heap->rights;
+        return true;
+    }
+
+    return false;
 }

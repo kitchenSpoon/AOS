@@ -60,7 +60,7 @@ int serv_sys_close(int fd);
  * @param len - The length of the data read
  * Returns 0 if successful
  */
-int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte, size_t* len);
+int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte);
 
 /*
  * Write data to a file

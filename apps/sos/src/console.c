@@ -11,7 +11,8 @@
 #include "vnode.h"
 #include "copyinout.h"
 
-#define MAX_IO_BUF 0x1000
+//#define MAX_IO_BUF 0x1000
+#define MAX_IO_BUF 6000
 #define MAX_SERIAL_SEND 100
 
 struct console{
@@ -28,7 +29,6 @@ struct con_read_state{
     struct vnode *file;
     char* buf;
     size_t nbytes;
-    size_t *len;
 } con_read_state;
 
 int
@@ -38,8 +38,8 @@ con_init(void) {
         if (con_vnode == NULL) {
             return ENOMEM;
         }
-        con_vnode->vn_refcount  = 0;
-        con_vnode->vn_data      = NULL;
+        con_vnode->vn_opencount  = 0;
+        con_vnode->vn_data       = NULL;
 
         struct vnode_ops *vops = malloc(sizeof(struct vnode_ops));
         if (vops == NULL) {
@@ -77,7 +77,7 @@ con_destroy_vnode(void) {
     }
     /* If any of these fails, that means we have a bug */
     assert(con_vnode->vn_ops != NULL);
-    if (con_vnode->vn_refcount != 1) {
+    if (con_vnode->vn_opencount != 1) {
         return EINVAL;
     }
 
@@ -91,7 +91,7 @@ con_destroy_vnode(void) {
 }
 
 static void read_handler(struct serial * serial , char c){
-    printf("read_handler called\n");
+    //printf("read_handler called, c = %d\n", (int)c);
     if(console.buf_size < MAX_IO_BUF){
         console.buf[console.buf_size++] = c;
     }
@@ -100,12 +100,9 @@ static void read_handler(struct serial * serial , char c){
         struct vnode *file = con_read_state.file;
         char* buf = con_read_state.buf;
         size_t nbytes = con_read_state.nbytes;
-        size_t *len = con_read_state.len;
         seL4_CPtr reply_cap = con_read_state.reply_cap;
-        con_read(file, buf, nbytes, len, reply_cap);
-        printf("read handler block finish\n");
+        con_read(file, buf, nbytes, reply_cap);
     }
-    printf("read handler finish\n");
 }
 
 int con_eachopen(struct vnode *file, int flags){
@@ -166,64 +163,51 @@ int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
     return 0;
 }
 
-int con_read(struct vnode *file, char* buf, size_t nbytes, size_t *len, seL4_CPtr reply_cap){
-    printf("con_read called\n");
-    /*
-     * while there are bytes left to be read,
-     * we block waiting for more content to come
-     */
-    //printf("bytes_left = %d\n", bytes_left);
+int con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
+    //printf("con_read called\n");
+    int err;
 
     if(console.buf_size > 0){
-        //copy console_buf to user's buf
-        printf("con_read, buf_size > 0\n");
-        int i = 0;
-        for(i = 0; i < nbytes && i < console.buf_size; i++){
-            if(console.buf[i] == '\n') {
-                i++;
+        size_t len;
+        for(len = 0; len < nbytes && len < console.buf_size; len++){
+            if(console.buf[len] == '\n') {
+                len++;
                 break;
             }
         }
-        //do we need to append '\0' ?
-        int err = copyout((seL4_Word)buf, (seL4_Word)console.buf, i);//err here
+        //printf("copying out %d bytes, buffer size = %u\n", len, console.buf_size);
+        err = copyout((seL4_Word)buf, (seL4_Word)console.buf, len);
         if (err) {
-            //seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-            seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-            //seL4_SetMR(0, 0);
-            seL4_SetMR(0, 1);
+            seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+            seL4_SetMR(0, 0);
             seL4_Send(reply_cap, reply);
             cspace_free_slot(cur_cspace, reply_cap);
- 
+
             con_read_state.is_blocked = 0;
             return EFAULT;
         }
 
         //copy remaing buf foward
-        for(int j = 0; j < console.buf_size - i; j++){
-            console.buf[j] = console.buf[i+j];
+        for(size_t i = 0; i < console.buf_size - len; i++){
+            console.buf[i] = console.buf[len+i];
         }
 
-        //set correct buffer size
-        console.buf_size -= i;
-        printf("len = %p\n", len);
-        //*len = i; // bug here, len was declared in main and we never go back
+        console.buf_size -= len;
 
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)i);
+        seL4_SetMR(0, (seL4_Word)len);
         seL4_Send(reply_cap, reply);
         cspace_free_slot(cur_cspace, reply_cap);
- 
+
         con_read_state.is_blocked = 0;
     } else {
-        printf("con_read: blocked\n");
+        //printf("con_read: blocked\n");
         con_read_state.reply_cap = reply_cap;
         con_read_state.file = file;
         con_read_state.buf = buf;
-        con_read_state.len = len;
         con_read_state.is_blocked = 1;
     }
 
-    printf("con_read out\n");
-
+    //printf("con_read out\n");
     return 0;
 }

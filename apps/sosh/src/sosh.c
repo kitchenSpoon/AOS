@@ -24,7 +24,7 @@
 /* Your OS header file */
 #include <sos.h>
 
-#define BUF_SIZ   128
+#define BUF_SIZ   6000
 #define MAX_ARGS   32
 
 static int in;
@@ -345,17 +345,13 @@ int main(void) {
         while (!found && !done) {
             /* Make sure to flush so anything is visible while waiting for user input */
             fflush(stdout);
-            printf("sosh before\n");
-            //r = read(in, bp, BUF_SIZ - 1 + buf - bp);
-            r = read(in, bp, 2);
-            printf("sosh after\n");
+            r = read(in, bp, BUF_SIZ - 1 + buf - bp);
             if (r < 0) {
-                printf("Console read r = %d!\n",r);
-                printf("Console read failed!\n");
                 done = 1;
                 break;
             }
             bp[r] = 0; /* terminate */
+            //printf("read: %d bytes:<%s>\n", r, bp);
             for (p = bp; p < bp + r; p++) {
                 if (*p == '\03') { /* ^C */
                     printf("^C\n");

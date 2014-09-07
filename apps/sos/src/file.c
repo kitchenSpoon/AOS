@@ -1,7 +1,10 @@
+/* This file is mostly copied from OS161 */
+
 #include <errno.h>
 #include <string.h>
 #include <fcntl.h>
 
+#include "vfs.h"
 #include "proc.h"
 #include "file.h"
 #include "vnode.h"
@@ -17,35 +20,21 @@
 int
 file_open(char *filename, int flags, int *retfd)
 {
+    printf("file_open\n");
     struct vnode *vn;
     struct openfile *file;
     int err;
-    printf("file_open1\n");
 
-    err = vfs_open();
+    err = vfs_open(filename, flags, &vn);
     if (err) {
         return err;
     }
 
-    assert(vn != NULL);
-
-    printf("file_open2\n");
-
     file = malloc(sizeof(struct openfile));
     if (file == NULL) {
-        vfs_close();
+        vfs_close(vn, flags);
         return ENOMEM;
     }
-
-    printf("file_open3\n");
-
-    err = vn->vn_ops->vop_open(vn, flags);
-    if(err){
-        free(file);
-        return err;
-    }
-
-    printf("file_open4\n");
 
     file->of_vnode = vn;
     file->of_offset = 0;
@@ -61,11 +50,11 @@ file_open(char *filename, int flags, int *retfd)
     err = filetable_placefile(file, retfd);
     if (err) {
         free(file);
-        vn->vn_ops->vop_close(vn, flags);
+        vfs_close(vn, flags);
         return err;
     }
 
-    printf("file_open5\n");
+    printf("end of file_open\n");
     return 0;
 }
 
@@ -75,35 +64,23 @@ file_open(char *filename, int flags, int *retfd)
  */
 static
 int
-file_doclose(struct openfile *file, int flags)
+file_doclose(struct openfile *file, uint32_t flags)
 {
+    printf("file_doclose\n");
+
     if(file == NULL){
         return EINVAL;
     }
-    printf("file_doclose\n");
-    struct vnode *vn = file->of_vnode;
-    int err = 0;
 
-    if(vn == NULL)
-        printf("vn is NULL\n");
-    if(vn->vn_ops == NULL)
-        printf("vn_ops is NULL\n");
-
-    err = vn->vn_ops->vop_close(vn, flags);
-    if(err){
-        return err;
-    }
-
-    printf("file_doclose3\n");
     /* if this is the last close of this file, free it up */
     if (file->of_refcount == 1) {
+        vfs_close(file->of_vnode, flags);
         free(file);
     } else {
         assert(file->of_refcount > 1);
         file->of_refcount--;
     }
 
-    printf("file_doclose4444\n");
     return 0;
 }
 
@@ -226,8 +203,9 @@ filetable_destroy(struct filetable *ft)
     assert(ft != NULL);
 
     for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
-        if (ft->ft_openfiles[fd]) {
-            result = file_doclose(ft->ft_openfiles[fd], ft->ft_openfiles[fd]->of_accmode);
+        struct openfile *file = ft->ft_openfiles[fd];
+        if (file) {
+            result = file_doclose(file, file->of_accmode);
             assert(result == 0);
         }
     }

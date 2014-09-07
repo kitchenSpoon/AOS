@@ -46,8 +46,9 @@ con_init(void) {
             free(con_vnode);
             return ENOMEM;
         }
-        vops->vop_open  = con_open;
-        vops->vop_close = con_close;
+        vops->vop_eachopen  = con_eachopen;
+        vops->vop_eachclose = con_eachclose;
+        vops->vop_lastclose = con_lastclose;
         vops->vop_read  = con_read;
         vops->vop_write = con_write;
 
@@ -107,15 +108,14 @@ static void read_handler(struct serial * serial , char c){
     printf("read handler finish\n");
 }
 
-int con_open(struct vnode *file, int flags){
+int con_eachopen(struct vnode *file, int flags){
     printf("con_open called\n");
     int err;
 
     if(flags == O_RDWR || flags == O_RDONLY){
         if(!con_read_state.opened_for_reading){
-            err = serial_register_handler(serial, read_handler);
+            err = serial_register_handler(console.serial, read_handler);
             if(err){
-                console.serial = NULL;
                 return EFAULT;
             }
             con_read_state.opened_for_reading = 1;
@@ -124,15 +124,12 @@ int con_open(struct vnode *file, int flags){
         }
     }
 
-    err = vnode_incref(file);
-
     printf("con_open succeed\n");
-
     return 0;
 }
 
-int con_close(struct vnode *file, int flags){
-    printf("con_close\n");
+int con_eachclose(struct vnode *file, uint32_t flags){
+    printf("con_eachclose\n");
     if(flags == O_RDWR || flags == O_RDONLY) {
         if(console.serial == NULL) {
             return EFAULT;
@@ -145,10 +142,12 @@ int con_close(struct vnode *file, int flags){
         console.buf_size = 0;
         con_read_state.opened_for_reading = 0;
     }
-    file->vn_ops->
-    if (file->vn_refcnt == 1) {
-        con_destroy_vnode();
-    }
+    return 0;
+}
+
+int con_lastclose(struct vnode *vn) {
+    (void)vn;
+    console.buf_size = 0;
     return 0;
 }
 

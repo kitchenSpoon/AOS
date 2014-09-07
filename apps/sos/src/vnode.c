@@ -3,24 +3,21 @@
 #include <stdlib.h>
 #include "vnode.h"
 
-void vnode_incref(struct vnode *vn) {
+void vnode_incopen(struct vnode *vn) {
     assert(vn != NULL);
     vn->vn_refcount++;
 }
 
-void vnode_decref(struct vnode *vn) {
-    int result;
-    (void)result;
-
+void vnode_decopen(struct vnode *vn) {
     assert(vn != NULL);
+    assert(vn->vn_refcount > 0);
 
-    assert(vn->vn_refcount>0);
-    if (vn->vn_refcount>1) {
+    if (vn->vn_refcount > 1) {
         vn->vn_refcount--;
     } else {
         // flush changes to the disk i-nodes by calling reclaim
         // Also reclaim should free the vn_data as well
         //result = VOP_RECLAIM(vn);
-        free(vn);
+        VOP_LASTCLOSE(vn);
     }
 }

@@ -31,7 +31,6 @@ process_t tty_test_process;
 
 process_t* cur_proc(void);
 addrspace_t* proc_getas(void);
-seL4_ARM_PageDirectory proc_getvroot(void);
 cspace_t* proc_getcroot(void);
 
 #endif /* _LIBOS_PROCESS_H_ */

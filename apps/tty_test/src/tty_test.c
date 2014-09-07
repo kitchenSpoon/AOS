@@ -83,9 +83,9 @@ readonly_test(void) {
     printf("Start readonly permission test..\n");
     printf("btw, The process will be killed so you won't see any more notice\n");
     int* addr = (int*)0x9000;
-    
+
     *addr = 0x42;
-    
+
     printf("You should not see this!!!\n");
 }
 
@@ -97,11 +97,11 @@ stack_overflow_test(void) {
     printf("stacktop = 0x%08x, stackbase = 0x%08x\n", STACK_START, STACK_START-STACK_SIZE);
 
     int* addr = (int*)(STACK_START - (1<<24) + 4);
-    printf("accessing addr = 0x%08x\n", addr);
+    printf("accessing addr = %p\n", addr);
     *addr = 0x42;
 
     addr = (int*)(STACK_START - STACK_SIZE - 4);
-    printf("accessing addr = 0x%08x\n", addr);
+    printf("accessing addr = %p\n", addr);
     printf("Should die after this\n");
     *addr = 0x42;
 

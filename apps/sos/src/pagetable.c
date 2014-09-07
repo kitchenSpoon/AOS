@@ -72,9 +72,11 @@ _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
     return 0;
 }
 
-static int 
-_map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_ARM_PageDirectory pd,
-          seL4_Word vaddr, seL4_CapRights rights, seL4_ARM_VMAttributes attr){
+static int
+_map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_Word vaddr,
+          seL4_CapRights rights, seL4_ARM_VMAttributes attr) {
+
+    seL4_ARM_PageDirectory pd = as->as_sel4_pd;
     int err;
 
     /* Attempt the mapping */
@@ -92,7 +94,7 @@ _map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_ARM_PageDirectory pd,
 }
 
 int
-sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vaddr, uint32_t permissions) {
+sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
     if (as == NULL) {
         return EINVAL;
     }
@@ -150,8 +152,8 @@ sos_page_map(addrspace_t *as, seL4_ARM_PageDirectory app_sel4_pd, seL4_Word vadd
     }
 
     /* Map the frame into application's address spaces */
-    err = _map_page(as, frame_cap, app_sel4_pd, vpage, 
-                   permissions, seL4_ARM_Default_VMAttributes);
+    err = _map_page(as, frame_cap, vpage, permissions,
+                    seL4_ARM_Default_VMAttributes);
     if (err) {
         frame_free(kvaddr);
         cspace_delete_cap(cur_cspace, frame_cap);

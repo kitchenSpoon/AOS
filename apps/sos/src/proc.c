@@ -11,9 +11,6 @@ addrspace_t* proc_getas(void) {
     return (cur_proc()->as);
 }
 
-seL4_ARM_PageDirectory proc_getvroot(void) {
-    return (cur_proc()->vroot);
-}
 cspace_t* proc_getcroot(void) {
     return (cur_proc()->croot);
 }

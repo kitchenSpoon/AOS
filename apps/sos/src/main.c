@@ -135,8 +135,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         int fd        = (int)seL4_GetMR(1);
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
-        size_t len;
-        err = serv_sys_read(reply_cap, fd, buf, nbyte, &len);
+        err = serv_sys_read(reply_cap, fd, buf, nbyte);
         if(err){
             //do something
         }
@@ -228,14 +227,11 @@ void syscall_loop(seL4_CPtr ep) {
         seL4_MessageInfo_t message;
 
         message = seL4_Wait(ep, &badge);
-        printf("badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
             if (badge & IRQ_BADGE_NETWORK) {
-                printf("before network_irq\n");
                 network_irq();
-                printf("after network_irq\n");
             }
             if (badge & IRQ_BADGE_TIMER) {
                 int ret = timer_interrupt();
@@ -393,11 +389,11 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
     /* initialise address space */
-    tty_test_process.as = as_create();
+    tty_test_process.as = as_create(tty_test_process.vroot);
     conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
 
     /* load the elf image */
-    err = elf_load(tty_test_process.as, tty_test_process.vroot, elf_base);
+    err = elf_load(tty_test_process.as, elf_base);
     conditional_panic(err, "Failed to load elf image");
 
     /* set up the stack & the heap */

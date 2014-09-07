@@ -4,8 +4,8 @@
 #include <sel4/sel4.h>
 #include <errno.h>
 
-#include "syscall.h"
-#include "clock.h"
+#include "syscall/syscall.h"
+#include "dev/clock.h"
 
 #define TIMESTAMP_LOW_MASK      (0x00000000ffffffffULL)
 #define TIMESTAMP_HIGH_MASK     (0xffffffff00000000ULL)

@@ -3,10 +3,10 @@
 #include <string.h>
 #include <sel4/sel4.h>
 
-#include "utility.h"
-#include "proc.h"
-#include "copyinout.h"
-#include "addrspace.h"
+#include "tool/utility.h"
+#include "proc/proc.h"
+#include "vm/copyinout.h"
+#include "vm/addrspace.h"
 
 int
 copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte) {

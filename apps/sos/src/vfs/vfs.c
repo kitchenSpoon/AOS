@@ -1,8 +1,8 @@
 #include <errno.h>
 #include <string.h>
 
-#include "vfs.h"
-#include "console.h"
+#include "vfs/vfs.h"
+#include "dev/console.h"
 
 int vfs_open(char *path, int openflags, struct vnode **ret) {
     int err;

@@ -1,6 +1,7 @@
 #ifndef _SOS_DEVICE_H_
 #define _SOS_DEVICE_H_
-#include "vnode.h"
+
+#include "vfs/vnode.h"
 
 struct vnode* con_vnode;
 

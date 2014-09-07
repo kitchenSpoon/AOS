@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <strings.h>
 #include <limits.h>
-#include "addrspace.h"
-#include "vm.h"
-#include "utility.h"
+
+#include "vm/vm.h"
+#include "vm/addrspace.h"
+#include "tool/utility.h"
 
 #define N_PAGETABLES       (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))

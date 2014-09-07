@@ -1,10 +1,11 @@
 #ifndef _LIBOS_VM_H_
 #define _LIBOS_VM_H_
 
+#include <sel4/sel4.h>
 #include <errno.h>
 
 /*
- * Initialise frame table. Reserve memory and initialise values for frame table 
+ * Initialise frame table. Reserve memory and initialise values for frame table
  *
  * Returns 0 iff successful
  */
@@ -21,7 +22,7 @@ seL4_Word frame_alloc(void);
  * Free the frame with this SOS's vaddr
  *
  * Returns 0 only if successul
- */ 
+ */
 int frame_free(seL4_Word vaddr);
 
 /*

@@ -1,7 +1,7 @@
 #ifndef _SOS_FILE_H_
 #define _SOS_FILE_H_
 
-#include "vnode.h"
+#include "vfs/vnode.h"
 
 #define PROCESS_MAX_FILES 16
 

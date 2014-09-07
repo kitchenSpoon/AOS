@@ -8,11 +8,11 @@
 #include <strings.h>
 #include <errno.h>
 
-#include "vm.h"
-#include "mapping.h"
-#include "vmem_layout.h"
-#include "addrspace.h"
-#include "proc.h"
+#include "vm/vm.h"
+#include "vm/mapping.h"
+#include "vm/vmem_layout.h"
+#include "vm/addrspace.h"
+#include "proc/proc.h"
 
 #define RW_BIT    (1<<11)
 static

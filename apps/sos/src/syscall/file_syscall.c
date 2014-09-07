@@ -7,11 +7,11 @@
 #include <serial/serial.h>
 #include <fcntl.h>
 
-#include "utility.h"
-#include "addrspace.h"
-#include "proc.h"
-#include "syscall.h"
-#include "copyinout.h"
+#include "tool/utility.h"
+#include "vm/addrspace.h"
+#include "proc/proc.h"
+#include "syscall/syscall.h"
+#include "vm/copyinout.h"
 
 #define MAX_SERIAL_TRY  0x100
 #define MAX_IO_BUF      0x1000

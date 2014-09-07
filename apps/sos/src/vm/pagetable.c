@@ -6,10 +6,10 @@
 #include <strings.h>
 #include <ut_manager/ut.h>
 
-#include "vm.h"
-#include "addrspace.h"
-#include "mapping.h"
-#include "utility.h"
+#include "vm/vm.h"
+#include "vm/addrspace.h"
+#include "vm/mapping.h"
+#include "tool/utility.h"
 
 #define STATUS_USED     0
 #define STATUS_FREE     1
@@ -36,7 +36,7 @@ _insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap) {
  * @param vaddr The virtual address of the mapping
  * @return 0 on success
  */
-static int 
+static int
 _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
     seL4_Word pt_addr;
     seL4_ARM_PageTable pt_cap;

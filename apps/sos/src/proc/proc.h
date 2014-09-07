@@ -3,8 +3,8 @@
 
 #include <sel4/sel4.h>
 #include <cspace/cspace.h>
-#include "addrspace.h"
-#include "file.h"
+#include "vm/addrspace.h"
+#include "syscall/file.h"
 
 typedef struct process process_t;
 struct process {

@@ -1,4 +1,4 @@
-#include "proc.h"
+#include "proc/proc.h"
 
 extern process_t tty_test_process;
 

@@ -7,10 +7,10 @@
 #include <cspace/cspace.h>
 #include <fcntl.h>
 
-#include "utility.h"
-#include "console.h"
-#include "vnode.h"
-#include "copyinout.h"
+#include "tool/utility.h"
+#include "dev/console.h"
+#include "vfs/vnode.h"
+#include "vm/copyinout.h"
 
 //#define MAX_IO_BUF 0x1000
 #define MAX_IO_BUF 6000

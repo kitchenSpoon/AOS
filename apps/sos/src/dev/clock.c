@@ -2,13 +2,13 @@
 #include <string.h>
 #include <cspace/cspace.h>
 #include <sel4/sel4.h>
-#include <mapping.h>
 #include <sys/panic.h>
 
 #define verbose 5
 #include <sys/debug.h>
 
-#include "clock.h"
+#include "vm/mapping.h"
+#include "clock/clock.h"
 
 /* Time in miliseconds that an interrupt will be fired */
 #define CLOCK_INT_MILISEC 100
@@ -32,10 +32,10 @@
 #define EPIT_CR_RLD             BIT(3)  // Reload bit
 #define EPIT_CR_OCIEN           BIT(2)  // Enable interrupt
 #define EPIT_CR_ENMOD           BIT(1)  // Set ENMOD to reload CNR when re-enable counter
-#define EPIT_CR_EN              BIT(0)  // Enable bit     
+#define EPIT_CR_EN              BIT(0)  // Enable bit
 
 #define EPIT_CR_CLKSRC          (1 << EPIT_CR_CLKSRC_SHIFT) // Peripheral clock
-#define EPIT_CR_PRESCALER       ((CLOCK_PRESCALER-1) << EPIT_CR_PRE_SHIFT)   
+#define EPIT_CR_PRESCALER       ((CLOCK_PRESCALER-1) << EPIT_CR_PRE_SHIFT)
 
 #define EPIT1_IRQ_NUM       88
 #define EPIT1_BASE_PADDR    0x020D0000
@@ -130,13 +130,13 @@ int start_timer(seL4_CPtr interrupt_ep) {
     }
 
     irq_handler1 = enable_irq(EPIT1_IRQ_NUM, interrupt_ep);
-    epit1 = (clock_register_t*)map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE); 
+    epit1 = (clock_register_t*)map_device((void*)EPIT1_BASE_PADDR, EPIT1_SIZE);
     setup_epit(epit1);
     epit1->cr |= EPIT_CR_EN;
     epit1->lr = CLOCK_LOAD_VALUE;
 
     irq_handler2 = enable_irq(EPIT2_IRQ_NUM, interrupt_ep);
-    epit2 = (clock_register_t*)map_device((void*)EPIT2_BASE_PADDR, EPIT2_SIZE); 
+    epit2 = (clock_register_t*)map_device((void*)EPIT2_BASE_PADDR, EPIT2_SIZE);
     setup_epit(epit2);
     epit2->cr &= ~EPIT_CR_EN;
 
@@ -149,7 +149,7 @@ int stop_timer(void){
     if (!initialised) return CLOCK_R_UINT;
     int err = 0;
     cspace_err_t cspace_err;
-    
+
     /* Cleanup in seL4 kernel & cspace */
     epit1->cr &= ~EPIT_CR_EN;
     err = seL4_IRQHandler_Clear(irq_handler1);
@@ -172,7 +172,7 @@ int stop_timer(void){
  * of our main timer interval, we use a second variable
  * timer for finer resolution.
  *
- * If the next timeout is not within the main timer's 
+ * If the next timeout is not within the main timer's
  * resolution , we will stop running till there is.
  * */
 static void

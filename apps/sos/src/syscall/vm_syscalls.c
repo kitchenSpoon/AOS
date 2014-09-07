@@ -1,8 +1,8 @@
 #include <sel4/sel4.h>
 
-#include "proc.h"
-#include "syscall.h"
-#include "addrspace.h"
+#include "proc/proc.h"
+#include "syscall/syscall.h"
+#include "vm/addrspace.h"
 
 void serv_sys_sbrk(seL4_CPtr reply_cap, seL4_Word newbrk) {
     seL4_MessageInfo_t reply;

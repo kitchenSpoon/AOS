@@ -4,11 +4,11 @@
 #include <string.h>
 #include <fcntl.h>
 
-#include "vfs.h"
-#include "proc.h"
-#include "file.h"
-#include "vnode.h"
-#include "console.h"
+#include "vfs/vfs.h"
+#include "vfs/vnode.h"
+#include "proc/proc.h"
+#include "syscall/file.h"
+#include "dev/console.h"
 
 /*** openfile functions ***/
 

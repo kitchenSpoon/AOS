@@ -7,10 +7,10 @@
 #include <ut_manager/ut.h>
 #include <errno.h>
 
-#include "vm.h"
-#include "mapping.h"
-#include "vmem_layout.h"
-#include "utility.h"
+#include "vm/vm.h"
+#include "vm/mapping.h"
+#include "vm/vmem_layout.h"
+#include "tool/utility.h"
 
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
 

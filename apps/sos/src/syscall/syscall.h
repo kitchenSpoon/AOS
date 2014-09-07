@@ -5,7 +5,7 @@
 #ifndef _SOS_SYSCALL_H_
 #define _SOS_SYSCALL_H_
 
-#include "clock.h"
+#include "dev/clock.h"
 
 #define PROCESS_MAX_FILES       16
 

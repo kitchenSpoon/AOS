@@ -14,13 +14,12 @@
 #include <assert.h>
 #include <errno.h>
 #include <cspace/cspace.h>
-
-#include "addrspace.h"
-#include "utility.h"
-
-#include <vmem_layout.h>
 #include <ut_manager/ut.h>
-#include <mapping.h>
+
+#include "vm/mapping.h"
+#include "vm/addrspace.h"
+#include "vm/vmem_layout.h"
+#include "tool/utility.h"
 
 #define verbose 2
 #include <sys/debug.h>

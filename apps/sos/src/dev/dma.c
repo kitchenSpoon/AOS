@@ -21,10 +21,11 @@
 
 #include <sel4/types.h>
 #include <cspace/cspace.h>
-#include <dma.h>
-#include <mapping.h>
 #include <ut_manager/ut.h>
-#include <vmem_layout.h>
+
+#include "dev/dma.h"
+#include "vm/mapping.h"
+#include "vm/vmem_layout.h"
 
 #define verbose 5
 #include <sys/debug.h>

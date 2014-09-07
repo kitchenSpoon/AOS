@@ -20,16 +20,16 @@
 #include <elf/elf.h>
 #include <serial/serial.h>
 
-#include "network.h"
+#include "dev/network.h"
 
 #include "ut_manager/ut.h"
-#include "vmem_layout.h"
-#include "mapping.h"
-#include "clock.h"
-#include "vm.h"
-#include "addrspace.h"
-#include "proc.h"
-#include "syscall.h"
+#include "vm/vm.h"
+#include "vm/mapping.h"
+#include "vm/vmem_layout.h"
+#include "dev/clock.h"
+#include "proc/proc.h"
+#include "vm/addrspace.h"
+#include "syscall/syscall.h"
 
 #include <autoconf.h>
 

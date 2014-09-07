@@ -121,6 +121,6 @@ int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap);
 int sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr, seL4_Word *kvaddr);
 
 /* SOS's handler for sys_brk system call */
-seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as);
+seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr);
 
 #endif /* _LIBOS_ADDRSPACE_H_ */

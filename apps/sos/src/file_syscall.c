@@ -32,20 +32,8 @@ is_range_mapped(seL4_Word vaddr, size_t nbyte) {
     return true;
 }
 
-
-int serv_sys_print(char* message, size_t len, size_t *sent) {
-    struct serial* serial = serial_init(); //serial_init does the cacheing
-
-    *sent = 0;
-    int tries = 0;
-    while (*sent < len && tries < MAX_SERIAL_TRY) {
-        *sent += serial_send(serial, message+*sent, len-*sent);
-        tries++;
-    }
-    return 0;
-}
-
-int serv_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd){
+static int
+_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd) {
     if (nbyte >= MAX_IO_BUF) {
         return EINVAL;
     }
@@ -71,11 +59,11 @@ int serv_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd){
     if(err) {
         return err;
     }
-    printf("serv_sys_open\n");
     return 0;
 }
 
-int serv_sys_close(int fd){
+static int
+_sys_close(int fd) {
     if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         return EINVAL;
     }
@@ -87,8 +75,8 @@ int serv_sys_close(int fd){
     return 0;
 }
 
-int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
-    //printf("serv_sys_read called\n");
+static int
+_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         return EINVAL;
     }
@@ -121,8 +109,8 @@ int serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     return 0;
 }
 
-
-int serv_sys_write(int fd, seL4_Word buf, size_t nbyte, size_t* len){
+static int
+_sys_write(int fd, seL4_Word buf, size_t nbyte, size_t* len){
     if (fd < 0 || fd >= PROCESS_MAX_FILES || nbyte >= MAX_IO_BUF) {
         return EINVAL;
     }
@@ -150,11 +138,80 @@ int serv_sys_write(int fd, seL4_Word buf, size_t nbyte, size_t* len){
         return EACCES;
     }
 
-    err = file->of_vnode->vn_ops->vop_write(file->of_vnode, kbuf, nbyte, len);
-    //VOP_WRITE(file->of_vnode, kbuf, nbyte, len);
+    err = VOP_WRITE(file->of_vnode, kbuf, nbyte, len);
     if (err) {
         return err;
     }
 
     return 0;
+}
+
+void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
+    struct serial* serial = serial_init(); //serial_init does the cacheing
+
+    size_t sent = 0;
+    int tries = 0;
+    while (sent < len && tries < MAX_SERIAL_TRY) {
+        sent += serial_send(serial, message+sent, len-sent);
+        tries++;
+    }
+
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)sent);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+}
+
+void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
+    int fd;
+    int err;
+    seL4_MessageInfo_t reply;
+
+    err = _sys_open(path, nbyte, flags, &fd);
+
+    reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, fd);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+
+    printf("serv_sys_open\n");
+}
+
+void serv_sys_close(seL4_CPtr reply_cap, int fd){
+    int err;
+    seL4_MessageInfo_t reply;
+
+    err = _sys_close(fd);
+
+    reply = seL4_MessageInfo_new(err, 0, 0, 0);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+}
+
+void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
+    int err;
+    seL4_MessageInfo_t reply;
+
+    err = _sys_read(reply_cap, fd, buf, nbyte);
+    if (err) {
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)-1); // this value can be anything
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+    }
+}
+
+
+void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf,
+                    size_t nbyte) {
+
+    size_t len;
+    int err;
+    seL4_MessageInfo_t reply;
+
+    err = _sys_write(fd, buf, nbyte, &len);
+    reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)len);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
 }

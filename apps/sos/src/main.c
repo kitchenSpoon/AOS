@@ -73,9 +73,6 @@ extern fhandle_t mnt_point;
 void handle_syscall(seL4_Word badge, int num_args) {
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
-    seL4_MessageInfo_t reply;
-    int err;
-
 
     syscall_number = seL4_GetMR(0);
 
@@ -93,23 +90,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
             data[i] = (char)seL4_GetMR(i+1);
         }
 
-        size_t sent;
-        err = serv_sys_print(data, msg_len, &sent);
-
-        reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)sent);
-        seL4_Send(reply_cap, reply);
+        serv_sys_print(reply_cap, data, msg_len);
 
         break;
     }
     case SOS_SYSCALL_SYSBRK:
     {
         seL4_Word newbrk = (seL4_Word)seL4_GetMR(1);
-        newbrk = sos_sys_brk(newbrk, tty_test_process.as);
-
-        reply = seL4_MessageInfo_new(newbrk, 0, 0, 0);
-        seL4_Send(reply_cap, reply);
-
+        serv_sys_sbrk(reply_cap, newbrk);
         break;
     }
     case SOS_SYSCALL_OPEN:
@@ -117,24 +105,13 @@ void handle_syscall(seL4_Word badge, int num_args) {
         seL4_Word path = (seL4_Word)seL4_GetMR(1);
         size_t nbyte   = (size_t)seL4_GetMR(2);
         uint32_t flags = (uint32_t)seL4_GetMR(3);
-        int fd;
-        err = serv_sys_open(path, nbyte, flags, &fd);
-
-        reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0, fd);
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
+        serv_sys_open(reply_cap, path, nbyte, flags);
         break;
     }
     case SOS_SYSCALL_CLOSE:
     {
-        printf("sos_syscall_close_in_main\n");
         int fd = seL4_GetMR(1);
-        err = serv_sys_close(fd);
-
-        reply = seL4_MessageInfo_new(err, 0, 0, 0);
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
+        serv_sys_close(reply_cap, fd);
         break;
     }
     case SOS_SYSCALL_READ:
@@ -142,10 +119,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
         int fd        = (int)seL4_GetMR(1);
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
-        err = serv_sys_read(reply_cap, fd, buf, nbyte);
-        if(err){
-            //do something
-        }
+        serv_sys_read(reply_cap, fd, buf, nbyte);
 
         break;
     }
@@ -154,34 +128,17 @@ void handle_syscall(seL4_Word badge, int num_args) {
         int fd          = (int)seL4_GetMR(1);
         seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
         size_t nbyte    = (size_t)seL4_GetMR(3);
-        size_t len;
-        err = serv_sys_write(fd, buf, nbyte, &len);
-
-        reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)len);
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
-
+        serv_sys_write(reply_cap, fd, buf, nbyte);
         break;
     }
     case SOS_SYSCALL_SLEEP:
     {
-        err = serv_sys_sleep(reply_cap, seL4_GetMR(1));
-        //reply = seL4_MessageInfo_new(err, 0, 0, 0);
-        //seL4_Send(reply_cap, reply);
-        if(err){
-            //do something
-        }
+        serv_sys_sleep(reply_cap, seL4_GetMR(1));
         break;
     }
     case SOS_SYSCALL_TIMESTAMP:
     {
-        timestamp_t ts;
-        err = serv_sys_timestamp(&ts);
-        reply = seL4_MessageInfo_new(err, 0, 0, 2);
-        seL4_SetMR(0, (uint32_t)(ts & TIMESTAMP_LOW_MASK));
-        seL4_SetMR(1, (uint32_t)((ts & TIMESTAMP_HIGH_MASK)>>32));
-        seL4_Send(reply_cap, reply);
+        serv_sys_timestamp(reply_cap);
         break;
     }
     default:
@@ -189,8 +146,6 @@ void handle_syscall(seL4_Word badge, int num_args) {
         /* we don't want to reply to an unknown syscall */
     }
 
-    /* Free the saved reply cap */
-    //cspace_free_slot(cur_cspace, reply_cap);
 }
 
 void handle_pagefault(void) {

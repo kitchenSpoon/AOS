@@ -213,7 +213,7 @@ as_define_heap(addrspace_t *as) {
     return 0;
 }
 
-seL4_Word sos_sys_brk(seL4_Word vaddr, addrspace_t *as){
+seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr){
     if(as == NULL || as->as_heap == NULL) return 0;
 
     if(vaddr == 0){

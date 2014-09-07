@@ -179,7 +179,7 @@ int con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
         err = copyout((seL4_Word)buf, (seL4_Word)console.buf, len);
         if (err) {
             seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-            seL4_SetMR(0, 0);
+            seL4_SetMR(0, (seL4_Word)-1); // This value can be anything
             seL4_Send(reply_cap, reply);
             cspace_free_slot(cur_cspace, reply_cap);
 

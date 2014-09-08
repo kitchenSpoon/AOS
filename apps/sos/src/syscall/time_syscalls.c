@@ -46,10 +46,10 @@ static int
 _sys_sleep(seL4_CPtr reply_cap, const int msec) {
     uint64_t delay = (uint64_t)msec * 1000;
     struct sleep_state *state = malloc(sizeof(struct sleep_state));
-    state->reply_cap = reply_cap;
     if(state == NULL) {
         return ENOMEM;
     }
+    state->reply_cap = reply_cap;
     register_timer(delay, sleep_callback, (void*)state);
     return 0;
 }

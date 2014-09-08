@@ -62,7 +62,8 @@ int sos_sys_close(fildes_t fd) {
 
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
     int err = seL4_MessageInfo_get_label(message);
-    return err;
+    if(err) return -1;
+    return 0;
 }
 int sos_sys_read(fildes_t file, char *buf, size_t nbyte) {
     int err;

@@ -290,8 +290,10 @@ static void test_file_syscalls(void) {
 
 
     printf("Closing both files\n");
-    close(fd);
-    close(fd2);
+    ret = close(fd);
+    assert(ret == 0);
+    ret = close(fd2);
+    assert(ret == 0);
     printf("Done\n---\n");
 
     /* write to a closed file */
@@ -310,7 +312,8 @@ static void test_file_syscalls(void) {
     printf("Failed, as expected!\n");
 
     printf("Closing the file\n");
-    close(fd);
+    ret = close(fd);
+    assert(ret == 0);
     printf("Done\n---\n");
 
     printf("Test opening read two times\n");
@@ -320,8 +323,10 @@ static void test_file_syscalls(void) {
     assert(fd2 < 0);
     printf("Failed, as expected!\n");
 
-    close(fd);
-    close(fd2);
+    ret = close(fd);
+    assert(ret == 0);
+    ret = close(fd2);
+    assert(ret == -1);
     printf("Done\n");
 
     printf("End file syscalls test\n");

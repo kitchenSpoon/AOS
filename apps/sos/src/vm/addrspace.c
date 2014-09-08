@@ -217,8 +217,9 @@ as_define_heap(addrspace_t *as) {
 seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr){
     if(as == NULL || as->as_heap == NULL) return 0;
 
+    printf("sos_sysbrk, vaddr = %p\n", (void*)vaddr);
     if(vaddr == 0){
-        return as->as_heap->vbase;
+        return as->as_heap->vtop;
     }
     if (vaddr < as->as_heap->vbase) {
         return as->as_heap->vtop = as->as_heap->vbase;

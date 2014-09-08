@@ -185,7 +185,7 @@ void handle_pagefault(void) {
 void syscall_loop(seL4_CPtr ep) {
 
     while (1) {
-        printf("looping\n");
+        //printf("looping\n");
         seL4_Word badge;
         seL4_Word label;
         seL4_MessageInfo_t message;

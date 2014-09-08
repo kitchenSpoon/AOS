@@ -266,39 +266,94 @@ struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
         {"time", second_time}, {"mtime", micro_time}, {"kill", kill} };
 
-static void test_write(void) {
-    int fd = open("console", O_RDWR);
-    assert(fd >= 0);
-
+static void test_file_syscalls(void) {
+    printf("Start file syscalls test...\n");
+    int fd, fd2, ret;
     char buf[] = "This is cool!!\n";
-    int ret = write(fd, buf, sizeof(buf));
-    assert(ret == sizeof(buf));
-    printf("First write success, as expected\n");
-    close(fd);
-    ret = write(fd, buf, sizeof(buf)); // should fail
-    assert(ret < 0);
-    printf("Second write failed, as expected\n");
-    fd = open("console", O_RDONLY);
-    printf("fd = %d\n",fd);
-    assert(fd >= 0);
-    printf("Second open success , as expected\n");
-    ret = write(fd, buf, sizeof(buf)); // should fail
-    assert(ret < 0);
-    printf("Third write failed, as expected\n");
-    close(fd);
+    char buf2[] = "This is even cooler!!!\n";
 
+    printf("Test open & write, should see: %s", buf);
+    fd = open("console", O_RDWR);
+    assert(fd >= 0);
+
+    ret = write(fd, buf, sizeof(buf));
+    assert(ret == sizeof(buf));
+    printf("Passed!\n");
+
+    printf("Test multiple write to the console, should see: %s", buf2);
+    fd2 = open("console", O_WRONLY);
+    assert(fd2 > fd && fd2 != fd);
+
+    ret = write(fd2, buf2, sizeof(buf2));
+    assert(ret == sizeof(buf2));
+    printf("Passed!\n");
+
+
+    printf("Closing both files\n");
+    close(fd);
+    close(fd2);
+    printf("Done\n---\n");
+
+    /* write to a closed file */
+    printf("Test writing to a closed file\n");
+    ret = write(fd, buf, sizeof(buf));
+    assert(ret < 0);
+    printf("Failed, as expected!\n---\n");
+
+    /* Write to a read only file */
+    printf("Test writing for readonly file\n");
+    fd = open("console", O_RDONLY);
+    assert(fd >= 0);
+
+    ret = write(fd, buf, sizeof(buf)); // should fail
+    assert(ret < 0);
+    printf("Failed, as expected!\n");
+
+    printf("Closing the file\n");
+    close(fd);
+    printf("Done\n---\n");
 
     printf("Test opening read two times\n");
     fd = open("console", O_RDWR);
     assert(fd > 0);
-    int fd2 = open("console", O_RDONLY);
+    fd2 = open("console", O_RDONLY);
     assert(fd2 < 0);
-    printf("Failed to open console for reading twice, as expected\n");
+    printf("Failed, as expected!\n");
 
     close(fd);
-    printf("closed fd\n");
     close(fd2);
-    printf("closed fd2\n");
+    printf("Done\n");
+
+    printf("End file syscalls test\n");
+}
+
+static void
+test_dynamic_heap(void) {
+    printf("Beginning dynamic heap...\n");
+    void* addr;
+
+    printf("current brk is at: %p\n", sbrk(0));
+    printf("Mallocing 8K memory...\n");
+    addr = malloc((1<<13));
+    printf("Touching the address\n");
+    *(int*)addr = 100;
+    addr += (1<<12);
+    *(int*)addr = 100;
+    addr += (1<<11);
+    *(int*)addr = 100;
+
+    printf("brk is now at: %p\n", sbrk(0));
+    printf("Mallocing 10K memory...\n");
+    addr = malloc((1<<13) + (1<<11));
+    printf("Touching the address\n");
+    *(int*)addr = 100;
+    addr += (1<<12);
+    *(int*)addr = 100;
+    addr += (1<<11);
+    *(int*)addr = 100;
+    printf("brk is now at: %p\n", sbrk(0));
+
+    printf("Exiting dynamic heap test\n");
 }
 
 int main(void) {
@@ -307,7 +362,8 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
 
-    test_write();
+    test_file_syscalls();
+    test_dynamic_heap();
 
     in = open("console", O_RDONLY);
     assert(in >= 0);
@@ -318,22 +374,6 @@ int main(void) {
     new = 1;
 
     printf("\n[SOS Starting]\n");
-
-    printf("\nsleep begin 1 second\n");
-    second_time(0,NULL);
-    micro_time(0,NULL);
-    sleep(1);
-    micro_time(0,NULL);
-    second_time(0,NULL);
-    printf("\nwake up\n");
-    printf("\nsleep begin 10 second\n");
-    second_time(0,NULL);
-    micro_time(0,NULL);
-    sleep(1);
-    micro_time(0,NULL);
-    second_time(0,NULL);
-    printf("\nwake up\n");
-
 
     while (!done) {
         if (new) {

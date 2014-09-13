@@ -28,6 +28,11 @@ int vfs_open(char *path, int openflags, struct vnode **ret) {
         //
         // When we mount nfs, we will be given a fhandle_t to the root
         // of the filesystem, we will have to save it somewhere
+        vn = malloc(sizeof(struct vnode));
+        if(vn == NULL)
+            return ENOMEM;
+        //need to copy path to name, this is wrong
+        vn->name = path;
         return EFAULT;
     }
     err = VOP_EACHOPEN(vn, openflags);

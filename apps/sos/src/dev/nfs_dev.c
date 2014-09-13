@@ -16,6 +16,8 @@
 #define MAX_IO_BUF 6000
 #define MAX_SERIAL_SEND 100
 
+extern fhandle_t mnt_point;
+
 struct console{
 } console;
 
@@ -115,21 +117,77 @@ static void read_handler(struct serial * serial , char c){
     }
 }
 
-void nfs_eachopen_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
-    nfs_open_state *state = token;
-    state->vnode->vn_data->status = status;
+
+void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
     //FHSIZE is max fhandle->data size
-    state->vnode->vn_data = fh;//fh->data = fh->data;
-    
-    state->fattr = fattr;
+
+    /* Cast for convience */
+    nfs_open_state *state = (nfs_open_state*) token;
+
+    /* Copy data to our vnode*/
+    fhandle_t *our_fh = malloc(sizeof(fhandle_t));
+    memcpy(our_fh->data, fh->data, sizeof(fh->data));
+    fattr_t *our_fattr = malloc(sizeof(fattr_t));
+    *our_fattr = *fattr;
+
+    state->vnode->vn_data->fh = our_fh;
+    state->vnode->vn_data->fattr = our_fattr;
+    seL4_CPtr_t reply_cap = token->reply_cap;
+
+    /* place fhandle_t into vnode and add vnode into mapping*/
+
+    /* reply sosh*/
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)len);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
 }
 
-int nfs_eachopen(struct vnode *file, int flags){
+void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
+    if(status == NFS_OK){
+        nfs_dev_eachopen_end(token, fh, fattr);
+    } else {
+        //error, nfs fail to create file
+    }
+}
+
+void nfs_dev_create(const char *name, uintptr_t token){
+
+    nfs_open_state *state = malloc(sizeof(nfs_open_state));
+    sattr_t sattr;
+    sattr.mode = ASD;
+    sattr.uid = 0;//processid
+    sattr.gid = 0;//groupid
+    sattr.size = 0;//what is the size a new file should have
+    timeval atime, mtime;
+    atime = get_timeval();
+    mtime = get_timeval();
+    sattr.atime = atime;
+    sattr.mtime = mtime;
+
+    nfs_create(mnt_point, name, &sattr, nfs_dev_create_handler, token);
+}
+
+void nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
+    if(status == NFS_OK){
+        nfs_dev_each_open_end(token, fh, fattr);
+    } else {
+        nfs_dev_create(state->vnode->name, token);
+    }
+}
+
+int nfs_dev_eachopen(struct vnode *file, int flags, struct openfile *openfile){
     printf("nfs_open called\n");
-    int err;
 
     //Need a fhandle_t to the root of nfs (provided by nfs_mount(which should be called when we start))
-    //nfs_lookup(magic_nfs_root_dir,);
+    if(file == NULL) return EFAULT;
+    if(openfile == NULL) return EFAULT;
+    if(mnt_point == NULL) return EFAULT;
+
+    nfs_open_state *state = malloc(sizeof(nfs_open_state));
+    nfs_lookup(mnt_point, file->name, nfs_dev_lookup_handler, state);
+
+    /*
     if(flags == O_RDWR || flags == O_RDONLY){
         if(!con_read_state.opened_for_reading){
             err = serial_register_handler(console.serial, read_handler);
@@ -141,8 +199,7 @@ int nfs_eachopen(struct vnode *file, int flags){
             return EFAULT;
         }
     }
-
-    printf("con_open succeed\n");
+    */
     return 0;
 }
 

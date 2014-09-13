@@ -126,14 +126,23 @@ static void read_handler(struct serial * serial , char c){
 
 void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
     //FHSIZE is max fhandle->data size
+    int err = 0;
 
     /* Cast for convience */
     nfs_open_state *state = (nfs_open_state*) token;
 
     /* Copy data to our vnode*/
     fhandle_t *our_fh = malloc(sizeof(fhandle_t));
+    if(our_fh == NULL){
+        err = 1;
+    }
     memcpy(our_fh->data, fh->data, sizeof(fh->data));
+
     fattr_t *our_fattr = malloc(sizeof(fattr_t));
+    if(our_fattr == NULL){
+        free(our_fh);
+        err = 1;
+    }
     *our_fattr = *fattr;
 
     state->vnode->vn_data->fh = our_fh;
@@ -144,8 +153,8 @@ void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
     //nfs_vnode_init();
 
     /* reply sosh*/
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)len);
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
+    //seL4_SetMR(0, (seL4_Word)len);
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
 
@@ -157,6 +166,13 @@ void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh
         nfs_dev_eachopen_end(token, fh, fattr);
     } else {
         //error, nfs fail to create file
+        /* reply sosh*/
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(1, 0, 0, 0);
+        //seL4_SetMR(0, (seL4_Word)len);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+
+        free(state);
     }
 }
 

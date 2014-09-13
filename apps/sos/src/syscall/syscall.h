@@ -17,6 +17,8 @@
 #define SOS_SYSCALL_WRITE       5
 #define SOS_SYSCALL_TIMESTAMP   6
 #define SOS_SYSCALL_SLEEP       7
+#define SOS_SYSCALL_GETDIRENT   8
+#define SOS_SYSCALL_STAT        9
 
 /* File syscalls */
 

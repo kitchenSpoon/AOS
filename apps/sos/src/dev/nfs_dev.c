@@ -46,6 +46,11 @@ typedef struct nfs_read_state{
     struct openfile *openfile;
 } nfs_read_state;
 
+typedef struct nfs_getdirent_state{
+    seL4_CPtr reply_cap;
+    nfscookie_t cookie;
+} nfs_getdirent_state;
+
 struct nfs_data{
     fhandle_t *fh;
     fattr_t *fattr;
@@ -306,6 +311,29 @@ int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, int offset, struc
     state->app_buf = buf;
     state->openfile = openfile;
     nfs_read(file->vn_data->fh, offset, nbytes, nfs_dev_read_handler, state);
+
+    return 0;
+}
+
+void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
+    nfs_getdirent_state *state = (nfs_getdirent_state*) token;
+    state->cookie = nfscookie;
+}
+
+int nfs_dev_getdirent(struct vnode *file, char *buf, seL4_CPtr reply_cap){
+    nfs_getdirent_state *state = malloc(sizeof(nfs_getdirent_state));
+    state->reply_cap = reply_cap;
+    state->cookie = cookie;
+    nfs_readdir(mnt_point, 0, nfs_dev_getdirent_handler, state);
+}
+
+int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
+    if(file == NULL) return EFAULT;
+    if(file->vn == NULL) return EFAULT;
+    if(file->vn->vn_data == NULL) return EFAULT;
+
+    //need to check if fattr has pointers in it
+    *buf = *(file->vn->vn_data->fattr);
 
     return 0;
 }

@@ -337,3 +337,12 @@ int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
 
     return 0;
 }
+
+void nfs_dev_timeout_handler(){
+    nfs_timeout();
+    register_timer(100000, nfs_dev_timeout_handler, NULL); //100ms
+}
+
+void nfs_dev_timeout(){
+    register_timer(100000, nfs_dev_timeout_handler, NULL); //100ms
+}

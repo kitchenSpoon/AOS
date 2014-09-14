@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include <sel4/sel4.h>
+#include <sos.h>
+
 struct vnode {
     bool initialised;
     int vn_opencount;
@@ -17,7 +19,8 @@ struct vnode_ops {
     int (*vop_lastclose)(struct vnode *file);   // lastclose cleans up the vn_data
     int (*vop_read)(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap);
     int (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
-    int (*vop_getdirent)(struct vnode *dir, char* buf, seL4_CPtr reply_cap);
+    int (*vop_getdirent)(struct vnode *dir, char *buf, size_t nbyte,
+                         int pos, seL4_CPtr reply_cap);
     int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
 };
 
@@ -30,7 +33,7 @@ struct vnode_ops {
 #define VOP_READ(vn, buf, nbytes, reply_cap)        (__VOP(vn, read)(vn, buf, nbytes, reply_cap))
 #define VOP_WRITE(vn, buf, nbyte, len)              (__VOP(vn, write)(vn, buf, nbyte, len))
 #define VOP_WRITE(vn, buf, nbyte, len)              (__VOP(vn, write)(vn, buf, nbyte, len))
-#define VOP_GETDIRENT(vn, buf, reply_cap)           (__VOP(vn, getdirent)(vn, buf, reply_cap))
+#define VOP_GETDIRENT(vn, buf, nbyte, pos, reply_cap) (__VOP(vn, getdirent)(vn, buf, nbyte, pos, reply_cap))
 #define VOP_STAT(vn, buf)                           (__VOP(vn, stat)(vn, buf))
 
 /*

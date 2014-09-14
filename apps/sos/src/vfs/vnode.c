@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
+#include "vfs/vfs.h"
 #include "vfs/vnode.h"
 
 void vnode_incopen(struct vnode *vn) {

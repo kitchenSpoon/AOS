@@ -361,7 +361,7 @@ void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_fi
     }
 }
 
-int nfs_dev_getdirent(struct vnode *file, char *buf, int pos, size_t nbyte, seL4_CPtr reply_cap){
+int nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int pos, seL4_CPtr reply_cap){
     nfs_getdirent_state *state = malloc(sizeof(nfs_getdirent_state));
     state->reply_cap = reply_cap;
     state->pos = pos;

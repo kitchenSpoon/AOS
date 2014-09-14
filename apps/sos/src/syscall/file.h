@@ -22,7 +22,7 @@ struct openfile {
 };
 
 /* opens a file (must be kernel pointers in the args) */
-int file_open(char *filename, int flags, int *retfd);
+int file_open(char *filename, int flags, int *retfd, seL4_CPtr reply_cap);
 
 /* closes a file */
 int file_close(int fd);

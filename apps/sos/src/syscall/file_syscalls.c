@@ -212,25 +212,32 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf,
 
 void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
     uint32_t permissions = 0;
-    if(!as_is_valid_memory(proc_getas(), buf, sizeof(sos_stat_t), &permissions) ||
-            !(permissions & sel4_canwrite)){
-        return einval;
+    if(!as_is_valid_memory(proc_getas(), (seL4_Word)name, sizeof(sos_stat_t), &permissions) ||
+            !(permissions & seL4_CanWrite)){
+        return EINVAL;
     }
+    //get vnode
+    
 
     //find vnode
-    VOP_GETDIRENT(vn, name, pos, reply_cap);
+    VOP_GETDIRENT(NULL, name, nbyte, pos, reply_cap);
 }
 
-void serv_sys_stat(seL4_CPtr reply_cap, char *path, sos_stat_t *buf){
+void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf){
 
     /* Read doesn't check buffer if mapped like open & write,
      * just check if the memory is valid. It will map page when copyout */
     uint32_t permissions = 0;
-    if(!as_is_valid_memory(proc_getas(), buf, sizeof(sos_stat_t), &permissions) ||
-            !(permissions & sel4_canwrite)){
-        return einval;
+    if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_stat_t), &permissions) ||
+            !(permissions & seL4_CanWrite)){
+        return EINVAL;
     }
 
+    //check me
+    if(!as_is_valid_memory(proc_getas(), (seL4_Word)path, path_len, &permissions) ||
+            !(permissions & seL4_CanRead)){
+        return EINVAL;
+    }
     //we store stat with our vnode so we dont need to deal with nfs
     //loop through our vnode list
     vn = vfs_vt_lookup(path);

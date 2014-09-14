@@ -80,4 +80,8 @@ void serv_sys_sleep(seL4_CPtr reply_cap, const int msec);
  */
 void serv_sys_sbrk(seL4_CPtr reply_cap, seL4_Word newbrk);
 
+void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte);
+
+void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf);
+
 #endif /* _SOS_SYSCALL_H_ */

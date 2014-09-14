@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 
@@ -6,6 +7,8 @@
 
 static
 int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap) {
+    int err;
+
     struct vnode *vn = malloc(sizeof(struct vnode));
     if (vn == NULL) {
         return ENOMEM;
@@ -19,8 +22,8 @@ int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply
     }
     strcpy(vn->vn_name, path);
 
-    vn->vn_vops = malloc(sizeof(struct vnode_ops));
-    if (vn->vn_vops == NULL) {
+    vn->vn_ops = malloc(sizeof(struct vnode_ops));
+    if (vn->vn_ops == NULL) {
         free(vn->vn_name);
         free(vn);
         return ENOMEM;
@@ -33,7 +36,7 @@ int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply
         err = con_init(vn, reply_cap);
         if (err) {
             free(vn->vn_name);
-            free(vn->vn_vops);
+            free(vn->vn_ops);
             free(vn);
             return err;
         }
@@ -41,7 +44,7 @@ int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply
         err = nfs_dev_init(vn, reply_cap);
         if (err) {
             free(vn->vn_name);
-            free(vn->vn_vops);
+            free(vn->vn_ops);
             free(vn);
             return err;
         }
@@ -51,12 +54,13 @@ int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply
     if (err) {
         VOP_LASTCLOSE(vn);
         free(vn->vn_name);
-        free(vn->vn_vops);
+        free(vn->vn_ops);
         free(vn);
         return err;
     }
 
     *ret = vn;
+    return 0;
 }
 
 int vfs_open(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap) {
@@ -75,7 +79,7 @@ int vfs_open(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap)
         if (err) {
             VOP_LASTCLOSE(vn);
             free(vn->vn_name);
-            free(vn->vn_vops);
+            free(vn->vn_ops);
             free(vn);
             return err;
         }
@@ -83,7 +87,7 @@ int vfs_open(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap)
         err = VOP_EACHOPEN(vn, openflags);
         if (err) {
             free(vn->vn_name);
-            free(vn->vn_vops);
+            free(vn->vn_ops);
             free(vn);
             return err;
         }
@@ -106,12 +110,12 @@ struct vnode* vfs_vnt_lookup(const char *path) {
     }
     struct vnode_table_entry *vte = vnode_table_head;
     while (vte != NULL) {
-        if (strcmp(path, vte->vte_name) == 0) {
+        if (strcmp(path, vte->vte_vn->vn_name) == 0) {
             break;
         }
         vte = vte->next;
     }
-    return vte;
+    return vte->vte_vn;
 }
 
 int vfs_vnt_insert(struct vnode *vn) {
@@ -125,6 +129,7 @@ int vfs_vnt_insert(struct vnode *vn) {
     vte->vte_vn = vn;
     vte->next = vnode_table_head;
     vnode_table_head = vte->next;
+    return 0;
 }
 
 void vfs_vnt_delete(const char *path) {
@@ -134,7 +139,7 @@ void vfs_vnt_delete(const char *path) {
     if (vnode_table_head == NULL) {
         return;
     }
-    if (strcmp(vnode_table_head->name, path) == 0) {
+    if (strcmp(vnode_table_head->vte_vn->vn_name, path) == 0) {
         struct vnode_table_entry *next_vte = vnode_table_head->next;
         free(vnode_table_head);
         vnode_table_head = next_vte;
@@ -144,7 +149,7 @@ void vfs_vnt_delete(const char *path) {
     struct vnode_table_entry *vte = vnode_table_head->next;
     struct vnode_table_entry *prev = vnode_table_head;;
     while (vte != NULL) {
-        if (strcmp(vte->vte_vn->name, path) == 0) {
+        if (strcmp(vte->vte_vn->vn_name, path) == 0) {
             break;
         }
         prev = vte;

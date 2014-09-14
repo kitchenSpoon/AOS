@@ -28,6 +28,13 @@
 #define SOS_SYSCALL_WRITE       5
 #define SOS_SYSCALL_TIMESTAMP   6
 #define SOS_SYSCALL_SLEEP       7
+#define SOS_SYSCALL_GETDIRENT   8
+#define SOS_SYSCALL_STAT        9
+
+/// The maximum number of bytes in a file name argument.
+#define MAXNAMLEN   255
+/// The maximum number of bytes in a pathname argument.
+#define MAXPATHLEN 1024
 
 fildes_t sos_sys_open(const char *path, int flags) {
     int len = 0;
@@ -201,13 +208,18 @@ int sos_getdirent(int pos, char *name, size_t nbyte) {
 
 int sos_stat(const char *path, sos_stat_t *buf) {
     int err;
+
+    size_t size = 0;
+    for(size = 0; size < MAXPATHLEN && path[size] != '\0'; size++);
+
     seL4_MessageInfo_t tag, message;
 
     tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
     seL4_SetTag(tag);
     seL4_SetMR(0, SOS_SYSCALL_STAT);
     seL4_SetMR(1, (seL4_Word)path);
-    seL4_SetMR(2, (seL4_Word)buf);
+    seL4_SetMR(2, (seL4_Word)size);
+    seL4_SetMR(3, (seL4_Word)buf);
 
     message = seL4_Call(SOS_IPC_EP_CAP, tag);
     err = seL4_MessageInfo_get_label(message);

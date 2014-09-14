@@ -12,20 +12,23 @@
 
 /*** openfile functions ***/
 
+//TODO: This needs to handle concurrency when we have multiple processes
+//      Especially when they open the same file
+
 /*
  * file_open
  * opens a file, places it in the filetable, sets RETFD to the file
  * descriptor. the pointer arguments must be kernel pointers.
  */
 int
-file_open(char *filename, int flags, int *retfd)
+file_open(char *filename, int flags, int *retfd, seL4_CPtr reply_cap)
 {
     printf("file_open\n");
     struct vnode *vn;
     struct openfile *file;
     int err;
 
-    err = vfs_open(filename, flags, &vn);
+    err = vfs_open(filename, flags, &vn, reply_cap);
     if (err) {
         return err;
     }

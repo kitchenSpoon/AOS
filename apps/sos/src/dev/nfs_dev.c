@@ -39,27 +39,29 @@ typedef struct nfs_open_state{
     size_t nbytes;
 } nfs_open_state;
 
-typedef struct nfs_
-
 struct nfs_data{
-    fhandle_t fh;
-} nfs_data;
+    fhandle_t *fh;
+    fattr_t   *fattr;
+};
 
-int
-nfs_vnode_init(vnode* vn, fhandle_t nfs_fh) {
+/*
+ * To be called when a new vnode is created (i.e. called in nfs_dev_eachopen_end()
+ * Assumes that it is okay to do a shallow
+ */
+static int
+nfs_vnode_init(vnode* vn, fhandle_t *nfs_fh, fattr_t *nfs_fattr) {
     vn = malloc(sizeof(struct vnode));
     if (vn == NULL) {
         return ENOMEM;
     }
 
-    struct nfs_data *data = malloc(sizeof(nfs_data));
+    struct nfs_data *data = malloc(sizeof(struct nfs_data));
     if (data == NULL) {
         free(vn);
         return ENOMEM;
     }
-    data->fh = fh;
-    vn->vn_data       = data;
-    vn->vn_opencount  = 0;
+    data->fh    = nfs_fh;
+    data->fattr = nfs_fattr;
 
     struct vnode_ops *vops = malloc(sizeof(struct vnode_ops));
     if (vops == NULL) {
@@ -69,11 +71,13 @@ nfs_vnode_init(vnode* vn, fhandle_t nfs_fh) {
     }
     vops->vop_eachopen  = nfs_eachopen;
     vops->vop_eachclose = nfs_eachclose;
-    vops->vop_lastclose = cnfs_lastclose;
-    vops->vop_read  = nfs_read;
-    vops->vop_write = nfs_write;
+    vops->vop_lastclose = nfs_lastclose;
+    vops->vop_read      = nfs_read;
+    vops->vop_write     = nfs_write;
 
-    vn->vn_ops = vops;
+    vn->vn_data       = data;
+    vn->vn_opencount  = 0;
+    vn->vn_ops        = vops;
 
     return 0;
 }
@@ -203,26 +207,17 @@ int nfs_dev_eachopen(struct vnode *file, int flags, struct openfile *openfile){
     return 0;
 }
 
-int con_eachclose(struct vnode *file, uint32_t flags){
-    printf("con_eachclose\n");
-    if(flags == O_RDWR || flags == O_RDONLY) {
-        if(console.serial == NULL) {
-            return EFAULT;
-        }
-        int err = serial_register_handler(console.serial, NULL);
-        if(err){ // should not happen
-            return EFAULT;
-        }
-
-        console.buf_size = 0;
-        con_read_state.opened_for_reading = 0;
-    }
+int nfs_eachclose(struct vnode *file, uint32_t flags){
+    (void)file;
+    (void)flags;
     return 0;
 }
 
-int con_lastclose(struct vnode *vn) {
-    (void)vn;
-    console.buf_size = 0;
+int nfs_lastclose(struct vnode *vn) {
+    struct nfs_data *data = (struct nfs_data*)vn->vn_data;
+
+    free(data->fh);
+    free(data->fattr);
     return 0;
 }
 

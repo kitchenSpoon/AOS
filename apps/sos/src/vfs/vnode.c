@@ -15,9 +15,12 @@ void vnode_decopen(struct vnode *vn) {
     if (vn->vn_opencount > 1) {
         vn->vn_opencount--;
     } else {
-        // flush changes to the disk i-nodes by calling reclaim
-        // Also reclaim should free the vn_data as well
-        //result = VOP_RECLAIM(vn);
+        //result = VOP_RECLAIM(vn); // flush changes to the disk i-nodes
+
         VOP_LASTCLOSE(vn);
+        vfs_vnt_delete(vn->vn_name);
+        free(vn->vn_name);
+        free(vn->vn_ops);
+        free(vn);
     }
 }

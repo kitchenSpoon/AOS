@@ -216,21 +216,33 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf,
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
-void serv_sys_getdirent(int pos, char* name, size_t nbyte){
+void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
+    uint32_t permissions = 0;
+    if(!as_is_valid_memory(proc_getas(), buf, sizeof(sos_stat_t), &permissions) ||
+            !(permissions & sel4_canwrite)){
+        return einval;
+    }
+
     //find vnode
-    vops->getdirent();
+    VOP_GETDIRENT(vn, name, pos, reply_cap);
 }
 
-void serv_sys_stat(char *path, sos_stat_t *buf){
+void serv_sys_stat(seL4_CPtr reply_cap, char *path, sos_stat_t *buf){
+
+    /* Read doesn't check buffer if mapped like open & write,
+     * just check if the memory is valid. It will map page when copyout */
+    uint32_t permissions = 0;
+    if(!as_is_valid_memory(proc_getas(), buf, sizeof(sos_stat_t), &permissions) ||
+            !(permissions & sel4_canwrite)){
+        return einval;
+    }
+
     //we store stat with our vnode so we dont need to deal with nfs
-    //loop through our vnode list 
-    //
-    vn = that vnode;
+    //loop through our vnode list
+    vn = vfs_vt_lookup(path);
+    if(vn == NULL){
+        //error
+    }
 
-    copyout();
-
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)sent);
-    seL4_Send(reply_cap, reply);
-    cspace_free_slot(cur_cspace, reply_cap);
+    VOP_STAT(vn, buf);
 }

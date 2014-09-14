@@ -29,6 +29,8 @@ struct vnode_ops {
 #define VOP_READ(vn, buf, nbytes, reply_cap)        (__VOP(vn, read)(vn, buf, nbytes, reply_cap))
 #define VOP_WRITE(vn, buf, nbyte, len)              (__VOP(vn, write)(vn, buf, nbyte, len))
 #define VOP_WRITE(vn, buf, nbyte, len)              (__VOP(vn, write)(vn, buf, nbyte, len))
+#define VOP_GETDIRENT(vn, buf, reply_cap)           (__VOP(vn, getdirent)(vn, buf, reply_cap))
+#define VOP_STAT(vn, buf)                           (__VOP(vn, stat)(vn, buf))
 
 /*
  * Reference count manipulation

@@ -48,6 +48,7 @@ typedef struct nfs_read_state{
 
 typedef struct nfs_getdirent_state{
     seL4_CPtr reply_cap;
+    char* app_buf;
     nfscookie_t cookie;
 } nfs_getdirent_state;
 
@@ -316,14 +317,59 @@ int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, int offset, struc
 }
 
 void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
-    nfs_getdirent_state *state = (nfs_getdirent_state*) token;
-    state->cookie = nfscookie;
+    int size = 0, finish = 0, err = 0;
+    if(status == NFS_OK){
+        nfs_getdirent_state *state = (nfs_getdirent_state*) token;
+        state->cookie = nfscookie;
+
+        /* We have the file we want */
+        if(num_files >= state->pos){
+            //pos is next free entry
+            if(state->pos == num_files + 1){
+                size = 0;
+            //pos is valid entry
+            } else {
+                char* name = file_names[pos];
+                while(name[size] != '\0' && size < state->nbyte){
+                    size++;
+                }
+
+                err = copyout(state->buf, name, size);
+            }
+            finish = 1;
+        } else {
+            if(nfscookie == 0){  /* No more entry*/
+                //non-existent entry
+                finish = 1;
+            } else {             /* Read more */
+                pos -= num_files;
+                assert(pos >= 0);
+                nfs_readdir(mnt_point, nfscookie, nfs_dev_getdirent_handler, state);
+            }
+        }
+    } else {
+        finish = 1;
+        err = 1;
+    }
+
+    if(finish){
+        /* reply sosh*/
+        seL4_CPtr reply_cap = state->reply_cap;
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)size);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+
+        free(state);
+    }
 }
 
-int nfs_dev_getdirent(struct vnode *file, char *buf, seL4_CPtr reply_cap){
+int nfs_dev_getdirent(struct vnode *file, char *buf, int pos, size_t nbyte, seL4_CPtr reply_cap){
     nfs_getdirent_state *state = malloc(sizeof(nfs_getdirent_state));
     state->reply_cap = reply_cap;
-    state->cookie = cookie;
+    state->pos = pos;
+    state->app_buf = buf;
+    state->nbyte = nbyte;
     nfs_readdir(mnt_point, 0, nfs_dev_getdirent_handler, state);
 }
 
@@ -333,8 +379,27 @@ int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
     if(file->vn->vn_data == NULL) return EFAULT;
 
     //need to check if fattr has pointers in it
-    *buf = *(file->vn->vn_data->fattr);
+    fattr_t *fattr = (file->vn->vn_data->fattr);
 
+    /* Turn fattr to sos_stat_t */
+    sos_stat_t stat;
+    stat.st_type = ST_FILE;
+    stat.st_mode = fattr->mode;
+    stat.st_size = fattr->size;
+    stat.st_mtime.seconds = fattr->mtime.seconds;
+    stat.st_mtime.useconds = fattr->mtime.useconds;
+
+    /* Needs to copy the data to sosh space */
+    int err = copyout(buf, stat, sizeof(sos_stat_t));
+
+
+    /* reply sosh*/
+    seL4_CPtr reply_cap = state->reply_cap;
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+
+    free(state);
     return 0;
 }
 

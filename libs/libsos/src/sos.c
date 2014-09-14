@@ -179,13 +179,43 @@ int64_t sos_sys_time_stamp(void) {
 }
 
 int sos_getdirent(int pos, char *name, size_t nbyte) {
-    printf("System call not implemented\n");
-    return -1;
+    int err;
+    seL4_MessageInfo_t tag, message;
+
+    tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_GETDIRENT);
+    seL4_SetMR(1, (seL4_Word)pos);
+    seL4_SetMR(2, (seL4_Word)name);
+    seL4_SetMR(3, (seL4_Word)nbyte);
+
+    message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    err = seL4_MessageInfo_get_label(message);
+    if (err) {
+        return -1;
+    }
+
+    int len = seL4_GetMR(0);
+    return len;
 }
 
 int sos_stat(const char *path, sos_stat_t *buf) {
-    printf("System call not implemented\n");
-    return -1;
+    int err;
+    seL4_MessageInfo_t tag, message;
+
+    tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 4);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_STAT);
+    seL4_SetMR(1, (seL4_Word)path);
+    seL4_SetMR(2, (seL4_Word)buf);
+
+    message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    err = seL4_MessageInfo_get_label(message);
+    if (err) {
+        return -1;
+    }
+
+    return 0;
 }
 
 pid_t sos_process_create(const char *path) {

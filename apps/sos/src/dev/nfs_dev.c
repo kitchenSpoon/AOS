@@ -32,17 +32,29 @@ struct con_read_state{
 
 typedef struct nfs_open_state{
     seL4_CPtr reply_cap;
-    bool opened_for_reading;
-    int is_blocked;
     struct vnode *file;
-    char* buf;
-    size_t nbytes;
 } nfs_open_state;
 
 struct nfs_data{
     fhandle_t *fh;
     fattr_t   *fattr;
 };
+
+typedef struct nfs_write_state{
+    seL4_CPtr reply_cap;
+    struct openfile *openfile;
+} nfs_write_state;
+
+typedef struct nfs_read_state{
+    seL4_CPtr reply_cap;
+    char* app_buf;
+    struct openfile *openfile;
+} nfs_read_state;
+
+typedef struct nfs_getdirent_state{
+    seL4_CPtr reply_cap;
+    nfscookie_t cookie;
+} nfs_getdirent_state;
 
 /*
  * To be called when a new vnode is created (i.e. called in nfs_dev_eachopen_end()
@@ -124,14 +136,23 @@ static void read_handler(struct serial * serial , char c){
 
 void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
     //FHSIZE is max fhandle->data size
+    int err = 0;
 
     /* Cast for convience */
     nfs_open_state *state = (nfs_open_state*) token;
 
     /* Copy data to our vnode*/
     fhandle_t *our_fh = malloc(sizeof(fhandle_t));
+    if(our_fh == NULL){
+        err = 1;
+    }
     memcpy(our_fh->data, fh->data, sizeof(fh->data));
+
     fattr_t *our_fattr = malloc(sizeof(fattr_t));
+    if(our_fattr == NULL){
+        free(our_fh);
+        err = 1;
+    }
     *our_fattr = *fattr;
 
     state->vnode->vn_data->fh = our_fh;
@@ -139,12 +160,15 @@ void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
     seL4_CPtr_t reply_cap = token->reply_cap;
 
     /* place fhandle_t into vnode and add vnode into mapping*/
+    //nfs_vnode_init();
 
     /* reply sosh*/
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)len);
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
+    //seL4_SetMR(0, (seL4_Word)len);
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
+
+    free(state);
 }
 
 void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
@@ -152,6 +176,13 @@ void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh
         nfs_dev_eachopen_end(token, fh, fattr);
     } else {
         //error, nfs fail to create file
+        /* reply sosh*/
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(1, 0, 0, 0);
+        //seL4_SetMR(0, (seL4_Word)len);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+
+        free(state);
     }
 }
 
@@ -191,23 +222,10 @@ int nfs_dev_eachopen(struct vnode *file, int flags, struct openfile *openfile){
     nfs_open_state *state = malloc(sizeof(nfs_open_state));
     nfs_lookup(mnt_point, file->name, nfs_dev_lookup_handler, state);
 
-    /*
-    if(flags == O_RDWR || flags == O_RDONLY){
-        if(!con_read_state.opened_for_reading){
-            err = serial_register_handler(console.serial, read_handler);
-            if(err){
-                return EFAULT;
-            }
-            con_read_state.opened_for_reading = 1;
-        } else {
-            return EFAULT;
-        }
-    }
-    */
     return 0;
 }
 
-int nfs_eachclose(struct vnode *file, uint32_t flags){
+int nfs_dev_eachclose(struct vnode *file, uint32_t flags){
     (void)file;
     (void)flags;
     return 0;
@@ -221,86 +239,107 @@ int nfs_lastclose(struct vnode *vn) {
     return 0;
 }
 
-int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
-    struct serial* serial = serial_init(); //serial_init does the caching
+void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
+    int err = 0;
+    if(status == NFS_OK){
+        /* Cast for convience */
+        nfs_write_state *state = (nfs_write_state*) token;
 
-    //TODO CHECK ME
-    size_t tot_sent = 0;
-    int tries = 0;
-    while (tot_sent < nbytes && tries < MAX_SERIAL_SEND) {
-        tot_sent += serial_send(serial, (char*)buf+tot_sent, nbytes-tot_sent);
-        tries++;
+        // can we write more data than the file can hold?
+        /* Update openfile */
+        state->openfile->offset += count;
+
+    } else {
+        //error
+        err = 1;
     }
 
-    *len = tot_sent;
+    /* reply sosh*/
+    seL4_CPtr reply_cap = state->reply_cap;
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)count);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+
+    free(state);
+}
+
+//we do not need len anymore since it will be invalid when our callack finishes, please remove or not use it
+int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset, size_t *len, struct openfile *openfile, seL4_CPtr reply_cap) {
+
+    nfs_write_state state = malloc(sizeof(nfs_write_state));
+    state->reply = reply_cap;
+    state->openfile = openfile;
+    rpc_stat status = nfs_write(mnt_point, offset, nbytes, buf, nfs_dev_write_handler, state);
     return 0;
 }
 
-int con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
-    //printf("con_read called\n");
-    int err;
+void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
+    int err = 0;
+    if(status == NFS_OK){
+        /* Cast for convience */
+        nfs_read_state *state = (nfs_read_state*) token;
 
-    if(console.buf_size > 0){
-        size_t len = 0;
-        for(size_t cur = console.start; len < nbytes && len < console.buf_size; cur++, cur%=MAX_IO_BUF){
-            len++;
-            if(console.buf[cur] == '\n') {
-                break;
-            }
+        /* Needs to copy the data to sosh space */
+        int err = copyout(state->app_buf, data, count);
+
+        /* Update openfile */
+        if(!err){
+            openfile->offset += count;
         }
-
-        //printf("copying out %d bytes, buffer size = %u\n", len, console.buf_size);
-
-        //save the original start value, so that we can restore this when theres an error
-        int console_start_ori = console.start;
-
-        //Since we are using a circular buffer, we need to split our copy into two chunkcs
-        //because our buffer may start and wrap over the buffer, also copyout should not
-        //know that we are using a circular buffer.
-
-        //copy first half of circular buffer
-        int first_half_size = MIN(MAX_IO_BUF, console.start + len) - console.start;
-        err = copyout((seL4_Word)buf, (seL4_Word)console.buf + console.start, first_half_size);
-        console.start += first_half_size;
-        console.start %= MAX_IO_BUF;
-
-        //copy second half of circular buffer
-        int second_half_size = len - first_half_size > 0 ? len - first_half_size : 0;
-        int err2 = copyout((seL4_Word)buf + first_half_size, (seL4_Word)console.buf + console.start, second_half_size);
-        console.start += second_half_size;
-        console.start %= MAX_IO_BUF;
-        if (err || err2) {
-            seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-            seL4_SetMR(0, (seL4_Word)-1); // This value can be anything
-            seL4_Send(reply_cap, reply);
-            cspace_free_slot(cur_cspace, reply_cap);
-
-            console.start = console_start_ori;
-            con_read_state.is_blocked = 0;
-            return EFAULT;
-        }
-
-        //copy remaing buf foward
-        /*for(size_t i = 0; i < console.buf_size - len; i++){
-            console.buf[i] = console.buf[len+i];
-        }*/
-
-        console.buf_size -= len;
-
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)len);
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
-
-        con_read_state.is_blocked = 0;
     } else {
-        //printf("con_read: blocked\n");
-        con_read_state.reply_cap = reply_cap;
-        con_read_state.file = file;
-        con_read_state.buf = buf;
-        con_read_state.is_blocked = 1;
+        //error
+        err = 1;
     }
 
-    //printf("con_read out\n");
+
+    /* reply sosh*/
+    seL4_CPtr reply_cap = state->reply_cap;
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)count);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+
+    free(state);
+}
+int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, int offset, struct openfile *openfile, seL4_CPtr reply_cap){
+    nfs_read_state *state = malloc(sizeof(nfs_read_state));
+    state->reply_cap = reply_cap;
+    state->app_buf = buf;
+    state->openfile = openfile;
+    nfs_read(file->vn_data->fh, offset, nbytes, nfs_dev_read_handler, state);
+
     return 0;
+}
+
+void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
+    nfs_getdirent_state *state = (nfs_getdirent_state*) token;
+    state->cookie = nfscookie;
+}
+
+int nfs_dev_getdirent(struct vnode *file, char *buf, seL4_CPtr reply_cap){
+    nfs_getdirent_state *state = malloc(sizeof(nfs_getdirent_state));
+    state->reply_cap = reply_cap;
+    state->cookie = cookie;
+    nfs_readdir(mnt_point, 0, nfs_dev_getdirent_handler, state);
+}
+
+int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
+    if(file == NULL) return EFAULT;
+    if(file->vn == NULL) return EFAULT;
+    if(file->vn->vn_data == NULL) return EFAULT;
+
+    //need to check if fattr has pointers in it
+    *buf = *(file->vn->vn_data->fattr);
+
+    return 0;
+}
+
+void nfs_dev_timeout_handler(){
+    nfs_timeout();
+    register_timer(100000, nfs_dev_timeout_handler, NULL); //100ms
+}
+
+void nfs_dev_timeout(){
+    register_timer(100000, nfs_dev_timeout_handler, NULL); //100ms
 }

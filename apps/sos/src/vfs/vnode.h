@@ -17,6 +17,8 @@ struct vnode_ops {
     int (*vop_lastclose)(struct vnode *file);   // lastclose cleans up the vn_data
     int (*vop_read)(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap);
     int (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
+    int (*vop_getdirent)(struct vnode *dir, char* buf, seL4_CPtr reply_cap);
+    int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
 };
 
 #define __VOP(vn, sym) ((vn)->vn_ops->vop_##sym)

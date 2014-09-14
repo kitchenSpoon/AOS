@@ -37,6 +37,8 @@
 #include "vm/mapping.h"
 #include "ut_manager/ut.h"
 
+#include "dev/nfs_dev.h"
+
 #define verbose 0
 #include <sys/debug.h>
 #include <sys/panic.h>
@@ -235,6 +237,9 @@ network_init(seL4_CPtr interrupt_ep) {
                 printf("Error mounting path '%s'!\n", SOS_NFS_DIR);
             }else{
                 printf("\nSuccessfully mounted '%s'\n", SOS_NFS_DIR);
+
+                //register nfs_timeout callback
+                nfs_dev_timeout();
             }
         }
         if(err){

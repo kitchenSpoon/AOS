@@ -209,3 +209,22 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf,
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
 }
+
+void serv_sys_getdirent(int pos, char* name, size_t nbyte){
+    //find vnode
+    vops->getdirent();
+}
+
+void serv_sys_stat(char *path, sos_stat_t *buf){
+    //we store stat with our vnode so we dont need to deal with nfs
+    //loop through our vnode list 
+    //
+    vn = that vnode;
+
+    copyout();
+
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)sent);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+}

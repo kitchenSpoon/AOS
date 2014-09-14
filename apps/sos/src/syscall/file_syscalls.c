@@ -33,7 +33,7 @@ is_range_mapped(seL4_Word vaddr, size_t nbyte) {
 }
 
 static int
-_sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd) {
+_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags, int* fd) {
     if (nbyte >= MAX_IO_BUF) {
         return EINVAL;
     }
@@ -55,7 +55,7 @@ _sys_open(seL4_Word path, size_t nbyte, uint32_t flags, int* fd) {
     }
     kbuf[len] = '\0';
 
-    err = file_open(kbuf, (int)flags, fd);
+    err = file_open(kbuf, (int)flags, fd, reply_cap);
     if(err) {
         return err;
     }
@@ -165,14 +165,8 @@ void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
 void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
     int fd;
     int err;
-    seL4_MessageInfo_t reply;
 
-    err = _sys_open(path, nbyte, flags, &fd);
-
-    reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, fd);
-    seL4_Send(reply_cap, reply);
-    cspace_free_slot(cur_cspace, reply_cap);
+    err = _sys_open(reply_cap, path, nbyte, flags, &fd);
 
     printf("serv_sys_open\n");
 }

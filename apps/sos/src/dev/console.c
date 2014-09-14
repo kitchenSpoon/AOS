@@ -12,8 +12,10 @@
 #include "vfs/vnode.h"
 #include "vm/copyinout.h"
 
-//#define MAX_IO_BUF 0x1000
-#define MAX_IO_BUF 6000
+//TODO: need to check with init & close to see if it works,
+//      also probably need to remove the global variable vnode console
+//      This means need to change vfs_open, file_open & con_init
+#define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
 
 struct console{
@@ -21,7 +23,6 @@ struct console{
     int buf_size;
     int start;
     int end;
-    int is_init;
     struct serial * serial;
 } console;
 
@@ -35,65 +36,39 @@ struct con_read_state{
 } con_read_state;
 
 int
-con_init(void) {
-    if (!console.is_init) {
-        con_vnode = malloc(sizeof(struct vnode));
-        if (con_vnode == NULL) {
-            return ENOMEM;
-        }
-        con_vnode->vn_opencount  = 0;
-        con_vnode->vn_data       = NULL;
+con_init(struct vnode *con_vn, seL4_CPtr reply_cap) {
+    assert(con_vn != NULL);
 
-        struct vnode_ops *vops = malloc(sizeof(struct vnode_ops));
-        if (vops == NULL) {
-            free(con_vnode);
-            return ENOMEM;
-        }
-        vops->vop_eachopen  = con_eachopen;
-        vops->vop_eachclose = con_eachclose;
-        vops->vop_lastclose = con_lastclose;
-        vops->vop_read  = con_read;
-        vops->vop_write = con_write;
+    vops->vop_eachopen  = con_eachopen;
+    vops->vop_eachclose = con_eachclose;
+    vops->vop_lastclose = con_lastclose;
+    vops->vop_read      = con_read;
+    vops->vop_write     = con_write;
 
-        con_vnode->vn_ops = vops;
+    con_vn->vn_ops = vops;
+    con_vn->vn_data = NULL;
+    con_vn->initialised = true;
 
-        /* initalize console buf */
-        console.serial = serial_init();
-        if (console.serial == NULL) {
-            free(con_vnode);
-            free(vops);
-            return EFAULT;
-        }
-
-        console.buf_size = 0;
-        console.start = 0;
-        console.end= 0;
-        con_read_state.opened_for_reading = 0;
-
-        console.is_init = 1;
-    }
-    return 0;
-}
-
-int
-con_destroy_vnode(void) {
-    if (con_vnode == NULL) {
-        return EINVAL;
-    }
-    /* If any of these fails, that means we have a bug */
-    assert(con_vnode->vn_ops != NULL);
-    if (con_vnode->vn_opencount != 1) {
-        return EINVAL;
+    /* initalize console buf */
+    console.serial = serial_init();
+    if (console.serial == NULL) {
+        return EFAULT;
     }
 
-    console.serial = NULL;
     console.buf_size = 0;
     console.start = 0;
     console.end= 0;
-    console.is_init = 0;
+    con_read_state.opened_for_reading = 0;
 
-    free(con_vnode->vn_ops);
-    free(con_vnode);
+
+    /* Reply here but SOS won't be blocked until we call seL4_Wait(),
+     * which is in the syscall_loop in main.c */
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, fd);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
+
     return 0;
 }
 
@@ -151,16 +126,25 @@ int con_eachclose(struct vnode *file, uint32_t flags){
     return 0;
 }
 
-int con_lastclose(struct vnode *vn) {
-    (void)vn;
-    console.buf_size = 0;
+int con_lastclose(struct vnode *con_vn) {
+    /* If any of these fails, that means we have a bug */
+    assert(con_vn->vn_ops != NULL);
+    assert(con_vn->vn_opencount == 1);
+
+    console.serial    = NULL;
+    console.buf_size  = 0;
+    console.start     = 0;
+    console.end       = 0;
+
     return 0;
 }
 
 int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
-    struct serial* serial = serial_init(); //serial_init does the caching
+    if (console.serial == NULL) {
+        return EFAULT;
+    }
+    struct serial* serial = console.serial;
 
-    //TODO CHECK ME
     size_t tot_sent = 0;
     int tries = 0;
     while (tot_sent < nbytes && tries < MAX_SERIAL_SEND) {

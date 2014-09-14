@@ -4,40 +4,89 @@
 #include "vfs/vfs.h"
 #include "dev/console.h"
 
-int vfs_open(char *path, int openflags, struct vnode **ret) {
+static
+int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap) {
+    struct vnode *vn = malloc(sizeof(struct vnode));
+    if (vn == NULL) {
+        return ENOMEM;
+    }
+
+    int path_len = strlen(path);    // use strlen as path is a trustworthy string
+    vn->vn_name = (char*)malloc(path_len+1);
+    if (vn->vn_name == NULL) {
+        free(vn);
+        return ENOMEM;
+    }
+    strcpy(vn->vn_name, path);
+
+    vn->vn_vops = malloc(sizeof(struct vnode_ops));
+    if (vn->vn_vops == NULL) {
+        free(vn->vn_name);
+        free(vn);
+        return ENOMEM;
+    }
+
+    vn->vn_opencount = 0;
+    vn->initialised = false;
+
+    if (strcmp(path, "console") == 0) {
+        err = con_init(vn, reply_cap);
+        if (err) {
+            free(vn->vn_name);
+            free(vn->vn_vops);
+            free(vn);
+            return err;
+        }
+    } else {
+        err = nfs_dev_init(vn, reply_cap);
+        if (err) {
+            free(vn->vn_name);
+            free(vn->vn_vops);
+            free(vn);
+            return err;
+        }
+    }
+
+    err = vfs_vnt_insert(vn);
+    if (err) {
+        VOP_LASTCLOSE(vn);
+        free(vn->vn_name);
+        free(vn->vn_vops);
+        free(vn);
+        return err;
+    }
+
+    *ret = vn;
+}
+
+int vfs_open(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap) {
+
     int err;
 
     struct vnode *vn;
-    /* Extract the Vnode related to this path */
-    if (strcmp(path, "console") == 0) {
-        err = con_init();
+    vn = vfs_vnt_lookup(path);
+
+    if (vn == NULL) {
+        err = _create_vnode(path, openflags, &vn, reply_cap);
         if (err) {
             return err;
         }
-        vn = con_vnode;
+        err = VOP_EACHOPEN(vn, openflags);
+        if (err) {
+            VOP_LASTCLOSE(vn);
+            free(vn->vn_name);
+            free(vn->vn_vops);
+            free(vn);
+            return err;
+        }
     } else {
-        // should check some global variable 
-        // to determine which filesystem is mounted
-        // and we should then use something similiar to
-        // fs->lookup 
-        // if lookup fail we create the file on nfs 
-        // 
-        // Then we take the filehandle return by lookup/create
-        // and then create a vnode
-        // if()vn = create_nfs_vnode(fhandle_t);
-        //
-        // When we mount nfs, we will be given a fhandle_t to the root
-        // of the filesystem, we will have to save it somewhere
-        vn = malloc(sizeof(struct vnode));
-        if(vn == NULL)
-            return ENOMEM;
-        //need to copy path to name, this is wrong
-        vn->name = path;
-        return EFAULT;
-    }
-    err = VOP_EACHOPEN(vn, openflags);
-    if (err) {
-        return err;
+        err = VOP_EACHOPEN(vn, openflags);
+        if (err) {
+            free(vn->vn_name);
+            free(vn->vn_vops);
+            free(vn);
+            return err;
+        }
     }
 
     VOP_INCOPEN(vn);
@@ -49,4 +98,62 @@ int vfs_open(char *path, int openflags, struct vnode **ret) {
 void vfs_close(struct vnode *vn, uint32_t flags) {
     VOP_EACHCLOSE(vn, flags);
     VOP_DECOPEN(vn);
+}
+
+struct vnode* vfs_vnt_lookup(const char *path) {
+    if (path == NULL) {
+        return NULL;
+    }
+    struct vnode_table_entry *vte = vnode_table_head;
+    while (vte != NULL) {
+        if (strcmp(path, vte->vte_name) == 0) {
+            break;
+        }
+        vte = vte->next;
+    }
+    return vte;
+}
+
+int vfs_vnt_insert(struct vnode *vn) {
+    if (vn == NULL || vn->vn_name == NULL) {
+        return EINVAL;
+    }
+    struct vnode_table_entry *vte = malloc(sizeof(struct vnode_table_entry));
+    if (vte == NULL) {
+        return ENOMEM;
+    }
+    vte->vte_vn = vn;
+    vte->next = vnode_table_head;
+    vnode_table_head = vte->next;
+}
+
+void vfs_vnt_delete(const char *path) {
+    if (path == NULL) {
+        return;
+    }
+    if (vnode_table_head == NULL) {
+        return;
+    }
+    if (strcmp(vnode_table_head->name, path) == 0) {
+        struct vnode_table_entry *next_vte = vnode_table_head->next;
+        free(vnode_table_head);
+        vnode_table_head = next_vte;
+        return;
+    }
+
+    struct vnode_table_entry *vte = vnode_table_head->next;
+    struct vnode_table_entry *prev = vnode_table_head;;
+    while (vte != NULL) {
+        if (strcmp(vte->vte_vn->name, path) == 0) {
+            break;
+        }
+        prev = vte;
+        vte = vte->next;
+    }
+
+    /* Remove this vnode from the list */
+    if (vte != NULL) {
+        prev->next = vte->next;
+        free(vte);
+    }
 }

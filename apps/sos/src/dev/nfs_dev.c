@@ -12,15 +12,21 @@
 #include "vm/copyinout.h"
 #include "dev/nfs_dev.h"
 #include "dev/clock.h"
+#include "syscall/syscall.h"
 
 #define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
 
 extern fhandle_t mnt_point;
 
-struct console{
-} console;
 
+static int nfs_dev_eachopen(struct vnode *file, int flags);
+static int nfs_dev_eachclose(struct vnode *file, uint32_t flags);
+static int nfs_dev_lastclose(struct vnode *file);
+static int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap);
+static int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
+static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte,
+                      int pos, serv_sys_getdirent_cb_t callback, void *token);
 struct con_read_state{
     seL4_CPtr reply_cap;
     bool opened_for_reading;
@@ -54,9 +60,10 @@ typedef struct nfs_read_state{
 typedef struct nfs_getdirent_state{
     int pos;
     size_t nbyte;
-    seL4_CPtr reply_cap;
     char* app_buf;
     nfscookie_t cookie;
+    serv_sys_getdirent_cb_t callback;
+    void* token;
 } nfs_getdirent_state;
 
 /*
@@ -120,7 +127,7 @@ int nfs_dev_init_mntpoint(struct vnode* vn, fhandle_t *mnt_point) {
     return 0;
 }
 
-void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
+static void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
 //    //FHSIZE is max fhandle->data size
 //    int err = 0;
 //
@@ -157,7 +164,7 @@ void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
 //    free(state);
 }
 
-void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
+static void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
 //    if(status == NFS_OK){
 //        nfs_dev_eachopen_end(token, fh, fattr);
 //    } else {
@@ -172,7 +179,7 @@ void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh
 //    }
 }
 
-void nfs_dev_create(const char *name, uintptr_t token){
+static void nfs_dev_create(const char *name, uintptr_t token){
 
 //    nfs_open_state *state = malloc(sizeof(nfs_open_state));
 //    sattr_t sattr;
@@ -189,7 +196,7 @@ void nfs_dev_create(const char *name, uintptr_t token){
 //    nfs_create(mnt_point, name, &sattr, nfs_dev_create_handler, token);
 }
 
-void nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
+static void nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
 //    if(status == NFS_OK){
 //        nfs_dev_each_open_end(token, fh, fattr);
 //    } else {
@@ -197,7 +204,7 @@ void nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh
 //    }
 }
 
-int nfs_dev_eachopen(struct vnode *file, int flags){
+static int nfs_dev_eachopen(struct vnode *file, int flags){
 //    printf("nfs_open called\n");
 //
 //    //Need a fhandle_t to the root of nfs (provided by nfs_mount(which should be called when we start))
@@ -211,13 +218,13 @@ int nfs_dev_eachopen(struct vnode *file, int flags){
     return 0;
 }
 
-int nfs_dev_eachclose(struct vnode *file, uint32_t flags){
+static int nfs_dev_eachclose(struct vnode *file, uint32_t flags){
 //    (void)file;
 //    (void)flags;
     return 0;
 }
 
-int nfs_dev_lastclose(struct vnode *vn) {
+static int nfs_dev_lastclose(struct vnode *vn) {
     struct nfs_data *data = (struct nfs_data*)vn->vn_data;
 
     free(data->fh);
@@ -225,7 +232,7 @@ int nfs_dev_lastclose(struct vnode *vn) {
     return 0;
 }
 
-void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
+static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
 //    int err = 0;
 //    if(status == NFS_OK){
 //        /* Cast for convience */
@@ -251,7 +258,7 @@ void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr
 }
 
 //we do not need len anymore since it will be invalid when our callack finishes, please remove or not use it
-int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
+static int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
 
 //    nfs_write_state state = malloc(sizeof(nfs_write_state));
 //    state->reply = reply_cap;
@@ -260,7 +267,7 @@ int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *le
     return 0;
 }
 
-void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
+static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
 //    int err = 0;
 //    if(status == NFS_OK){
 //        /* Cast for convience */
@@ -288,8 +295,8 @@ void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr,
 //
 //    free(state);
 }
-//int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, int offset, seL4_CPtr reply_cap){
-int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
+//static int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, int offset, seL4_CPtr reply_cap){
+static int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
 //    nfs_read_state *state = malloc(sizeof(nfs_read_state));
 //    state->reply_cap = reply_cap;
 //    state->app_buf = buf;
@@ -299,8 +306,10 @@ int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_c
     return 0;
 }
 
-void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
-    int size = 0, finish = 0, err = 0;
+static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
+    int err = 0;
+    size_t size = 0;
+    bool finish = false;
     nfs_getdirent_state *state = (nfs_getdirent_state*) token;
     if(status == NFS_OK){
         state->cookie = nfscookie;
@@ -314,15 +323,15 @@ void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_fi
             }
 
             err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size);
-            finish = 1;
+            finish = true;
         } else {
             if(nfscookie == 0){  /* No more entry*/
-                finish = 1;
+                finish = true;
                 //pos is next free entry
                 if(state->pos == num_files + 1){
                     size = 0;
                 } else {
-                    err = 2;
+                    err = EINVAL;
                 }
             } else {             /* Read more */
                 state->pos -= num_files;
@@ -330,38 +339,34 @@ void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_fi
                 nfs_readdir(&mnt_point, nfscookie, nfs_dev_getdirent_handler, (uintptr_t)state);
             }
         }
+
     } else {
-        finish = 1;
+        finish = true;
         err = 1;
     }
 
     if(finish){
-        /* reply sosh*/
-        seL4_CPtr reply_cap = state->reply_cap;
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)size);
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
-
+        state->callback(state->token, err, size);
         free(state);
     }
 }
 
-int nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int pos, seL4_CPtr reply_cap){
+static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int pos,
+                              serv_sys_getdirent_cb_t callback, void *token){
     nfs_getdirent_state *state = malloc(sizeof(nfs_getdirent_state));
     if (state == NULL) {
-        //wtf do we do here?
-        assert(1==0);
+        callback(token, ENOMEM, 0);
+        return;
     }
-    state->reply_cap = reply_cap;
-    state->pos = pos;
-    state->app_buf = buf;
-    state->nbyte = nbyte;
+    state->app_buf   = buf;
+    state->nbyte     = nbyte;
+    state->pos       = pos;
+    state->callback  = callback;
+    state->token     = token;
     nfs_readdir(&mnt_point, 0, nfs_dev_getdirent_handler, (uintptr_t)state);
-    return 0;
 }
 
-//int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
+//static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
 //    if(file == NULL) return EFAULT;
 //    if(file->vn == NULL) return EFAULT;
 //    if(file->vn->vn_data == NULL) return EFAULT;

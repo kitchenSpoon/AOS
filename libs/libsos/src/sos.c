@@ -31,11 +31,7 @@
 #define SOS_SYSCALL_GETDIRENT   8
 #define SOS_SYSCALL_STAT        9
 
-/// The maximum number of bytes in a file name argument.
-#define MAXNAMLEN   255
-/// The maximum number of bytes in a pathname argument.
-#define MAXPATHLEN 1024
-
+#define MAXNAMLEN               255
 fildes_t sos_sys_open(const char *path, int flags) {
     int len = 0;
     while(len < MAX_IO_BUF && path[len] != '\0') {
@@ -210,7 +206,7 @@ int sos_stat(const char *path, sos_stat_t *buf) {
     int err;
 
     size_t size = 0;
-    for(size = 0; size < MAXPATHLEN && path[size] != '\0'; size++);
+    for(size = 0; size < MAXNAMLEN && path[size] != '\0'; size++);
 
     seL4_MessageInfo_t tag, message;
 

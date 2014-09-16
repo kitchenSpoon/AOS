@@ -135,16 +135,16 @@ void handle_syscall(seL4_Word badge, int num_args) {
 //        serv_sys_write(reply_cap, fd, buf, nbyte);
 //        break;
 //    }
-//    case SOS_SYSCALL_SLEEP:
-//    {
-//        serv_sys_sleep(reply_cap, seL4_GetMR(1));
-//        break;
-//    }
-//    case SOS_SYSCALL_TIMESTAMP:
-//    {
-//        serv_sys_timestamp(reply_cap);
-//        break;
-//    }
+    case SOS_SYSCALL_SLEEP:
+    {
+        serv_sys_sleep(reply_cap, seL4_GetMR(1));
+        break;
+    }
+    case SOS_SYSCALL_TIMESTAMP:
+    {
+        serv_sys_timestamp(reply_cap);
+        break;
+    }
     case SOS_SYSCALL_GETDIRENT:
     {
         int pos          = (int)seL4_GetMR(1);

@@ -217,25 +217,50 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf,
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
+
+typedef struct {
+    seL4_CPtr reply_cap;
+} cont_getdirent_t;
+
+static void serv_sys_getdirent_end(void *token, int err, size_t size) {
+    cont_getdirent_t *cont = (cont_getdirent_t*)token;
+
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)size);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+
+    free(cont);
+}
+
 void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
     uint32_t permissions = 0;
-    if(!as_is_valid_memory(proc_getas(), (seL4_Word)name, sizeof(sos_stat_t), &permissions) ||
-            !(permissions & seL4_CanWrite)){
-        assert(1==0);
-        //reply the user there is an error EINVAL
+
+    cont_getdirent_t *cont = malloc(sizeof(cont_getdirent_t));
+    if (cont == NULL) {
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)0);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
-    //if (nbyte > MAX_FILE_NAME) {
-    //    return;
-    //}
-    struct vnode *vn = vfs_vnt_lookup("/");
-    if (vn == NULL) {
-        //reply wtf is wrong with main bootstrap?
-        assert(1==0);
+    cont->reply_cap = reply_cap;
+
+    bool is_inval = !as_is_valid_memory(proc_getas(), (seL4_Word)name, sizeof(sos_stat_t), &permissions);
+    is_inval = is_inval || !(permissions & seL4_CanWrite);
+
+    if(is_inval) {
+        serv_sys_getdirent_end((void*)cont, EINVAL, 0);
         return;
     }
 
-    VOP_GETDIRENT(vn, name, nbyte, pos, reply_cap);
+    struct vnode *vn = vfs_vnt_lookup("/");
+    if (vn == NULL) {
+        serv_sys_getdirent_end((void*)cont, ENOMEM, 0);
+        return;
+    }
+
+    VOP_GETDIRENT(vn, name, nbyte, pos, serv_sys_getdirent_end, (void*)cont);
 }
 
 //void serv_sys_getdirent_ret(seL4_CPtr

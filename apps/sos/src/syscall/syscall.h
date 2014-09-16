@@ -21,7 +21,10 @@
 #define SOS_SYSCALL_GETDIRENT   8
 #define SOS_SYSCALL_STAT        9
 
+#define MAX_NAME_LEN            255
 /* File syscalls */
+
+typedef void (*serv_sys_getdirent_cb_t)(void *token, int err, size_t size) ;
 
 /*
  * Print out to netcat port.

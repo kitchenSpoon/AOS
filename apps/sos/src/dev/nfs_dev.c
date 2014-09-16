@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <assert.h>
+#include <string.h>
 
 #include <nfs/nfs.h>
 #include <sel4/sel4.h>
@@ -19,12 +20,18 @@
 
 extern fhandle_t mnt_point;
 
+struct nfs_data{
+    fhandle_t *fh;
+    fattr_t   *fattr;
+};
 
 static int nfs_dev_eachopen(struct vnode *file, int flags);
 static int nfs_dev_eachclose(struct vnode *file, uint32_t flags);
 static int nfs_dev_lastclose(struct vnode *file);
-static int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap);
-static int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
+static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
+                              serv_sys_read_cb_t callback, void *token);
+static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
+                              serv_sys_write_cb_t callback, void *token);
 static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte,
                       int pos, serv_sys_getdirent_cb_t callback, void *token);
 struct con_read_state{
@@ -41,20 +48,17 @@ typedef struct nfs_open_state{
     struct vnode *file;
 } nfs_open_state;
 
-struct nfs_data{
-    fhandle_t *fh;
-    fattr_t   *fattr;
-};
-
 typedef struct nfs_write_state{
     seL4_CPtr reply_cap;
-    struct openfile *openfile;
+    serv_sys_write_cb_t callback;
+    void* token;
 } nfs_write_state;
 
 typedef struct nfs_read_state{
     seL4_CPtr reply_cap;
     char* app_buf;
-    struct openfile *openfile;
+    serv_sys_write_cb_t callback;
+    void* token;
 } nfs_read_state;
 
 typedef struct nfs_getdirent_state{
@@ -233,77 +237,70 @@ static int nfs_dev_lastclose(struct vnode *vn) {
 }
 
 static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
-//    int err = 0;
-//    if(status == NFS_OK){
-//        /* Cast for convience */
-//        nfs_write_state *state = (nfs_write_state*) token;
-//
-//        // can we write more data than the file can hold?
-//        /* Update openfile */
-//        state->openfile->offset += count;
-//
-//    } else {
-//        //error
-//        err = 1;
-//    }
-//
-//    /* reply sosh*/
-//    seL4_CPtr reply_cap = state->reply_cap;
-//    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-//    seL4_SetMR(0, (seL4_Word)count);
-//    seL4_Send(reply_cap, reply);
-//    cspace_free_slot(cur_cspace, reply_cap);
-//
-//    free(state);
+    int err = 0;
+    nfs_write_state *state = malloc(sizeof(nfs_write_state));
+    if(status == NFS_OK){
+        /* Cast for convience */
+
+        // can we write more data than the file can hold?
+        /* Update openfile */
+        //state->openfile->offset += count;
+
+    } else {
+        //error
+        err = 1;
+    }
+
+    state->callback(state->token, err, count);
+    free(state);
 }
 
 //we do not need len anymore since it will be invalid when our callack finishes, please remove or not use it
-static int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
+static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
+                              serv_sys_write_cb_t callback, void *token){
 
-//    nfs_write_state state = malloc(sizeof(nfs_write_state));
-//    state->reply = reply_cap;
-//    state->openfile = openfile;
-//    rpc_stat status = nfs_write(mnt_point, offset, nbytes, buf, nfs_dev_write_handler, state);
-    return 0;
+    nfs_write_state *state = malloc(sizeof(nfs_write_state));
+    if (state == NULL) {
+        callback(token, ENOMEM, 0);
+        return;
+    }
+    state->callback  = callback;
+    state->token     = token;
+    nfs_write(&mnt_point, offset, nbytes, buf, nfs_dev_write_handler, (uintptr_t)state);
+    //need to check rpc status return value from nfs_write
 }
+
 
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
-//    int err = 0;
-//    if(status == NFS_OK){
-//        /* Cast for convience */
-//        nfs_read_state *state = (nfs_read_state*) token;
-//
-//        /* Needs to copy the data to sosh space */
-//        int err = copyout(state->app_buf, data, count);
-//
-//        /* Update openfile */
-//        if(!err){
-//            openfile->offset += count;
-//        }
-//    } else {
-//        //error
-//        err = 1;
-//    }
-//
-//
-//    /* reply sosh*/
-//    seL4_CPtr reply_cap = state->reply_cap;
-//    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-//    seL4_SetMR(0, (seL4_Word)count);
-//    seL4_Send(reply_cap, reply);
-//    cspace_free_slot(cur_cspace, reply_cap);
-//
-//    free(state);
+    int err = 0;
+    nfs_read_state *state = malloc(sizeof(nfs_read_state));
+    if(status == NFS_OK){
+        err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count);
+    } else {
+        //error
+        err = 1;
+    }
+
+    state->callback(state->token, err, count);
+    free(state->app_buf);
+    free(state);
 }
-//static int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, int offset, seL4_CPtr reply_cap){
-static int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
-//    nfs_read_state *state = malloc(sizeof(nfs_read_state));
-//    state->reply_cap = reply_cap;
-//    state->app_buf = buf;
-//    state->openfile = openfile;
-//    nfs_read(file->vn_data->fh, offset, nbytes, nfs_dev_read_handler, state);
-//
-    return 0;
+
+static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
+                              serv_sys_read_cb_t callback, void *token){
+    nfs_read_state *state = malloc(sizeof(nfs_read_state));
+    if (state == NULL) {
+        callback(token, ENOMEM, 0);
+        return;
+    }
+    state->app_buf = buf;
+    state->callback  = callback;
+    state->token     = token;
+
+    struct nfs_data *data = (struct nfs_data*)(file->vn_data);
+    nfs_read(data->fh, offset, nbytes, nfs_dev_read_handler, (uintptr_t)state);
+
+    return;
 }
 
 static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
@@ -317,13 +314,18 @@ static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int
         /* We have the file we want */
         if(num_files >= state->pos){
             //pos is valid entry
-            char* name = file_names[state->pos];
-            while(name[size] != '\0' && size < state->nbyte-1){
+            while(file_names[state->pos][size] != '\0' && size < state->nbyte-1){
                 size++;
             }
-            name[size++] = '\0';
-
-            err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size);
+            char* name = malloc(size+1);
+            if (name == NULL) {
+                err = ENOMEM;
+            } else {
+                strncpy(name, file_names[state->pos], size);
+                name[size++] = '\0';
+                err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size);
+                free(name);
+            }
             finish = true;
         } else {
             if(nfscookie == 0){  /* No more entry*/

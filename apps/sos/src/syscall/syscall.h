@@ -25,7 +25,8 @@
 /* File syscalls */
 
 typedef void (*serv_sys_getdirent_cb_t)(void *token, int err, size_t size) ;
-
+typedef void (*serv_sys_write_cb_t)(void *token, int err, size_t size) ;
+typedef void (*serv_sys_read_cb_t)(void *token, int err, size_t size) ;
 /*
  * Print out to netcat port.
  * Because this is talking with a device so could be considered a file

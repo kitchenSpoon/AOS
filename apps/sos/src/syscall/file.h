@@ -22,7 +22,8 @@ struct openfile {
 };
 
 /* opens a file (must be kernel pointers in the args) */
-int file_open(char *filename, int flags, int *retfd, seL4_CPtr reply_cap);
+typedef void (*file_open_cb_t)(void *token, int err, struct vnode *vn);
+void file_open(char *filename, int flags, serv_sys_open_cb_t callback, void *token);
 
 /* closes a file */
 int file_close(int fd);

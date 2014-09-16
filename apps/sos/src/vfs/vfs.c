@@ -3,22 +3,61 @@
 #include <string.h>
 
 #include "vfs/vfs.h"
+#include "dev/nfs_dev.h"
 #include "dev/console.h"
 
-static
-int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap) {
+typedef struct {
+    file_open_cb_t callback;
+    void *file_open_token;
+    struct vnode *vn;
+} cont_vfs_open_t;
+
+static void
+vfs_open_end(void* vfs_open_token, int err) {
+    assert(vfs_open_token != NULL);
+
+    cont_vfs_open_t *cont = (cont_vfs_open_t*)vfs_open_token;
+    cont_vfs_open_t local_cont = *cont;
+    free(cont);
+
+    if (err) {
+        free(local_cont.vn->vn_name);
+        free(local_cont.vn->vn_ops);
+        free(local_cont.vn);
+        local_cont.callback(local_cont.file_open_token, err, NULL);
+        return;
+    }
+
+    err = vfs_vnt_insert(local_cont.vn);
+    if (err) {
+        VOP_LASTCLOSE(local_cont.vn);
+        free(local_cont.vn->vn_name);
+        free(local_cont.vn->vn_ops);
+        free(local_cont.vn);
+        local_cont.callback(local_cont.file_open_token, err, NULL);
+        return;
+    }
+
+    VOP_INCOPEN(local_cont.vn);
+    local_cont.callback(local_cont.file_open_token, 0, local_cont.vn);
+}
+
+static void
+vfs_open_2_create_vnode(char *path, int openflags, file_open_cb_t callback, void *file_open_token) {
     int err;
 
     struct vnode *vn = malloc(sizeof(struct vnode));
     if (vn == NULL) {
-        return ENOMEM;
+        callback(file_open_token, ENOMEM, NULL);
+        return;
     }
 
     int path_len = strlen(path);    // use strlen as path is a trustworthy string
     vn->vn_name = (char*)malloc(path_len+1);
     if (vn->vn_name == NULL) {
         free(vn);
-        return ENOMEM;
+        callback(file_open_token, ENOMEM, NULL);
+        return;
     }
     strcpy(vn->vn_name, path);
 
@@ -26,79 +65,53 @@ int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply
     if (vn->vn_ops == NULL) {
         free(vn->vn_name);
         free(vn);
-        return ENOMEM;
+        callback(file_open_token, ENOMEM, NULL);
+        return;
     }
 
     vn->vn_opencount = 0;
     vn->initialised = false;
 
     if (strcmp(path, "console") == 0) {
-        err = con_init(vn, reply_cap);
+        err = con_init(vn);
         if (err) {
             free(vn->vn_name);
             free(vn->vn_ops);
             free(vn);
-            return err;
         }
-    } else {
-//        err = nfs_dev_init(vn, reply_cap);
-//        if (err) {
-//            free(vn->vn_name);
-//            free(vn->vn_ops);
-//            free(vn);
-//            return err;
-//        }
+        callback(file_open_token, err, NULL);
+        return;
     }
 
-    //VOP_INCOPEN(vn);
-    err = vfs_vnt_insert(vn);
-    if (err) {
-        VOP_LASTCLOSE(vn);
+    cont_vfs_open_t *cont = malloc(sizeof(cont_vfs_open_t));
+    if (cont == NULL) {
         free(vn->vn_name);
         free(vn->vn_ops);
         free(vn);
-        return err;
+        callback(file_open_token, ENOMEM, NULL);
     }
+    cont->callback        = callback;
+    cont->file_open_token = file_open_token;
+    cont->vn              = vn;
 
-    *ret = vn;
-    return 0;
+    nfs_dev_init(vn, vfs_open_end, (void*)cont);
 }
 
-int vfs_open(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap) {
-
+void vfs_open(char *path, int openflags, file_open_cb_t callback, void *file_open_token) {
     int err;
 
     struct vnode *vn;
     vn = vfs_vnt_lookup(path);
-    //TODO: Check if vnode is initialised of vn != NULL
-
-    if (vn == NULL) {
-        err = _create_vnode(path, openflags, &vn, reply_cap);
-        if (err) {
-            return err;
-        }
+    if (vn != NULL) {
         err = VOP_EACHOPEN(vn, openflags);
         if (err) {
-            VOP_LASTCLOSE(vn);
-            free(vn->vn_name);
-            free(vn->vn_ops);
-            free(vn);
-            return err;
+            vn = NULL;
         }
-    } else {
-        err = VOP_EACHOPEN(vn, openflags);
-        if (err) {
-            free(vn->vn_name);
-            free(vn->vn_ops);
-            free(vn);
-            return err;
-        }
+        callback((void*)file_open_token, err, vn);
+        return;
     }
 
-    VOP_INCOPEN(vn);
-
-    *ret = vn;
-    return 0;
+    vfs_open_2_create_vnode(path, openflags, callback, file_open_token);
 }
 
 void vfs_close(struct vnode *vn, uint32_t flags) {

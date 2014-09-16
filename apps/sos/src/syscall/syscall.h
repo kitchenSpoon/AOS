@@ -25,6 +25,7 @@
 /* File syscalls */
 
 typedef void (*serv_sys_getdirent_cb_t)(void *token, int err, size_t size) ;
+typedef void (*serv_sys_open_cb_t)(void *token, int err, int fd) ;
 
 /*
  * Print out to netcat port.

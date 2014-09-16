@@ -7,6 +7,7 @@
 #include "vfs/vfs.h"
 #include "vfs/vnode.h"
 #include "proc/proc.h"
+#include "syscall/syscall.h"
 #include "syscall/file.h"
 #include "dev/console.h"
 
@@ -15,50 +16,76 @@
 //TODO: This needs to handle concurrency when we have multiple processes
 //      Especially when they open the same file
 
+typedef struct {
+    serv_sys_open_cb_t callback;
+    void *token;
+    int flags;
+} cont_file_open_t;
+
 /*
  * file_open
  * opens a file, places it in the filetable, sets RETFD to the file
  * descriptor. the pointer arguments must be kernel pointers.
  */
-int
-file_open(char *filename, int flags, int *retfd, seL4_CPtr reply_cap)
-{
-    printf("file_open\n");
-    struct vnode *vn;
+static void file_open_end(void *token, int err, struct vnode *vn) {
+    assert(token != NULL);
+
+    cont_file_open_t *cont = (cont_file_open_t*)token;
+    cont_file_open_t local_cont = *cont;
+    free(cont);
+
+    if (err) {
+        local_cont.callback(local_cont.token, err, -1);
+        return;
+    }
+
     struct openfile *file;
-    int err;
+    int fd;
 
     file = malloc(sizeof(struct openfile));
     if (file == NULL) {
-        return ENOMEM;
+        local_cont.callback(local_cont.token, ENOMEM, -1);
+        return;
     }
 
     file->of_offset = 0;
-    file->of_accmode = flags & O_ACCMODE;
+    file->of_accmode = local_cont.flags & O_ACCMODE;
     file->of_refcount = 1;
-
-    /* Make sure the accmode are correct */
-    assert(file->of_accmode==O_RDONLY ||
-            file->of_accmode==O_WRONLY ||
-            file->of_accmode==O_RDWR);
-
-    /* place the file in the filetable, getting the file descriptor */
-    err = filetable_placefile(file, retfd);
-    if (err) {
-        free(file);
-        vfs_close(vn, flags);
-        return err;
-    }
-
-    err = vfs_open(filename, flags, &vn, reply_cap);
-    if (err) {
-        return err;
-    }
-
     file->of_vnode = vn;
 
-    printf("end of file_open\n");
-    return 0;
+    /* place the file in the filetable, getting the file descriptor */
+    err = filetable_placefile(file, &fd);
+    if (err) {
+        free(file);
+        vfs_close(vn, local_cont.flags);
+        local_cont.callback(local_cont.token, err, -1);
+        return;
+    }
+
+    local_cont.callback(local_cont.token, 0, fd);
+}
+
+void
+file_open(char *filename, int flags, serv_sys_open_cb_t callback, void *token)
+{
+    int accmode = flags & O_ACCMODE;
+    if (!(accmode==O_RDONLY ||
+          accmode==O_WRONLY ||
+          accmode==O_RDWR)) {
+        callback(token, EINVAL, -1);
+        return;
+    }
+
+    cont_file_open_t *cont = malloc(sizeof(cont_file_open_t));
+    if (cont == NULL) {
+        callback(token, ENOMEM, -1);
+        return;
+    }
+    cont->callback = callback;
+    cont->token    = token;
+    cont->flags    = flags;
+
+    vfs_open(filename, flags, file_open_end, token);
 }
 
 /*

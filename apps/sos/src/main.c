@@ -104,14 +104,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
         serv_sys_sbrk(reply_cap, newbrk);
         break;
     }
-//    case SOS_SYSCALL_OPEN:
-//    {
-//        seL4_Word path = (seL4_Word)seL4_GetMR(1);
-//        size_t nbyte   = (size_t)seL4_GetMR(2);
-//        uint32_t flags = (uint32_t)seL4_GetMR(3);
-//        serv_sys_open(reply_cap, path, nbyte, flags);
-//        break;
-//    }
+    case SOS_SYSCALL_OPEN:
+    {
+        seL4_Word path = (seL4_Word)seL4_GetMR(1);
+        size_t nbyte   = (size_t)seL4_GetMR(2);
+        uint32_t flags = (uint32_t)seL4_GetMR(3);
+        serv_sys_open(reply_cap, path, nbyte, flags);
+        break;
+    }
 //    case SOS_SYSCALL_CLOSE:
 //    {
 //        int fd = seL4_GetMR(1);

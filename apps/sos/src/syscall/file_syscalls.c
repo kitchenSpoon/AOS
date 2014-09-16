@@ -34,36 +34,6 @@ is_range_mapped(seL4_Word vaddr, size_t nbyte) {
 }
 
 static int
-_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags, int* fd) {
-    if (nbyte >= MAX_IO_BUF) {
-        return EINVAL;
-    }
-    if (!is_range_mapped(path, nbyte)){
-        return EINVAL;
-    }
-
-    int err;
-    char kbuf[MAX_IO_BUF];
-    err = copyin((seL4_Word)kbuf, (seL4_Word)path, (size_t)nbyte);
-    if (err) {
-        return err;
-    }
-
-    size_t len;
-    for(len = 0; len < nbyte && kbuf[len]!='\0'; len++);
-    if (len != nbyte) {
-        return EINVAL;
-    }
-    kbuf[len] = '\0';
-
-    err = file_open(kbuf, (int)flags, fd, reply_cap);
-    if(err) {
-        return err;
-    }
-    return 0;
-}
-
-static int
 _sys_close(int fd) {
     if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         return EINVAL;
@@ -163,19 +133,56 @@ void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
-void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
-    int fd;
-    int err;
+typedef struct {
+    seL4_CPtr reply_cap;
+} cont_open_t;
 
-    err = _sys_open(reply_cap, path, nbyte, flags, &fd);
-    if (err) {
-        seL4_MessageInfo_t reply;
-        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+void serv_sys_open_end(void *token, int err, int fd) {
+    cont_open_t *cont = (cont_open_t*)token;
+
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)fd);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+
+    free(cont);
+}
+
+void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
+
+    cont_open_t *cont = malloc(sizeof(cont_open_t));
+    if (cont == NULL) {
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)-1);
         seL4_Send(reply_cap, reply);
         cspace_free_slot(cur_cspace, reply_cap);
+        return;
+    }
+    cont->reply_cap = reply_cap;
+
+    if ((nbyte >= MAX_IO_BUF) || (!is_range_mapped(path, nbyte))){
+        serv_sys_open_end((void*)cont, EINVAL, -1);
+        return;
     }
 
-    printf("serv_sys_open\n");
+    int err;
+    char kbuf[MAX_IO_BUF];
+    err = copyin((seL4_Word)kbuf, (seL4_Word)path, (size_t)nbyte);
+    if (err) {
+        serv_sys_open_end((void*)cont, err, -1);
+        return;
+    }
+
+    size_t len;
+    for(len = 0; len < nbyte && kbuf[len]!='\0'; len++);
+    if (len != nbyte) {
+        serv_sys_open_end((void*)cont, EINVAL, -1);
+        return;
+    }
+    kbuf[len] = '\0';
+
+    file_open(kbuf, (int)flags, serv_sys_open_end, (void*)cont);
 }
 
 void serv_sys_close(seL4_CPtr reply_cap, int fd){

@@ -36,7 +36,7 @@ struct con_read_state{
 } con_read_state;
 
 int
-con_init(struct vnode *con_vn, seL4_CPtr reply_cap) {
+con_init(struct vnode *con_vn) {
     assert(con_vn != NULL);
 
     struct vnode_ops *vops = con_vn->vn_ops;
@@ -61,16 +61,6 @@ con_init(struct vnode *con_vn, seL4_CPtr reply_cap) {
     console.start = 0;
     console.end= 0;
     con_read_state.opened_for_reading = 0;
-
-
-    /* Reply here but SOS won't be blocked until we call seL4_Wait(),
-     * which is in the syscall_loop in main.c */
-    //TODO: overhaul this shit
-    seL4_MessageInfo_t reply;
-    reply = seL4_MessageInfo_new(0, 0, 0, 1);
-    seL4_SetMR(0, 100);//fd);
-    seL4_Send(reply_cap, reply);
-    cspace_free_slot(cur_cspace, reply_cap);
 
     return 0;
 }

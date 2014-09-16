@@ -6,7 +6,7 @@
 #include "syscall/syscall.h"
 
 struct vnode {
-    bool initialised;
+    bool initialised; //TODO: remove this field
     int vn_opencount;
     char *vn_name;
     void *vn_data;                  /* Filesystem-specific data */

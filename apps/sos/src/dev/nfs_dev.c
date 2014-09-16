@@ -1,16 +1,19 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <assert.h>
+#include <string.h>
 
 #include <nfs/nfs.h>
 #include <sel4/sel4.h>
 #include <cspace/cspace.h>
 #include <fcntl.h>
+#include <unistd.h>
+
+#include "dev/nfs_dev.h"
 
 #include "tool/utility.h"
 #include "vfs/vnode.h"
 #include "vm/copyinout.h"
-#include "dev/nfs_dev.h"
 #include "dev/clock.h"
 #include "syscall/syscall.h"
 
@@ -27,21 +30,16 @@ static int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr 
 static int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
 static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte,
                       int pos, serv_sys_getdirent_cb_t callback, void *token);
-struct con_read_state{
-    seL4_CPtr reply_cap;
-    bool opened_for_reading;
-    int is_blocked;
-    struct vnode *file;
-    char* buf;
-    size_t nbytes;
-} con_read_state;
 
 typedef struct nfs_open_state{
-    seL4_CPtr reply_cap;
     struct vnode *file;
-} nfs_open_state;
+    vfs_open_cb_t callback;
+    void *vfs_open_token;
+    sattr_t sattr;
+} nfs_open_state_t;
 
 struct nfs_data{
+    //TODO: change these to non-pointer types
     fhandle_t *fh;
     fattr_t   *fattr;
 };
@@ -67,50 +65,16 @@ typedef struct nfs_getdirent_state{
 } nfs_getdirent_state;
 
 /*
- * To be called when a new vnode is created (i.e. called in nfs_dev_eachopen_end()
- * Assumes that it is okay to do a shallow
+ * Common function between nfs_dev_init & nfs_dev_init_mntpoint
  */
 static int
-nfs_vnode_init(struct vnode* vn, fhandle_t *nfs_fh, fattr_t *nfs_fattr) {
-    vn = malloc(sizeof(struct vnode));
-    if (vn == NULL) {
-        return ENOMEM;
-    }
-
-    struct nfs_data *data = malloc(sizeof(struct nfs_data));
-    if (data == NULL) {
-        free(vn);
-        return ENOMEM;
-    }
-    data->fh    = nfs_fh;
-    data->fattr = nfs_fattr;
-
-    struct vnode_ops *vops = malloc(sizeof(struct vnode_ops));
-    if (vops == NULL) {
-        free(vn);
-        free(data);
-        return ENOMEM;
-    }
-    vops->vop_eachopen  = nfs_dev_eachopen;
-    vops->vop_eachclose = nfs_dev_eachclose;
-    vops->vop_lastclose = nfs_dev_lastclose;
-    vops->vop_read      = nfs_dev_read;
-    vops->vop_write     = nfs_dev_write;
-    vops->vop_getdirent = nfs_dev_getdirent;
-
-    vn->vn_data       = data;
-    vn->vn_opencount  = 0;
-    vn->vn_ops        = vops;
-
-    return 0;
-}
-
-int nfs_dev_init_mntpoint(struct vnode* vn, fhandle_t *mnt_point) {
+init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
     struct nfs_data *data = malloc(sizeof(struct nfs_data));
     if (data == NULL) {
         return ENOMEM;
     }
-    data->fh = mnt_point;
+    data->fh = fh;
+    data->fattr = fattr;
 
     vn->vn_data = data;
 
@@ -123,98 +87,109 @@ int nfs_dev_init_mntpoint(struct vnode* vn, fhandle_t *mnt_point) {
 
     vn->vn_opencount  = 0;
     vn->initialised = true;
-
     return 0;
 }
 
-static void nfs_dev_eachopen_end(uintptr_t token, fhandle_t *fh, fattr_t *fattr){
-//    //FHSIZE is max fhandle->data size
-//    int err = 0;
-//
-//    /* Cast for convience */
-//    nfs_open_state *state = (nfs_open_state*) token;
-//
-//    /* Copy data to our vnode*/
-//    fhandle_t *our_fh = malloc(sizeof(fhandle_t));
-//    if(our_fh == NULL){
-//        err = 1;
-//    }
-//    memcpy(our_fh->data, fh->data, sizeof(fh->data));
-//
-//    fattr_t *our_fattr = malloc(sizeof(fattr_t));
-//    if(our_fattr == NULL){
-//        free(our_fh);
-//        err = 1;
-//    }
-//    *our_fattr = *fattr;
-//
-//    state->vnode->vn_data->fh = our_fh;
-//    state->vnode->vn_data->fattr = our_fattr;
-//    seL4_CPtr_t reply_cap = token->reply_cap;
-//
-//    /* place fhandle_t into vnode and add vnode into mapping*/
-//    //nfs_vnode_init();
-//
-//    /* reply sosh*/
-//    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
-//    //seL4_SetMR(0, (seL4_Word)len);
-//    seL4_Send(reply_cap, reply);
-//    cspace_free_slot(cur_cspace, reply_cap);
-//
-//    free(state);
+static void
+nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
+    nfs_open_state_t *state = (nfs_open_state_t*)token;
+    nfs_open_state_t local_state = *state;
+    free(state);
+    if(status == NFS_OK){
+        int err = 0;
+
+        /* Copy data to our vnode*/
+        fhandle_t *our_fh = malloc(sizeof(fhandle_t));
+        if(our_fh == NULL){
+            local_state.callback(local_state.vfs_open_token, ENOMEM);
+            return;
+        }
+        memcpy(our_fh->data, fh->data, sizeof(fh->data));
+
+        fattr_t *our_fattr = malloc(sizeof(fattr_t));
+        if(our_fattr == NULL){
+            free(our_fh);
+            local_state.callback(local_state.vfs_open_token, ENOMEM);
+            return;
+        }
+        *our_fattr = *fattr;
+
+        /* place fhandle_t into vnode and add vnode into mapping*/
+        err = init_helper(state->file, our_fh, our_fattr);
+        if (err) {
+            free(our_fh);
+            free(our_fattr);
+            local_state.callback(local_state.vfs_open_token, err);
+            return;
+        }
+
+        local_state.callback(local_state.vfs_open_token, 0);
+        return;
+    } else {
+        //error, nfs fail to create file
+        local_state.callback(local_state.vfs_open_token, EFAULT);
+        return;
+    }
 }
 
-static void nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
-//    if(status == NFS_OK){
-//        nfs_dev_eachopen_end(token, fh, fattr);
-//    } else {
-//        //error, nfs fail to create file
-//        /* reply sosh*/
-//        seL4_MessageInfo_t reply = seL4_MessageInfo_new(1, 0, 0, 0);
-//        //seL4_SetMR(0, (seL4_Word)len);
-//        seL4_Send(reply_cap, reply);
-//        cspace_free_slot(cur_cspace, reply_cap);
-//
-//        free(state);
-//    }
+static void
+nfs_dev_create(nfs_open_state_t *state){
+    state->sattr.mode  = S_IRUSR | S_IWUSR;
+    state->sattr.uid   = 0;
+    state->sattr.gid   = 0;
+    state->sattr.size  = 0;
+    //TODO: fix this
+    state->sattr.atime.seconds = 0;
+    state->sattr.atime.useconds = 0;
+    state->sattr.mtime.seconds = 0;
+    state->sattr.mtime.useconds = 0;
+    nfs_create(&mnt_point, state->file->vn_name, &state->sattr, nfs_dev_create_handler, (uintptr_t)state);
 }
 
-static void nfs_dev_create(const char *name, uintptr_t token){
+static void
+nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
+    int err;
 
-//    nfs_open_state *state = malloc(sizeof(nfs_open_state));
-//    sattr_t sattr;
-//    sattr.mode = ASD;
-//    sattr.uid = 0;//processid
-//    sattr.gid = 0;//groupid
-//    sattr.size = 0;//what is the size a new file should have
-//    timeval atime, mtime;
-//    atime = get_timeval();
-//    mtime = get_timeval();
-//    sattr.atime = atime;
-//    sattr.mtime = mtime;
-//
-//    nfs_create(mnt_point, name, &sattr, nfs_dev_create_handler, token);
+    nfs_open_state_t *state = (nfs_open_state_t*)token;
+
+    if(status == NFS_OK){
+        nfs_open_state_t local_state = *state;
+        free(state);
+
+        err = init_helper(local_state.file, fh, fattr);
+        local_state.callback(local_state.vfs_open_token, err);
+        return;
+    }
+
+    nfs_dev_create(state);
 }
 
-static void nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
-//    if(status == NFS_OK){
-//        nfs_dev_each_open_end(token, fh, fattr);
-//    } else {
-//        nfs_dev_create(state->vnode->name, token);
-//    }
+void
+nfs_dev_init(struct vnode* vn, vfs_open_cb_t callback, void *vfs_open_token) {
+    nfs_open_state_t *state = malloc(sizeof(nfs_open_state_t));
+    if (state == NULL) {
+        callback(vfs_open_token, ENOMEM);
+        return;
+    }
+
+    state->file            = vn;
+    state->callback        = callback;
+    state->vfs_open_token  = vfs_open_token;
+
+    nfs_lookup(&mnt_point, vn->vn_name, nfs_dev_lookup_handler, (uintptr_t)state);
 }
 
-static int nfs_dev_eachopen(struct vnode *file, int flags){
-//    printf("nfs_open called\n");
-//
-//    //Need a fhandle_t to the root of nfs (provided by nfs_mount(which should be called when we start))
-//    if(file == NULL) return EFAULT;
-//    if(openfile == NULL) return EFAULT;
-//    if(mnt_point == NULL) return EFAULT;
-//
-//    nfs_open_state *state = malloc(sizeof(nfs_open_state));
-//    nfs_lookup(mnt_point, file->name, nfs_dev_lookup_handler, state);
-//
+int
+nfs_dev_init_mntpoint(struct vnode* vn, fhandle_t *mnt_point) {
+    int err;
+    err = init_helper(vn, mnt_point, NULL);
+    return err;
+}
+
+static int
+nfs_dev_eachopen(struct vnode *file, int flags){
+    (void)file;
+    (void)flags;
     return 0;
 }
 

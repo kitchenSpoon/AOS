@@ -3,7 +3,7 @@
 
 #include "vfs/vnode.h"
 
-int con_init(struct vnode *con_vn, seL4_CPtr reply_cap);
+int con_init(struct vnode *con_vn);
 
 int con_eachopen(struct vnode *file, int flags);
 int con_eachclose(struct vnode *file, uint32_t flags);

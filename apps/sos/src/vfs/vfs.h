@@ -2,12 +2,14 @@
 #define _SOS_VFS_H_
 
 #include "vfs/vnode.h"
+#include "syscall/file.h"
 
 /******************************************************************************
  * VFS functions
  *****************************************************************************/
 
-int vfs_open(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap);
+typedef void (*vfs_open_cb_t)(void* vfs_open_token, int err);
+void vfs_open(char *path, int openflags, file_open_cb_t callback, void *token);
 void vfs_close(struct vnode *vn, uint32_t flags);
 
 /******************************************************************************

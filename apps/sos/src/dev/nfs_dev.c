@@ -318,9 +318,10 @@ static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int
         if(num_files >= state->pos){
             //pos is valid entry
             char* name = file_names[state->pos];
-            while(name[size] != '\0' && size < state->nbyte){
+            while(name[size] != '\0' && size < state->nbyte-1){
                 size++;
             }
+            name[size++] = '\0';
 
             err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size);
             finish = true;

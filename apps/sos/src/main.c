@@ -100,47 +100,47 @@ void handle_syscall(seL4_Word badge, int num_args) {
         serv_sys_sbrk(reply_cap, newbrk);
         break;
     }
-    case SOS_SYSCALL_OPEN:
-    {
-        seL4_Word path = (seL4_Word)seL4_GetMR(1);
-        size_t nbyte   = (size_t)seL4_GetMR(2);
-        uint32_t flags = (uint32_t)seL4_GetMR(3);
-        serv_sys_open(reply_cap, path, nbyte, flags);
-        break;
-    }
-    case SOS_SYSCALL_CLOSE:
-    {
-        int fd = seL4_GetMR(1);
-        serv_sys_close(reply_cap, fd);
-        break;
-    }
-    case SOS_SYSCALL_READ:
-    {
-        int fd        = (int)seL4_GetMR(1);
-        seL4_Word buf = (seL4_Word)seL4_GetMR(2);
-        size_t nbyte  = (size_t)seL4_GetMR(3);
-        serv_sys_read(reply_cap, fd, buf, nbyte);
-
-        break;
-    }
-    case SOS_SYSCALL_WRITE:
-    {
-        int fd          = (int)seL4_GetMR(1);
-        seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
-        size_t nbyte    = (size_t)seL4_GetMR(3);
-        serv_sys_write(reply_cap, fd, buf, nbyte);
-        break;
-    }
-    case SOS_SYSCALL_SLEEP:
-    {
-        serv_sys_sleep(reply_cap, seL4_GetMR(1));
-        break;
-    }
-    case SOS_SYSCALL_TIMESTAMP:
-    {
-        serv_sys_timestamp(reply_cap);
-        break;
-    }
+//    case SOS_SYSCALL_OPEN:
+//    {
+//        seL4_Word path = (seL4_Word)seL4_GetMR(1);
+//        size_t nbyte   = (size_t)seL4_GetMR(2);
+//        uint32_t flags = (uint32_t)seL4_GetMR(3);
+//        serv_sys_open(reply_cap, path, nbyte, flags);
+//        break;
+//    }
+//    case SOS_SYSCALL_CLOSE:
+//    {
+//        int fd = seL4_GetMR(1);
+//        serv_sys_close(reply_cap, fd);
+//        break;
+//    }
+//    case SOS_SYSCALL_READ:
+//    {
+//        int fd        = (int)seL4_GetMR(1);
+//        seL4_Word buf = (seL4_Word)seL4_GetMR(2);
+//        size_t nbyte  = (size_t)seL4_GetMR(3);
+//        serv_sys_read(reply_cap, fd, buf, nbyte);
+//
+//        break;
+//    }
+//    case SOS_SYSCALL_WRITE:
+//    {
+//        int fd          = (int)seL4_GetMR(1);
+//        seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
+//        size_t nbyte    = (size_t)seL4_GetMR(3);
+//        serv_sys_write(reply_cap, fd, buf, nbyte);
+//        break;
+//    }
+//    case SOS_SYSCALL_SLEEP:
+//    {
+//        serv_sys_sleep(reply_cap, seL4_GetMR(1));
+//        break;
+//    }
+//    case SOS_SYSCALL_TIMESTAMP:
+//    {
+//        serv_sys_timestamp(reply_cap);
+//        break;
+//    }
     case SOS_SYSCALL_GETDIRENT:
     {
         int pos          = (int)seL4_GetMR(1);
@@ -149,14 +149,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
         serv_sys_getdirent(reply_cap, pos, name, nbyte);
         break;
     }
-    case SOS_SYSCALL_STAT:
-    {
-        char *path          = (char *)seL4_GetMR(1);
-        size_t path_len     = (size_t)seL4_GetMR(2);
-        sos_stat_t *stat    = (sos_stat_t *)seL4_GetMR(3);
-        serv_sys_stat(reply_cap, path, path_len, stat);
-        break;
-    }
+//    case SOS_SYSCALL_STAT:
+//    {
+//        char *path          = (char *)seL4_GetMR(1);
+//        size_t path_len     = (size_t)seL4_GetMR(2);
+//        sos_stat_t *stat    = (sos_stat_t *)seL4_GetMR(3);
+//        serv_sys_stat(reply_cap, path, path_len, stat);
+//        break;
+//    }
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
@@ -555,6 +555,12 @@ int main(void) {
 
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
+
+    // file_system_init()
+    //TODO: make a mount_syscall, and this calls nfs_mount instead of letting
+    //network_init calls it?
+    //nfs_dev_timeout();
+    // create a vnode associated with the mount point
 
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);

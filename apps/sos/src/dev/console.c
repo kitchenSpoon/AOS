@@ -39,6 +39,8 @@ int
 con_init(struct vnode *con_vn, seL4_CPtr reply_cap) {
     assert(con_vn != NULL);
 
+    struct vnode_ops *vops = con_vn->vn_ops;
+
     vops->vop_eachopen  = con_eachopen;
     vops->vop_eachclose = con_eachclose;
     vops->vop_lastclose = con_lastclose;
@@ -63,9 +65,10 @@ con_init(struct vnode *con_vn, seL4_CPtr reply_cap) {
 
     /* Reply here but SOS won't be blocked until we call seL4_Wait(),
      * which is in the syscall_loop in main.c */
+    //TODO: overhaul this shit
     seL4_MessageInfo_t reply;
-    reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, fd);
+    reply = seL4_MessageInfo_new(0, 0, 0, 1);
+    seL4_SetMR(0, 100);//fd);
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
 

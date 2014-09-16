@@ -167,6 +167,12 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
     int err;
 
     err = _sys_open(reply_cap, path, nbyte, flags, &fd);
+    if (err) {
+        seL4_MessageInfo_t reply;
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+    }
 
     printf("serv_sys_open\n");
 }
@@ -214,36 +220,41 @@ void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
     uint32_t permissions = 0;
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)name, sizeof(sos_stat_t), &permissions) ||
             !(permissions & seL4_CanWrite)){
-        return EINVAL;
+        //TODO: shall we return? Check the interface
+        return;
+        //return EINVAL;
     }
+    // Check nbyte <= MAX_FILE_NAME
     //get vnode
-    
+
 
     //find vnode
-    VOP_GETDIRENT(NULL, name, nbyte, pos, reply_cap);
+    //VOP_GETDIRENT(NULL, name, nbyte, pos, reply_cap);
 }
 
 void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf){
+    //TODO: just making it compiles
+    return;
 
-    /* Read doesn't check buffer if mapped like open & write,
-     * just check if the memory is valid. It will map page when copyout */
-    uint32_t permissions = 0;
-    if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_stat_t), &permissions) ||
-            !(permissions & seL4_CanWrite)){
-        return EINVAL;
-    }
-
-    //check me
-    if(!as_is_valid_memory(proc_getas(), (seL4_Word)path, path_len, &permissions) ||
-            !(permissions & seL4_CanRead)){
-        return EINVAL;
-    }
-    //we store stat with our vnode so we dont need to deal with nfs
-    //loop through our vnode list
-    vn = vfs_vt_lookup(path);
-    if(vn == NULL){
-        //error
-    }
-
-    VOP_STAT(vn, buf);
+//    /* Read doesn't check buffer if mapped like open & write,
+//     * just check if the memory is valid. It will map page when copyout */
+//    uint32_t permissions = 0;
+//    if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_stat_t), &permissions) ||
+//            !(permissions & seL4_CanWrite)){
+//        return EINVAL;
+//    }
+//
+//    //check me
+//    if(!as_is_valid_memory(proc_getas(), (seL4_Word)path, path_len, &permissions) ||
+//            !(permissions & seL4_CanRead)){
+//        return EINVAL;
+//    }
+//    //we store stat with our vnode so we dont need to deal with nfs
+//    //loop through our vnode list
+//    vn = vfs_vt_lookup(path);
+//    if(vn == NULL){
+//        //error
+//    }
+//
+//    VOP_STAT(vn, buf);
 }

@@ -18,7 +18,7 @@ struct vnode_table_entry {
     struct vnode_table_entry *next;
 };
 
-struct vnode_table_entry *vnode_table_head = NULL;
+struct vnode_table_entry *vnode_table_head;
 
 /*
  * Performs a lookup in vnode table.

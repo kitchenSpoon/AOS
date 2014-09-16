@@ -28,18 +28,11 @@ file_open(char *filename, int flags, int *retfd, seL4_CPtr reply_cap)
     struct openfile *file;
     int err;
 
-    err = vfs_open(filename, flags, &vn, reply_cap);
-    if (err) {
-        return err;
-    }
-
     file = malloc(sizeof(struct openfile));
     if (file == NULL) {
-        vfs_close(vn, flags);
         return ENOMEM;
     }
 
-    file->of_vnode = vn;
     file->of_offset = 0;
     file->of_accmode = flags & O_ACCMODE;
     file->of_refcount = 1;
@@ -56,6 +49,13 @@ file_open(char *filename, int flags, int *retfd, seL4_CPtr reply_cap)
         vfs_close(vn, flags);
         return err;
     }
+
+    err = vfs_open(filename, flags, &vn, reply_cap);
+    if (err) {
+        return err;
+    }
+
+    file->of_vnode = vn;
 
     printf("end of file_open\n");
     return 0;

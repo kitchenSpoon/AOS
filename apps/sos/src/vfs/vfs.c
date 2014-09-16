@@ -41,13 +41,13 @@ int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply
             return err;
         }
     } else {
-        err = nfs_dev_init(vn, reply_cap);
-        if (err) {
-            free(vn->vn_name);
-            free(vn->vn_ops);
-            free(vn);
-            return err;
-        }
+//        err = nfs_dev_init(vn, reply_cap);
+//        if (err) {
+//            free(vn->vn_name);
+//            free(vn->vn_ops);
+//            free(vn);
+//            return err;
+//        }
     }
 
     err = vfs_vnt_insert(vn);
@@ -69,6 +69,7 @@ int vfs_open(char *path, int openflags, struct vnode **ret, seL4_CPtr reply_cap)
 
     struct vnode *vn;
     vn = vfs_vnt_lookup(path);
+    //TODO: Check if vnode is initialised of vn != NULL
 
     if (vn == NULL) {
         err = _create_vnode(path, openflags, &vn, reply_cap);
@@ -128,7 +129,7 @@ int vfs_vnt_insert(struct vnode *vn) {
     }
     vte->vte_vn = vn;
     vte->next = vnode_table_head;
-    vnode_table_head = vte->next;
+    vnode_table_head = vte;
     return 0;
 }
 

@@ -10,5 +10,7 @@ int nfs_dev_eachclose(struct vnode *file, uint32_t flags);
 int nfs_dev_lastclose(struct vnode *file);
 int nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap);
 int nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
+int nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte,
+                         int pos, seL4_CPtr reply_cap);
 
 #endif /* _SOS_DEVICE_H_ */

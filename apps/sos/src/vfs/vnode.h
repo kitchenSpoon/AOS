@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <sel4/sel4.h>
-#include <sos.h>
+//#include <sos.h>
 
 struct vnode {
     bool initialised;
@@ -21,7 +21,7 @@ struct vnode_ops {
     int (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
     int (*vop_getdirent)(struct vnode *dir, char *buf, size_t nbyte,
                          int pos, seL4_CPtr reply_cap);
-    int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
+    //int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
 };
 
 #define __VOP(vn, sym) ((vn)->vn_ops->vop_##sym)

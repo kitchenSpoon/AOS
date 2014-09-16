@@ -50,6 +50,7 @@ int _create_vnode(char *path, int openflags, struct vnode **ret, seL4_CPtr reply
 //        }
     }
 
+    //VOP_INCOPEN(vn);
     err = vfs_vnt_insert(vn);
     if (err) {
         VOP_LASTCLOSE(vn);

@@ -26,7 +26,9 @@
 #include "vm/vm.h"
 #include "vm/mapping.h"
 #include "vm/vmem_layout.h"
+#include "vfs/vfs.h"
 #include "dev/clock.h"
+#include "dev/nfs_dev.h"
 #include "proc/proc.h"
 #include "vm/addrspace.h"
 #include "syscall/syscall.h"
@@ -53,6 +55,8 @@
 #define TTY_NAME             CONFIG_SOS_STARTUP_APP
 #define TTY_PRIORITY         (0)
 #define TTY_EP_BADGE         (101)
+
+#define ROOT_PATH           "/"
 
 /* The linker will link this symbol to the start address  *
  * of an archive of attached applications.                */
@@ -537,6 +541,36 @@ frametable_test(uint32_t test_mask) {
     }
 }
 
+/*
+ * This function need to be called after network_init
+ * As it requires nfs to be mounted
+ */
+static void
+filesystem_init(void) {
+    int err;
+
+    struct vnode* vn = malloc(sizeof(struct vnode));
+    conditional_panic(vn == NULL, "Failed to allocate mountpoint vnode memory\n");
+
+    vn->vn_name = (char*)malloc(strlen(ROOT_PATH));
+    conditional_panic(vn->vn_name == NULL, "Failed to allocate mountpoint vnode memory\n");
+    strcpy(vn->vn_name, ROOT_PATH);
+
+    vn->vn_ops = malloc(sizeof(struct vnode_ops));
+    conditional_panic(vn->vn_ops == NULL, "Failed to allocate mountpoint vnode memory\n");
+
+    err = nfs_dev_init_mntpoint(vn, &mnt_point);
+    conditional_panic(err, "Failed to initialise mountpoint vnode\n");
+
+    vn->vn_opencount = 1;
+
+    err = vfs_vnt_insert(vn);
+    conditional_panic(err, "Failed to insert mountpoint vnode to vnode table\n");
+
+    /* Setup the timeout for NFS */
+    nfs_dev_setup_timeout();
+}
+
 static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     seL4_CPtr badged_cap = cspace_mint_cap(cur_cspace, cur_cspace, ep, seL4_AllRights, seL4_CapData_Badge_new(badge | IRQ_EP_BADGE));
     conditional_panic(!badged_cap, "Failed to allocate badged cap");
@@ -556,11 +590,7 @@ int main(void) {
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
 
-    // file_system_init()
-    //TODO: make a mount_syscall, and this calls nfs_mount instead of letting
-    //network_init calls it?
-    //nfs_dev_timeout();
-    // create a vnode associated with the mount point
+    filesystem_init();
 
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);

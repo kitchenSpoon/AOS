@@ -3,7 +3,9 @@
 
 #include "vfs/vnode.h"
 
-int nfs_dev_init(struct vnode*, seL4_CPtr reply_cap);
+int nfs_dev_init(struct vnode* vn, seL4_CPtr reply_cap);
+int nfs_dev_init_mntpoint(struct vnode *vn, fhandle_t *mnt_point);
+void nfs_dev_setup_timeout(void);
 
 int nfs_dev_eachopen(struct vnode *file, int flags);
 int nfs_dev_eachclose(struct vnode *file, uint32_t flags);

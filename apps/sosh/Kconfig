@@ -13,6 +13,5 @@ config APP_SOSH
     depends on LIB_SEL4 && HAVE_LIBC && LIB_SOS
     default n
     select HAVE_SEL4_APPS
-    select LIB_MUSL_C
     help
         Simple shell built upon the Simple Operating System

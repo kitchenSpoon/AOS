@@ -13,8 +13,7 @@
 #include "dev/nfs_dev.h"
 #include "dev/clock.h"
 
-//#define MAX_IO_BUF 0x1000
-#define MAX_IO_BUF 6000
+#define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
 
 extern fhandle_t mnt_point;
@@ -95,6 +94,28 @@ nfs_vnode_init(struct vnode* vn, fhandle_t *nfs_fh, fattr_t *nfs_fattr) {
     vn->vn_data       = data;
     vn->vn_opencount  = 0;
     vn->vn_ops        = vops;
+
+    return 0;
+}
+
+int nfs_dev_init_mntpoint(struct vnode* vn, fhandle_t *mnt_point) {
+    struct nfs_data *data = malloc(sizeof(struct nfs_data));
+    if (data == NULL) {
+        return ENOMEM;
+    }
+    data->fh = mnt_point;
+
+    vn->vn_data = data;
+
+    vn->vn_ops->vop_eachopen  = nfs_dev_eachopen;
+    vn->vn_ops->vop_eachclose = nfs_dev_eachclose;
+    vn->vn_ops->vop_lastclose = nfs_dev_lastclose;
+    vn->vn_ops->vop_read      = nfs_dev_read;
+    vn->vn_ops->vop_write     = nfs_dev_write;
+    vn->vn_ops->vop_getdirent = nfs_dev_getdirent;
+
+    vn->vn_opencount  = 0;
+    vn->initialised = true;
 
     return 0;
 }
@@ -286,23 +307,23 @@ void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_fi
 
         /* We have the file we want */
         if(num_files >= state->pos){
-            //pos is next free entry
-            if(state->pos == num_files + 1){
-                size = 0;
             //pos is valid entry
-            } else {
-                char* name = file_names[state->pos];
-                while(name[size] != '\0' && size < state->nbyte){
-                    size++;
-                }
-
-                err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size);
+            char* name = file_names[state->pos];
+            while(name[size] != '\0' && size < state->nbyte){
+                size++;
             }
+
+            err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size);
             finish = 1;
         } else {
             if(nfscookie == 0){  /* No more entry*/
-                //non-existent entry
                 finish = 1;
+                //pos is next free entry
+                if(state->pos == num_files + 1){
+                    size = 0;
+                } else {
+                    err = 2;
+                }
             } else {             /* Read more */
                 state->pos -= num_files;
                 assert(state->pos >= 0);
@@ -328,6 +349,10 @@ void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_fi
 
 int nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int pos, seL4_CPtr reply_cap){
     nfs_getdirent_state *state = malloc(sizeof(nfs_getdirent_state));
+    if (state == NULL) {
+        //wtf do we do here?
+        assert(1==0);
+    }
     state->reply_cap = reply_cap;
     state->pos = pos;
     state->app_buf = buf;
@@ -367,11 +392,13 @@ int nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int pos, seL4_
 //    return 0;
 //}
 
-void nfs_dev_timeout_handler(){
+static void nfs_dev_timeout_handler(uint32_t id, void *data){
+    (void)id;
+    (void)data;
     nfs_timeout();
     register_timer(100000, nfs_dev_timeout_handler, NULL); //100ms
 }
 
-void nfs_dev_timeout(){
+void nfs_dev_setup_timeout(void){
     register_timer(100000, nfs_dev_timeout_handler, NULL); //100ms
 }

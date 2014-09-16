@@ -9,6 +9,7 @@
 
 #include "tool/utility.h"
 #include "vm/addrspace.h"
+#include "vfs/vfs.h"
 #include "proc/proc.h"
 #include "syscall/syscall.h"
 #include "vm/copyinout.h"
@@ -220,17 +221,24 @@ void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
     uint32_t permissions = 0;
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)name, sizeof(sos_stat_t), &permissions) ||
             !(permissions & seL4_CanWrite)){
-        //TODO: shall we return? Check the interface
+        assert(1==0);
+        //reply the user there is an error EINVAL
         return;
-        //return EINVAL;
     }
-    // Check nbyte <= MAX_FILE_NAME
-    //get vnode
+    //if (nbyte > MAX_FILE_NAME) {
+    //    return;
+    //}
+    struct vnode *vn = vfs_vnt_lookup("/");
+    if (vn == NULL) {
+        //reply wtf is wrong with main bootstrap?
+        assert(1==0);
+        return;
+    }
 
-
-    //find vnode
-    //VOP_GETDIRENT(NULL, name, nbyte, pos, reply_cap);
+    VOP_GETDIRENT(vn, name, nbyte, pos, reply_cap);
 }
+
+//void serv_sys_getdirent_ret(seL4_CPtr
 
 void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf){
     //TODO: just making it compiles

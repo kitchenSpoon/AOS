@@ -367,8 +367,12 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
 
-    test_file_syscalls();
-    test_dynamic_heap();
+    for (int i=0; i<4; i++) {
+        r = sos_getdirent(i, buf, BUF_SIZ);
+        printf("buf[%d] = %s\n", i, buf);
+    }
+    //test_file_syscalls();
+    //test_dynamic_heap();
 
     in = open("console", O_RDONLY);
     assert(in >= 0);

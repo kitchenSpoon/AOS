@@ -153,14 +153,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
         serv_sys_getdirent(reply_cap, pos, name, nbyte);
         break;
     }
-//    case SOS_SYSCALL_STAT:
-//    {
-//        char *path          = (char *)seL4_GetMR(1);
-//        size_t path_len     = (size_t)seL4_GetMR(2);
-//        sos_stat_t *stat    = (sos_stat_t *)seL4_GetMR(3);
-//        serv_sys_stat(reply_cap, path, path_len, stat);
-//        break;
-//    }
+    case SOS_SYSCALL_STAT:
+    {
+        char *path          = (char *)seL4_GetMR(1);
+        size_t path_len     = (size_t)seL4_GetMR(2);
+        sos_stat_t *stat    = (sos_stat_t *)seL4_GetMR(3);
+        serv_sys_stat(reply_cap, path, path_len, stat);
+        break;
+    }
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */

@@ -62,16 +62,16 @@ void serv_sys_open_end(void *token, int err, int fd) {
     seL4_SetMR(0, (seL4_Word)fd);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
-    printf("--serv_cont_end = %p\n", cont);
+    //printf("--serv_cont_end = %p\n", cont);
 
-    printf("token at at %p\n", cont);
+    //printf("token at at %p\n", cont);
     free(cont);
 }
 
 void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
     printf("serv_sys_open called\n");
     cont_open_t *cont = malloc(sizeof(cont_open_t));
-    printf("--serv_cont = %p, size = %u\n", cont, sizeof(cont_open_t));
+    //printf("--serv_cont = %p, size = %u\n", cont, sizeof(cont_open_t));
     if (cont == NULL) {
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)-1);
@@ -107,15 +107,14 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
 
 void serv_sys_close(seL4_CPtr reply_cap, int fd){
     int err = 0;
-    seL4_MessageInfo_t reply;
-    printf("fd = %d\n", fd);
+    //printf("fd = %d\n", fd);
     if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         err = EINVAL;
     }
 
     err = err || file_close(fd);
 
-    reply = seL4_MessageInfo_new(err, 0, 0, 0);
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
 }
@@ -126,26 +125,31 @@ typedef struct {
 } cont_read_t;
 
 void serv_sys_read_end(void *token, int err, size_t size){
+    printf("serv read end\n");
     cont_read_t *cont = (cont_read_t*)token;
 
+    printf("serv_read_end 0.25\n");
+    
     /* Update file offset */
     if(!err){
+        printf("serv_read_end 0.5\n");
         cont->file->of_offset += size;
     }
 
+    printf("serv_read_end 1\n");
     /* Reply app*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    printf("serv_read_end size = %d\n", size);
     seL4_SetMR(0, (seL4_Word)size);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
 
-    if(cont->file != NULL){
-        free(cont->file);
-    }
     free(cont);
+    printf("serv_read_end out\n");
 }
 
 void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
+    printf("serv read\n");
     int err;
     cont_read_t *cont = malloc(sizeof(cont_read_t));
     if (cont == NULL) {
@@ -158,25 +162,36 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     cont->reply_cap = reply_cap;
     cont->file = NULL;
 
-    bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES) || (nbyte >= MAX_IO_BUF);
+    //have to read multiple times if nbyte >= MAX_IO_BUFF
+    bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);// || (nbyte >= MAX_IO_BUF);
+    if(is_inval){
+        printf("err1.8\n");}
     uint32_t permissions = 0;
     is_inval = is_inval || (!as_is_valid_memory(proc_getas(), buf, nbyte, &permissions));
+    if(is_inval){
+        printf("err1.9\n");}
     is_inval = is_inval || (!(permissions & seL4_CanWrite));
     if(is_inval){
+        printf("err2\n");
         serv_sys_read_end((void*)cont, EINVAL, 0);
+        return;
     }
 
     struct openfile *file;
     err = filetable_findfile(fd, &file);
     if (err) {
+        printf("err3\n");
         serv_sys_read_end((void*)cont, EINVAL, 0);
+        return;
     }
     cont->file = file;
 
     //check read permissions
     if(file->of_accmode != O_RDWR &&
         file->of_accmode != O_RDONLY){
+        printf("err4\n");
         serv_sys_read_end((void*)cont, EACCES, 0);
+        return;
     }
 
     VOP_READ(file->of_vnode, (char*)buf, nbyte, 0, serv_sys_read_end, (void*)cont);
@@ -189,6 +204,7 @@ typedef struct {
 
 
 void serv_sys_write_end(void *token, int err, size_t size){
+    printf("serv_write_end\n");
     cont_write_t *cont = (cont_write_t*)token;
 
     /* Update file offset */
@@ -202,14 +218,12 @@ void serv_sys_write_end(void *token, int err, size_t size){
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
 
-    if(cont->file != NULL){
-        free(cont->file);
-    }
     free(cont);
 }
 
 void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
 
+    printf("write\n");
     int err;
 
     cont_write_t *cont = malloc(sizeof(cont_write_t));
@@ -227,6 +241,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     is_inval = is_inval || (!is_range_mapped(buf, nbyte));
     if(is_inval){
         serv_sys_write_end((void*)cont, EINVAL, 0);
+        return;
     }
 
     struct openfile *file;
@@ -235,11 +250,13 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     err = copyin((seL4_Word)kbuf, (seL4_Word)buf, nbyte);
     if (err) {
         serv_sys_write_end((void*)cont, EINVAL, 0);
+        return;
     }
 
     err = filetable_findfile(fd, &file);
     if (err) {
         serv_sys_write_end((void*)cont, EINVAL, 0);
+        return;
     }
     cont->file = file;
 
@@ -247,6 +264,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     if(file->of_accmode != O_RDWR &&
         file->of_accmode != O_WRONLY){
         serv_sys_write_end((void*)cont, EACCES, 0);
+        return;
     }
 
 

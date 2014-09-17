@@ -336,7 +336,7 @@ test_dynamic_heap(void) {
     printf("Beginning dynamic heap...\n");
     void* addr;
 
-    printf("current brk is at: %p\n", sbrk(0));
+    printf("current brk is at: %p\n", sbrk((intptr_t)0));
     printf("Mallocing 8K memory...\n");
     addr = malloc((1<<13));
     printf("Touching the address\n");
@@ -346,7 +346,7 @@ test_dynamic_heap(void) {
     addr += (1<<11);
     *(int*)addr = 100;
 
-    printf("brk is now at: %p\n", sbrk(0));
+    printf("brk is now at: %p\n", sbrk((intptr_t)0));
     printf("Mallocing 10K memory...\n");
     addr = malloc((1<<13) + (1<<11));
     printf("Touching the address\n");
@@ -355,7 +355,7 @@ test_dynamic_heap(void) {
     *(int*)addr = 100;
     addr += (1<<11);
     *(int*)addr = 100;
-    printf("brk is now at: %p\n", sbrk(0));
+    printf("brk is now at: %p\n", sbrk((intptr_t)0));
 
     printf("Exiting dynamic heap test\n");
 }
@@ -366,14 +366,13 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
 
-    for (int i=0; i<3; i++) {
+/*    for (int i=0; i<3; i++) {
         r = sos_getdirent(i, buf, BUF_SIZ);
         printf("buf[%d] = %s\n", i, buf);
     }
     test_file_syscalls();
-    //test_dynamic_heap();
-    assert(false);
-
+    test_dynamic_heap();
+*/
     in = open("console", O_RDONLY);
     assert(in >= 0);
 

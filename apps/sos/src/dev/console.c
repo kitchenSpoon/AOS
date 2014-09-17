@@ -151,6 +151,7 @@ static void
 con_write(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
           serv_sys_write_cb_t callback, void *token)
 {
+    printf("conwrite\n");
     (void)offset;
     if (console.serial == NULL) {
         callback(token, EFAULT, 0);
@@ -158,6 +159,7 @@ con_write(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
     }
     struct serial* serial = console.serial;
 
+    printf("conwrite2\n");
     size_t tot_sent = 0;
     int tries = 0;
     while (tot_sent < nbytes && tries < MAX_SERIAL_SEND) {
@@ -165,6 +167,7 @@ con_write(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
         tries++;
     }
 
+    printf("conwrite3\n");
     callback(token, 0, tot_sent);
 }
 
@@ -173,7 +176,7 @@ static void
 con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
          serv_sys_read_cb_t callback, void *token)
 {
-    //printf("con_read called\n");
+    printf("con_read called\n");
     (void)offset;
     int err;
 
@@ -186,6 +189,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
             }
         }
 
+        printf("console read size = %d\n",len);
         //printf("copying out %d bytes, buffer size = %u\n", len, console.buf_size);
 
         //save the original start value, so that we can restore this when theres an error
@@ -214,6 +218,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
 
             console.start = console_start_ori;
             con_read_state.is_blocked = 0;
+            printf("console err \n");
             callback(token, EFAULT, 0);
             return;
         }
@@ -231,6 +236,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         //cspace_free_slot(cur_cspace, reply_cap);
 
         con_read_state.is_blocked = 0;
+        printf("console read size = %d\n",len);
         callback(token, 0, len);
     } else {
         //printf("con_read: blocked\n");

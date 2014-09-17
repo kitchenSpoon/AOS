@@ -115,7 +115,6 @@ void vfs_open(char *path, int openflags, file_open_cb_t callback, void *file_ope
         } else {
             VOP_INCOPEN(vn);
         }
-        printf("WTF IS THIS ADDRESS vfs_open = %p\n", file_open_token);
         callback((void*)file_open_token, err, vn);
         return;
     }

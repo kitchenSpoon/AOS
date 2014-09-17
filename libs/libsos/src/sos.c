@@ -205,6 +205,8 @@ int sos_getdirent(int pos, char *name, size_t nbyte) {
 int sos_stat(const char *path, sos_stat_t *buf) {
     int err;
 
+    printf("System call not implemented\n");
+    return -1;
     size_t size = 0;
     for(size = 0; size < MAXNAMLEN && path[size] != '\0'; size++);
 

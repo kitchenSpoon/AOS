@@ -33,21 +33,6 @@ is_range_mapped(seL4_Word vaddr, size_t nbyte) {
     return true;
 }
 
-static int
-_sys_close(int fd) {
-    if (fd < 0 || fd >= PROCESS_MAX_FILES) {
-        return EINVAL;
-    }
-
-    int err = file_close(fd);
-    if(err) {
-        return err;
-    }
-    return 0;
-}
-
-
-
 void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
     struct serial* serial = serial_init(); //serial_init does the cacheing
 
@@ -69,6 +54,7 @@ typedef struct {
 } cont_open_t;
 
 void serv_sys_open_end(void *token, int err, int fd) {
+    printf("serv_sys_open_end called\n");
     cont_open_t *cont = (cont_open_t*)token;
 
     seL4_MessageInfo_t reply;
@@ -76,13 +62,16 @@ void serv_sys_open_end(void *token, int err, int fd) {
     seL4_SetMR(0, (seL4_Word)fd);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
+    printf("--serv_cont_end = %p\n", cont);
 
+    printf("token at at %p\n", cont);
     free(cont);
 }
 
 void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
-
+    printf("serv_sys_open called\n");
     cont_open_t *cont = malloc(sizeof(cont_open_t));
+    printf("--serv_cont = %p, size = %u\n", cont, sizeof(cont_open_t));
     if (cont == NULL) {
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)-1);
@@ -117,10 +106,14 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
 }
 
 void serv_sys_close(seL4_CPtr reply_cap, int fd){
-    int err;
+    int err = 0;
     seL4_MessageInfo_t reply;
+    printf("fd = %d\n", fd);
+    if (fd < 0 || fd >= PROCESS_MAX_FILES) {
+        err = EINVAL;
+    }
 
-    err = _sys_close(fd);
+    err = err || file_close(fd);
 
     reply = seL4_MessageInfo_new(err, 0, 0, 0);
     seL4_Send(reply_cap, reply);

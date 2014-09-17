@@ -288,8 +288,7 @@ static void test_file_syscalls(void) {
     assert(ret == sizeof(buf2));
     printf("Passed!\n");
 
-
-    printf("Closing both files\n");
+    printf("Closing both file descriptors %d %d\n", fd, fd2);
     ret = close(fd);
     assert(ret == 0);
     ret = close(fd2);
@@ -367,12 +366,13 @@ int main(void) {
     int i, r, done, found, new, argc;
     char *bp, *p;
 
-    for (int i=0; i<4; i++) {
+    for (int i=0; i<3; i++) {
         r = sos_getdirent(i, buf, BUF_SIZ);
         printf("buf[%d] = %s\n", i, buf);
     }
-    //test_file_syscalls();
+    test_file_syscalls();
     //test_dynamic_heap();
+    assert(false);
 
     in = open("console", O_RDONLY);
     assert(in >= 0);

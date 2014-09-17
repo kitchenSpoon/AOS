@@ -28,10 +28,12 @@ typedef struct {
  * descriptor. the pointer arguments must be kernel pointers.
  */
 static void file_open_end(void *token, int err, struct vnode *vn) {
+    printf("file_open_end called\n");
     assert(token != NULL);
 
     cont_file_open_t *cont = (cont_file_open_t*)token;
     cont_file_open_t local_cont = *cont;
+    printf("WTF IS THIS ADDRESS file_open_end = %p\n", cont);
     free(cont);
 
     if (err) {
@@ -39,14 +41,21 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
         return;
     }
 
-    struct openfile *file;
+    struct openfile *file, *file2;
     int fd;
 
     file = malloc(sizeof(struct openfile));
+    printf("created an openfile at %p\n", file);
     if (file == NULL) {
         local_cont.callback(local_cont.token, ENOMEM, -1);
         return;
     }
+    file2 = malloc(sizeof(struct openfile));
+    printf("created an openfile at %p\n", file2);
+    file2 = malloc(sizeof(struct openfile));
+    printf("created an openfile at %p\n", file2);
+    file2 = malloc(sizeof(struct openfile));
+    printf("created an openfile at %p\n", file2);
 
     file->of_offset = 0;
     file->of_accmode = local_cont.flags & O_ACCMODE;
@@ -62,12 +71,15 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
         return;
     }
 
+    printf("openfile1 still at %p\n", file);
+    printf("local token at %p\n", local_cont.token);
     local_cont.callback(local_cont.token, 0, fd);
 }
 
 void
 file_open(char *filename, int flags, serv_sys_open_cb_t callback, void *token)
 {
+    printf("file_open called\n");
     int accmode = flags & O_ACCMODE;
     if (!(accmode==O_RDONLY ||
           accmode==O_WRONLY ||
@@ -85,7 +97,8 @@ file_open(char *filename, int flags, serv_sys_open_cb_t callback, void *token)
     cont->token    = token;
     cont->flags    = flags;
 
-    vfs_open(filename, flags, file_open_end, token);
+    printf("WTF IS THIS ADDRESS file_open  = %p\n", cont);
+    vfs_open(filename, flags, file_open_end, (void*)cont);
 }
 
 /*
@@ -105,7 +118,10 @@ file_doclose(struct openfile *file, uint32_t flags)
     /* if this is the last close of this file, free it up */
     if (file->of_refcount == 1) {
         vfs_close(file->of_vnode, flags);
+        printf("vfs_close_out\n");
+        printf("free openfile at %p\n", file);
         free(file);
+        printf("free_file\n");
     } else {
         assert(file->of_refcount > 1);
         file->of_refcount--;
@@ -131,11 +147,14 @@ file_close(int fd)
         return result;
     }
 
+    printf("file_close 2\n");
     result = file_doclose(file, file->of_accmode);
     if (result) {
+        printf("file_close 2.5\n");
         /* leave file open for possible retry */
         return result;
     }
+    printf("file_close 3\n");
     curproc->p_filetable->ft_openfiles[fd] = NULL;
     printf("file_close_out\n");
 
@@ -207,6 +226,7 @@ filetable_findfile(int fd, struct openfile **file)
 int
 filetable_placefile(struct openfile *file, int *fd)
 {
+    printf("openfile1 still at %p\n", file);
     struct filetable *ft = curproc->p_filetable;
     int i;
 
@@ -214,6 +234,7 @@ filetable_placefile(struct openfile *file, int *fd)
         if (ft->ft_openfiles[i] == NULL) {
             ft->ft_openfiles[i] = file;
             *fd = i;
+            printf("openfile1 still at %p\n", file);
             return 0;
         }
     }

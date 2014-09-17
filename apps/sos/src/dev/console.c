@@ -18,6 +18,15 @@
 #define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
 
+
+static int con_eachopen(struct vnode *file, int flags);
+static int con_eachclose(struct vnode *file, uint32_t flags);
+static int con_lastclose(struct vnode *file);
+static void con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
+                     serv_sys_read_cb_t callback, void *token);
+static void con_write(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
+               serv_sys_write_cb_t callback, void *token);
+
 struct console{
     char buf[MAX_IO_BUF];
     int buf_size;
@@ -27,28 +36,28 @@ struct console{
 } console;
 
 struct con_read_state{
-    seL4_CPtr reply_cap;
     bool opened_for_reading;
     int is_blocked;
     struct vnode *file;
     char* buf;
     size_t nbytes;
+    serv_sys_read_cb_t callback;
+    void* token;
+    size_t offset;
 } con_read_state;
 
 int
 con_init(struct vnode *con_vn) {
+    printf("con_init called\n");
     assert(con_vn != NULL);
 
-    struct vnode_ops *vops = con_vn->vn_ops;
+    con_vn->vn_ops->vop_eachopen  = con_eachopen;
+    con_vn->vn_ops->vop_eachclose = con_eachclose;
+    con_vn->vn_ops->vop_lastclose = con_lastclose;
+    con_vn->vn_ops->vop_read      = con_read;
+    con_vn->vn_ops->vop_write     = con_write;
 
-    vops->vop_eachopen  = con_eachopen;
-    vops->vop_eachclose = con_eachclose;
-    vops->vop_lastclose = con_lastclose;
-    vops->vop_read      = con_read;
-    vops->vop_write     = con_write;
-
-    con_vn->vn_ops = vops;
-    con_vn->vn_data = NULL;
+    con_vn->vn_data     = NULL;
     con_vn->initialised = true;
 
     /* initalize console buf */
@@ -65,7 +74,8 @@ con_init(struct vnode *con_vn) {
     return 0;
 }
 
-static void read_handler(struct serial * serial , char c){
+static void
+read_handler(struct serial * serial , char c){
     //printf("read_handler called, c = %d\n", (int)c);
     if(console.buf_size < MAX_IO_BUF){
         console.buf[console.end++] = c;
@@ -74,15 +84,13 @@ static void read_handler(struct serial * serial , char c){
     }
 
     if(con_read_state.is_blocked && c == '\n'){
-        struct vnode *file = con_read_state.file;
-        char* buf = con_read_state.buf;
-        size_t nbytes = con_read_state.nbytes;
-        seL4_CPtr reply_cap = con_read_state.reply_cap;
-        con_read(file, buf, nbytes, reply_cap);
+        struct con_read_state *s = &con_read_state;
+        con_read(s->file, s->buf, s->nbytes, s->offset, s->callback, s->token);
     }
 }
 
-int con_eachopen(struct vnode *file, int flags){
+static int
+con_eachopen(struct vnode *file, int flags){
     printf("con_open called\n");
     int err;
 
@@ -102,7 +110,12 @@ int con_eachopen(struct vnode *file, int flags){
     return 0;
 }
 
-int con_eachclose(struct vnode *file, uint32_t flags){
+static int
+con_eachclose(struct vnode *file, uint32_t flags){
+    printf("con_eachclose\n");
+    printf("con_eachclose\n");
+    printf("con_eachclose\n");
+    printf("con_eachclose\n");
     printf("con_eachclose\n");
     if(flags == O_RDWR || flags == O_RDONLY) {
         if(console.serial == NULL) {
@@ -119,7 +132,8 @@ int con_eachclose(struct vnode *file, uint32_t flags){
     return 0;
 }
 
-int con_lastclose(struct vnode *con_vn) {
+static int
+con_lastclose(struct vnode *con_vn) {
     /* If any of these fails, that means we have a bug */
     assert(con_vn->vn_ops != NULL);
     assert(con_vn->vn_opencount == 1);
@@ -132,9 +146,15 @@ int con_lastclose(struct vnode *con_vn) {
     return 0;
 }
 
-int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
+static void
+//int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
+con_write(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
+          serv_sys_write_cb_t callback, void *token)
+{
+    (void)offset;
     if (console.serial == NULL) {
-        return EFAULT;
+        callback(token, EFAULT, 0);
+        return;
     }
     struct serial* serial = console.serial;
 
@@ -145,12 +165,16 @@ int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len) {
         tries++;
     }
 
-    *len = tot_sent;
-    return 0;
+    callback(token, 0, tot_sent);
 }
 
-int con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
+static void
+//con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
+con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
+         serv_sys_read_cb_t callback, void *token)
+{
     //printf("con_read called\n");
+    (void)offset;
     int err;
 
     if(console.buf_size > 0){
@@ -183,14 +207,15 @@ int con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
         console.start += second_half_size;
         console.start %= MAX_IO_BUF;
         if (err || err2) {
-            seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-            seL4_SetMR(0, (seL4_Word)-1); // This value can be anything
-            seL4_Send(reply_cap, reply);
-            cspace_free_slot(cur_cspace, reply_cap);
+            //seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+            //seL4_SetMR(0, (seL4_Word)-1); // This value can be anything
+            //seL4_Send(reply_cap, reply);
+            //cspace_free_slot(cur_cspace, reply_cap);
 
             console.start = console_start_ori;
             con_read_state.is_blocked = 0;
-            return EFAULT;
+            callback(token, EFAULT, 0);
+            return;
         }
 
         //copy remaing buf foward
@@ -200,20 +225,22 @@ int con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
 
         console.buf_size -= len;
 
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)len);
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
+        //seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
+        //seL4_SetMR(0, (seL4_Word)len);
+        //seL4_Send(reply_cap, reply);
+        //cspace_free_slot(cur_cspace, reply_cap);
 
         con_read_state.is_blocked = 0;
+        callback(token, 0, len);
     } else {
         //printf("con_read: blocked\n");
-        con_read_state.reply_cap = reply_cap;
-        con_read_state.file = file;
-        con_read_state.buf = buf;
+        con_read_state.file       = file;
+        con_read_state.buf        = buf;
         con_read_state.is_blocked = 1;
+        con_read_state.callback   = callback;
+        con_read_state.token      = token;
+        con_read_state.offset     = offset;
     }
 
     //printf("con_read out\n");
-    return 0;
 }

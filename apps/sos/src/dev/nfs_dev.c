@@ -72,6 +72,7 @@ typedef struct nfs_getdirent_state{
  */
 static int
 init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
+    printf("init_helper called\n");
     struct nfs_data *data = malloc(sizeof(struct nfs_data));
     if (data == NULL) {
         return ENOMEM;
@@ -95,6 +96,7 @@ init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
 
 static void
 nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
+    printf("nfs_dev_create handler called\n");
     nfs_open_state_t *state = (nfs_open_state_t*)token;
     nfs_open_state_t local_state = *state;
     free(state);
@@ -169,6 +171,7 @@ nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
 
 void
 nfs_dev_init(struct vnode* vn, vfs_open_cb_t callback, void *vfs_open_token) {
+    printf("nfs_dev_init called\n");
     nfs_open_state_t *state = malloc(sizeof(nfs_open_state_t));
     if (state == NULL) {
         callback(vfs_open_token, ENOMEM);
@@ -199,6 +202,11 @@ nfs_dev_eachopen(struct vnode *file, int flags){
 static int nfs_dev_eachclose(struct vnode *file, uint32_t flags){
 //    (void)file;
 //    (void)flags;
+
+    printf("nfs_close\n");
+    printf("nfs_close\n");
+    printf("nfs_close\n");
+    printf("nfs_close\n");
     return 0;
 }
 

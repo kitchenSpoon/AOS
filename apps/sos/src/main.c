@@ -112,29 +112,29 @@ void handle_syscall(seL4_Word badge, int num_args) {
         serv_sys_open(reply_cap, path, nbyte, flags);
         break;
     }
-//    case SOS_SYSCALL_CLOSE:
-//    {
-//        int fd = seL4_GetMR(1);
-//        serv_sys_close(reply_cap, fd);
-//        break;
-//    }
-//    case SOS_SYSCALL_READ:
-//    {
-//        int fd        = (int)seL4_GetMR(1);
-//        seL4_Word buf = (seL4_Word)seL4_GetMR(2);
-//        size_t nbyte  = (size_t)seL4_GetMR(3);
-//        serv_sys_read(reply_cap, fd, buf, nbyte);
-//
-//        break;
-//    }
-//    case SOS_SYSCALL_WRITE:
-//    {
-//        int fd          = (int)seL4_GetMR(1);
-//        seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
-//        size_t nbyte    = (size_t)seL4_GetMR(3);
-//        serv_sys_write(reply_cap, fd, buf, nbyte);
-//        break;
-//    }
+    case SOS_SYSCALL_CLOSE:
+    {
+        int fd = seL4_GetMR(1);
+        serv_sys_close(reply_cap, fd);
+        break;
+    }
+    case SOS_SYSCALL_READ:
+    {
+        int fd        = (int)seL4_GetMR(1);
+        seL4_Word buf = (seL4_Word)seL4_GetMR(2);
+        size_t nbyte  = (size_t)seL4_GetMR(3);
+        serv_sys_read(reply_cap, fd, buf, nbyte);
+
+        break;
+    }
+    case SOS_SYSCALL_WRITE:
+    {
+        int fd          = (int)seL4_GetMR(1);
+        seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
+        size_t nbyte    = (size_t)seL4_GetMR(3);
+        serv_sys_write(reply_cap, fd, buf, nbyte);
+        break;
+    }
     case SOS_SYSCALL_SLEEP:
     {
         serv_sys_sleep(reply_cap, seL4_GetMR(1));

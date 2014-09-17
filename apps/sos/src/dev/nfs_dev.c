@@ -26,6 +26,7 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
                               serv_sys_write_cb_t callback, void *token);
 static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte,
                       int pos, serv_sys_getdirent_cb_t callback, void *token);
+static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf);
 
 #define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
@@ -88,6 +89,7 @@ init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
     vn->vn_ops->vop_read      = nfs_dev_read;
     vn->vn_ops->vop_write     = nfs_dev_write;
     vn->vn_ops->vop_getdirent = nfs_dev_getdirent;
+    vn->vn_ops->vop_stat = nfs_dev_stat;
 
     vn->vn_opencount  = 0;
     vn->initialised = true;
@@ -351,36 +353,54 @@ static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int po
     nfs_readdir(&mnt_point, 0, nfs_dev_getdirent_handler, (uintptr_t)state);
 }
 
-//static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
-//    if(file == NULL) return EFAULT;
-//    if(file->vn == NULL) return EFAULT;
-//    if(file->vn->vn_data == NULL) return EFAULT;
-//
-//    //TODO: update fattr in every call to nfs (lookup, read, write, create)
-//    //need to check if fattr has pointers in it
-//    fattr_t *fattr = (file->vn->vn_data->fattr);
-//
-//    /* Turn fattr to sos_stat_t */
-//    sos_stat_t stat;
-//    stat.st_type = ST_FILE;
-//    stat.st_mode = fattr->mode;
-//    stat.st_size = fattr->size;
-//    stat.st_mtime.seconds = fattr->mtime.seconds;
-//    stat.st_mtime.useconds = fattr->mtime.useconds;
-//
-//    /* Needs to copy the data to sosh space */
-//    int err = copyout(buf, stat, sizeof(sos_stat_t));
-//
-//
-//    /* reply sosh*/
-//    seL4_CPtr reply_cap = state->reply_cap;
-//    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
-//    seL4_Send(reply_cap, reply);
-//    cspace_free_slot(cur_cspace, reply_cap);
-//
-//    free(state);
-//    return 0;
-//}
+static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
+    if(file == NULL) return EFAULT;
+    if(file->vn_data == NULL) return EFAULT;
+
+    //TODO: update fattr in every call to nfs (lookup, read, write, create)
+    //need to check if fattr has pointers in it
+    struct nfs_data *data = (struct nfs_data*)file->vn_data;
+    fattr_t *fattr = (data->fattr);
+
+    /* Turn fattr to sos_stat_t */
+    sos_stat_t stat;
+    stat.st_type = ST_FILE;
+    stat.st_mode = fattr->mode;
+    stat.st_size = fattr->size;
+    stat.st_mtime.seconds = fattr->mtime.seconds;
+    stat.st_mtime.useconds = fattr->mtime.useconds;
+
+    /* Needs to copy the data to sosh space */
+    int err = copyout((seL4_Word)buf, (seL4_Word)&stat, sizeof(sos_stat_t));
+
+    return err;
+}
+
+int nfs_dev_getstat(struct vnode *file, sos_stat_t *buf){
+    if(file == NULL) return EFAULT;
+    if(file->vn_data == NULL) return EFAULT;
+
+    nfs_lookup();
+    nfs_getattr();
+
+    //TODO: update fattr in every call to nfs (lookup, read, write, create)
+    //need to check if fattr has pointers in it
+    struct nfs_data *data = (struct nfs_data*)file->vn_data;
+    fattr_t *fattr = (data->fattr);
+
+    /* Turn fattr to sos_stat_t */
+    sos_stat_t stat;
+    stat.st_type = ST_FILE;
+    stat.st_mode = fattr->mode;
+    stat.st_size = fattr->size;
+    stat.st_mtime.seconds = fattr->mtime.seconds;
+    stat.st_mtime.useconds = fattr->mtime.useconds;
+
+    /* Needs to copy the data to sosh space */
+    int err = copyout((seL4_Word)buf, (seL4_Word)&stat, sizeof(sos_stat_t));
+
+    return err;
+}
 
 static void nfs_dev_timeout_handler(uint32_t id, void *data){
     (void)id;

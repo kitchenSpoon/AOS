@@ -23,7 +23,7 @@ struct vnode_ops {
                             serv_sys_write_cb_t callback, void *token);
     void (*vop_getdirent)(struct vnode *dir, char *buf, size_t nbyte,
                           int pos, serv_sys_getdirent_cb_t callback, void *token);
-    //int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
+    int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
 };
 
 #define __VOP(vn, sym) ((vn)->vn_ops->vop_##sym)
@@ -32,10 +32,10 @@ struct vnode_ops {
 #define VOP_EACHCLOSE(vn, flags)                    (__VOP(vn, eachclose)(vn, flags))
 #define VOP_LASTCLOSE(vn)                           (__VOP(vn, lastclose)(vn))
 
-#define VOP_READ(vn, buf, nbytes, offset, callback, token)        (__VOP(vn, read)(vn, buf, nbytes, offset, callback, token))
-#define VOP_WRITE(vn, buf, nbyte, offset, callback, token)              (__VOP(vn, write)(vn, buf, nbyte, offset, callback, token))
-#define VOP_GETDIRENT(vn, buf, nbyte, pos, callback, token) (__VOP(vn, getdirent)(vn, buf, nbyte, pos, callback, token))
-#define VOP_STAT(vn, buf)                           (__VOP(vn, stat)(vn, buf))
+#define VOP_READ(vn, buf, nbytes, offset, callback, token)      (__VOP(vn, read)(vn, buf, nbytes, offset, callback, token))
+#define VOP_WRITE(vn, buf, nbyte, offset, callback, token)      (__VOP(vn, write)(vn, buf, nbyte, offset, callback, token))
+#define VOP_GETDIRENT(vn, buf, nbyte, pos, callback, token)     (__VOP(vn, getdirent)(vn, buf, nbyte, pos, callback, token))
+#define VOP_STAT(vn, buf)                                       (__VOP(vn, stat)(vn, buf))
 
 /*
  * Reference count manipulation

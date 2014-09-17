@@ -317,31 +317,59 @@ void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
     VOP_GETDIRENT(vn, name, nbyte, pos, serv_sys_getdirent_end, (void*)cont);
 }
 
-//void serv_sys_getdirent_ret(seL4_CPtr
+typedef struct {
+    seL4_CPtr reply_cap;
+} cont_stat_t;
+
+static void serv_sys_stat_end(void *token, int err){
+    cont_stat_t *cont = (cont_stat_t*)token;
+
+    /* reply sosh*/
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(EFAULT, 0, 0, 0);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+    
+    free(cont);
+}
 
 void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf){
-    //TODO: just making it compiles
-    return;
+    /* Read doesn't check buffer if mapped like open & write,
+     * just check if the memory is valid. It will map page when copyout */
+    int err = 0;
 
-//    /* Read doesn't check buffer if mapped like open & write,
-//     * just check if the memory is valid. It will map page when copyout */
-//    uint32_t permissions = 0;
-//    if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_stat_t), &permissions) ||
-//            !(permissions & seL4_CanWrite)){
-//        return EINVAL;
-//    }
-//
-//    //check me
-//    if(!as_is_valid_memory(proc_getas(), (seL4_Word)path, path_len, &permissions) ||
-//            !(permissions & seL4_CanRead)){
-//        return EINVAL;
-//    }
-//    //we store stat with our vnode so we dont need to deal with nfs
-//    //loop through our vnode list
-//    vn = vfs_vt_lookup(path);
-//    if(vn == NULL){
-//        //error
-//    }
-//
-//    VOP_STAT(vn, buf);
+    cont_stat_t *cont = malloc(sizeof(cont_stat_t));
+    if(cont == NULL){
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+        return;
+    }
+    cont->reply_cap = reply_cap;
+
+    uint32_t permissions = 0;
+    if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_stat_t), &permissions) ||
+            !(permissions & seL4_CanWrite)){
+        printf("stat isvalidmem1 error\n");
+        serv_sys_stat_end((void*)cont, EINVAL);
+        return;
+    }
+
+    //check me
+    if(!as_is_valid_memory(proc_getas(), (seL4_Word)path, path_len, &permissions) ||
+            !(permissions & seL4_CanRead)){
+        printf("stat isvalidmem2 error\n");
+        serv_sys_stat_end((void*)cont, EINVAL);
+        return;
+    }
+
+    char kbuf[MAX_IO_BUF];
+    err = copyin((seL4_Word)kbuf, (seL4_Word)path, path_len);
+    if (err) {
+        printf("stat copyin error\n");
+        serv_sys_stat_end((void*)cont, err);
+        return;
+    }
+    kbuf[path_len] = '\0';
+
+    vfs_stat(kbuf, path_len, serv_sys_stat_end, (void *) cont);
 }

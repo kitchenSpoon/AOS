@@ -132,6 +132,23 @@ void vfs_close(struct vnode *vn, uint32_t flags) {
     printf("vfs_close 2\n");
 }
 
+typedef struct {
+    serv_sys_stat_cb_t callback;
+    void *serv_sys_stat_token;
+} cont_vfs_stat_t;
+
+void vfs_stat(char* path, size_t path_len, serv_sys_stat_cb_t callback, void *token){
+    struct vnode *vn = vfs_vnt_lookup(kbuf);
+    if (vn != NULL) {
+        VOP_STAT(vn, buf);
+        callback(token, 0);
+        return;
+    } else {
+        cont_vfs_stat_t *cont = malloc(sizeof(cont_vfs_stat_t));
+        nfs_dev_getstat();
+    }
+}
+
 struct vnode* vfs_vnt_lookup(const char *path) {
     if (path == NULL) {
         return NULL;

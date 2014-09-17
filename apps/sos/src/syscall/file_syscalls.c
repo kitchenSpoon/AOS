@@ -46,76 +46,7 @@ _sys_close(int fd) {
     return 0;
 }
 
-static int
-_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
-    if (fd < 0 || fd >= PROCESS_MAX_FILES) {
-        return EINVAL;
-    }
-    /* Read doesn't check buffer if mapped like open & write,
-     * just check if the memory is valid. It will map page when copyout */
-    uint32_t permissions = 0;
-    if(!as_is_valid_memory(proc_getas(), buf, nbyte, &permissions) ||
-            !(permissions & seL4_CanWrite)){
-        return EINVAL;
-    }
 
-    int err;
-    struct openfile *file;
-
-    err = filetable_findfile(fd, &file);
-    if (err) {
-        return err;
-    }
-
-    //check read permissions
-    if(file->of_accmode != O_RDWR &&
-        file->of_accmode != O_RDONLY){
-        return EACCES;
-    }
-    err = VOP_READ(file->of_vnode, (char*)buf, nbyte, reply_cap);
-    if (err) {
-        return err;
-    }
-
-    return 0;
-}
-
-static int
-_sys_write(int fd, seL4_Word buf, size_t nbyte, size_t* len){
-    if (fd < 0 || fd >= PROCESS_MAX_FILES || nbyte >= MAX_IO_BUF) {
-        return EINVAL;
-    }
-    if(!is_range_mapped(buf, nbyte)){
-        return EINVAL;
-    }
-
-    int err;
-    struct openfile *file;
-    char kbuf[MAX_IO_BUF];
-
-    err = copyin((seL4_Word)kbuf, (seL4_Word)buf, nbyte);
-    if (err) {
-        return EINVAL;
-    }
-
-    err = filetable_findfile(fd, &file);
-    if (err) {
-        return err;
-    }
-
-    //check write permissions
-    if(file->of_accmode != O_RDWR &&
-        file->of_accmode != O_WRONLY){
-        return EACCES;
-    }
-
-    err = VOP_WRITE(file->of_vnode, kbuf, nbyte, len);
-    if (err) {
-        return err;
-    }
-
-    return 0;
-}
 
 void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
     struct serial* serial = serial_init(); //serial_init does the cacheing
@@ -196,32 +127,137 @@ void serv_sys_close(seL4_CPtr reply_cap, int fd){
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
-void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
-    int err;
-    seL4_MessageInfo_t reply;
+typedef struct {
+    seL4_CPtr reply_cap;
+    struct openfile *file;
+} cont_read_t;
 
-    err = _sys_read(reply_cap, fd, buf, nbyte);
-    if (err) {
-        reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)-1); // this value can be anything
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
+void serv_sys_read_end(void *token, int err, size_t size){
+    cont_read_t *cont = (cont_read_t*)token;
+
+    /* Update file offset */
+    if(!err){
+        cont->file->of_offset += size;
     }
+
+    /* Reply app*/
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)size);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+
+    if(cont->file != NULL){
+        free(cont->file);
+    }
+    free(cont);
 }
 
-
-void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf,
-                    size_t nbyte) {
-
-    size_t len;
+void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     int err;
-    seL4_MessageInfo_t reply;
+    cont_read_t *cont = malloc(sizeof(cont_read_t));
+    if (cont == NULL) {
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)0);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+        return;
+    }
+    cont->reply_cap = reply_cap;
+    cont->file = NULL;
 
-    err = _sys_write(fd, buf, nbyte, &len);
-    reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)len);
-    seL4_Send(reply_cap, reply);
-    cspace_free_slot(cur_cspace, reply_cap);
+    bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES) || (nbyte >= MAX_IO_BUF);
+    uint32_t permissions = 0;
+    is_inval = is_inval || (!as_is_valid_memory(proc_getas(), buf, nbyte, &permissions));
+    is_inval = is_inval || (!(permissions & seL4_CanWrite));
+    if(is_inval){
+        serv_sys_read_end((void*)cont, EINVAL, 0);
+    }
+
+    struct openfile *file;
+    err = filetable_findfile(fd, &file);
+    if (err) {
+        serv_sys_read_end((void*)cont, EINVAL, 0);
+    }
+    cont->file = file;
+
+    //check read permissions
+    if(file->of_accmode != O_RDWR &&
+        file->of_accmode != O_RDONLY){
+        serv_sys_read_end((void*)cont, EACCES, 0);
+    }
+
+    VOP_READ(file->of_vnode, (char*)buf, nbyte, 0, serv_sys_read_end, (void*)cont);
+}
+
+typedef struct {
+    seL4_CPtr reply_cap;
+    struct openfile *file;
+} cont_write_t;
+
+
+void serv_sys_write_end(void *token, int err, size_t size){
+    cont_write_t *cont = (cont_write_t*)token;
+
+    /* Update file offset */
+    if(!err){
+        cont->file->of_offset += size;
+    }
+
+    /* Reply app*/
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)size);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+
+    if(cont->file != NULL){
+        free(cont->file);
+    }
+    free(cont);
+}
+
+void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
+
+    int err;
+
+    cont_write_t *cont = malloc(sizeof(cont_write_t));
+    if (cont == NULL) {
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)0);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+        return;
+    }
+    cont->reply_cap = reply_cap;
+    cont->file = NULL;
+
+    bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES) || (nbyte >= MAX_IO_BUF);
+    is_inval = is_inval || (!is_range_mapped(buf, nbyte));
+    if(is_inval){
+        serv_sys_write_end((void*)cont, EINVAL, 0);
+    }
+
+    struct openfile *file;
+    char kbuf[MAX_IO_BUF];
+
+    err = copyin((seL4_Word)kbuf, (seL4_Word)buf, nbyte);
+    if (err) {
+        serv_sys_write_end((void*)cont, EINVAL, 0);
+    }
+
+    err = filetable_findfile(fd, &file);
+    if (err) {
+        serv_sys_write_end((void*)cont, EINVAL, 0);
+    }
+    cont->file = file;
+
+    //check write permissions
+    if(file->of_accmode != O_RDWR &&
+        file->of_accmode != O_WRONLY){
+        serv_sys_write_end((void*)cont, EACCES, 0);
+    }
+
+
+    VOP_WRITE(file->of_vnode, kbuf, 0, nbyte, serv_sys_write_end, (void*)cont);
 }
 
 

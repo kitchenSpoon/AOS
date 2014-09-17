@@ -17,8 +17,10 @@ struct vnode_ops {
     int (*vop_eachopen)(struct vnode *file, int flags);
     int (*vop_eachclose)(struct vnode *file, uint32_t flags);
     int (*vop_lastclose)(struct vnode *file);   // lastclose cleans up the vn_data
-    int (*vop_read)(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap);
-    int (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
+    void (*vop_read)(struct vnode *file, char* buf, size_t nbytes, size_t offset,
+                            serv_sys_read_cb_t callback, void *token);
+    void (*vop_write)(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
+                            serv_sys_write_cb_t callback, void *token);
     void (*vop_getdirent)(struct vnode *dir, char *buf, size_t nbyte,
                           int pos, serv_sys_getdirent_cb_t callback, void *token);
     //int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
@@ -30,9 +32,8 @@ struct vnode_ops {
 #define VOP_EACHCLOSE(vn, flags)                    (__VOP(vn, eachclose)(vn, flags))
 #define VOP_LASTCLOSE(vn)                           (__VOP(vn, lastclose)(vn))
 
-#define VOP_READ(vn, buf, nbytes, reply_cap)        (__VOP(vn, read)(vn, buf, nbytes, reply_cap))
-#define VOP_WRITE(vn, buf, nbyte, len)              (__VOP(vn, write)(vn, buf, nbyte, len))
-#define VOP_WRITE(vn, buf, nbyte, len)              (__VOP(vn, write)(vn, buf, nbyte, len))
+#define VOP_READ(vn, buf, nbytes, offset, callback, token)        (__VOP(vn, read)(vn, buf, nbytes, offset, callback, token))
+#define VOP_WRITE(vn, buf, nbyte, offset, callback, token)              (__VOP(vn, write)(vn, buf, nbyte, offset, callback, token))
 #define VOP_GETDIRENT(vn, buf, nbyte, pos, callback, token) (__VOP(vn, getdirent)(vn, buf, nbyte, pos, callback, token))
 #define VOP_STAT(vn, buf)                           (__VOP(vn, stat)(vn, buf))
 

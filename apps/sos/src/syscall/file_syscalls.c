@@ -325,10 +325,10 @@ static void serv_sys_stat_end(void *token, int err){
     cont_stat_t *cont = (cont_stat_t*)token;
 
     /* reply sosh*/
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(EFAULT, 0, 0, 0);
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
-    
+
     free(cont);
 }
 
@@ -349,15 +349,12 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
     uint32_t permissions = 0;
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_stat_t), &permissions) ||
             !(permissions & seL4_CanWrite)){
-        printf("stat isvalidmem1 error\n");
         serv_sys_stat_end((void*)cont, EINVAL);
         return;
     }
 
-    //check me
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)path, path_len, &permissions) ||
             !(permissions & seL4_CanRead)){
-        printf("stat isvalidmem2 error\n");
         serv_sys_stat_end((void*)cont, EINVAL);
         return;
     }
@@ -365,11 +362,10 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
     char kbuf[MAX_IO_BUF];
     err = copyin((seL4_Word)kbuf, (seL4_Word)path, path_len);
     if (err) {
-        printf("stat copyin error\n");
         serv_sys_stat_end((void*)cont, err);
         return;
     }
     kbuf[path_len] = '\0';
 
-    vfs_stat(kbuf, path_len, serv_sys_stat_end, (void *) cont);
+    vfs_stat(kbuf, path_len, buf, serv_sys_stat_end, (void *)cont);
 }

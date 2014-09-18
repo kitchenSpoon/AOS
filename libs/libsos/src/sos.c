@@ -203,6 +203,7 @@ int sos_getdirent(int pos, char *name, size_t nbyte) {
 }
 
 int sos_stat(const char *path, sos_stat_t *buf) {
+    //printf("sos_stat called\n");
     int err;
 
     size_t size = 0;
@@ -223,6 +224,7 @@ int sos_stat(const char *path, sos_stat_t *buf) {
         return -1;
     }
 
+    //printf("sos_stat ended\n");
     return 0;
 }
 

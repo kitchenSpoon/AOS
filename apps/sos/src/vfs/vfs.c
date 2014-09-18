@@ -123,13 +123,8 @@ void vfs_open(char *path, int openflags, file_open_cb_t callback, void *file_ope
 }
 
 void vfs_close(struct vnode *vn, uint32_t flags) {
-    printf("vfs_close called\n");
     VOP_EACHCLOSE(vn, flags);
-    //VOP_EACHOPEN(vn, flags);
-    //vn->vn_ops->vop_eachclose(vn, flags);
-    printf("vfs_close 1\n");
     VOP_DECOPEN(vn);
-    printf("vfs_close 2\n");
 }
 
 typedef struct {
@@ -137,16 +132,32 @@ typedef struct {
     void *serv_sys_stat_token;
 } cont_vfs_stat_t;
 
-void vfs_stat(char* path, size_t path_len, serv_sys_stat_cb_t callback, void *token){
-    struct vnode *vn = vfs_vnt_lookup(kbuf);
+static void vfs_stat_end(void *token, int err) {
+    //printf("vfs_stat_end called\n");
+    cont_vfs_stat_t *cont = (cont_vfs_stat_t*)token;
+    cont_vfs_stat_t local_cont = *cont;
+    free(cont);
+
+    local_cont.callback(local_cont.serv_sys_stat_token, err);
+}
+
+void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, serv_sys_stat_cb_t callback, void *token){
+    //printf("vfs_stat called\n");
+    struct vnode *vn = vfs_vnt_lookup(path);
     if (vn != NULL) {
         VOP_STAT(vn, buf);
         callback(token, 0);
         return;
-    } else {
-        cont_vfs_stat_t *cont = malloc(sizeof(cont_vfs_stat_t));
-        nfs_dev_getstat();
     }
+
+    cont_vfs_stat_t *cont = malloc(sizeof(cont_vfs_stat_t));
+    if (cont == NULL) {
+        callback(token, ENOMEM);
+        return;
+    }
+    cont->callback = callback;
+    cont->serv_sys_stat_token = token;
+    nfs_dev_getstat(path, path_len, buf, vfs_stat_end, (void*)cont);
 }
 
 struct vnode* vfs_vnt_lookup(const char *path) {

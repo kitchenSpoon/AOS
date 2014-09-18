@@ -9,9 +9,10 @@
  *****************************************************************************/
 
 typedef void (*vfs_open_cb_t)(void* vfs_open_token, int err);
+typedef void (*vfs_stat_cb_t)(void *token, int err);
 void vfs_open(char *path, int openflags, file_open_cb_t callback, void *token);
 void vfs_close(struct vnode *vn, uint32_t flags);
-void vfs_stat(char* path, size_t path_len, serv_sys_stat_cb_t callback, void *token);
+void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, serv_sys_stat_cb_t callback, void *token);
 
 /******************************************************************************
  * Vnode table entry part

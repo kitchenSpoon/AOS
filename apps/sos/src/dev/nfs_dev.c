@@ -76,23 +76,23 @@ typedef struct nfs_getdirent_state{
  */
 static int
 init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
+    assert(vn != NULL);
+    assert(vn->vn_ops != NULL);
+    assert(fh != NULL);
     printf("init_helper called\n");
     struct nfs_data *data = malloc(sizeof(struct nfs_data));
     if (data == NULL) {
         return ENOMEM;
     }
-    data->fh = NULL;
-    data->fattr = NULL;
 
-    if (fh != NULL) {
-        data->fh = malloc(sizeof(fhandle_t));
-        if(data->fh == NULL){
-            free(data);
-            return ENOMEM;
-        }
-        memcpy(data->fh->data, fh->data, sizeof(fh->data));
+    data->fh = malloc(sizeof(fhandle_t));
+    if(data->fh == NULL){
+        free(data);
+        return ENOMEM;
     }
+    memcpy(data->fh->data, fh->data, sizeof(fh->data));
 
+    data->fattr = NULL;
     if (fattr != NULL) {
         data->fattr = malloc(sizeof(fattr_t));
         if(data->fattr == NULL){
@@ -235,6 +235,8 @@ static int nfs_dev_lastclose(struct vnode *vn) {
 static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
     //TODO: update fattr of the vnode
     int err = 0;
+    printf("nfs_dev_write handler count = %d\n", count);
+    printf("nfs_dev_write status = %d\n", status);
     nfs_write_state *state = (nfs_write_state*)token;
     if(status == NFS_OK){
         /* Cast for convience */
@@ -255,7 +257,8 @@ static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t
 //we do not need len anymore since it will be invalid when our callack finishes, please remove or not use it
 static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
                               serv_sys_write_cb_t callback, void *token){
-
+    printf("nfs_dev_write buf = %s\n asdasdasdas \n",buf);
+    printf("nfs_dev_write offset = %d\n", offset);
     nfs_write_state *state = malloc(sizeof(nfs_write_state));
     if (state == NULL) {
         callback(token, ENOMEM, 0);
@@ -263,7 +266,8 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
     }
     state->callback  = callback;
     state->token     = token;
-    enum rpc_stat status = nfs_write(&mnt_point, offset, nbytes, buf, nfs_dev_write_handler, (uintptr_t)state);
+    struct nfs_data *data = (struct nfs_data *)file->vn_data;
+    enum rpc_stat status = nfs_write(data->fh, offset, nbytes, buf, nfs_dev_write_handler, (uintptr_t)state);
     if (status != RPC_OK) {
         free(state);
         callback(token, EFAULT, 0);

@@ -258,6 +258,9 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         return;
     }
 
+    //might be buggy here
+    kbuf[nbyte] = '\0';
+
     err = filetable_findfile(fd, &file);
     if (err) {
         serv_sys_write_end((void*)cont, EINVAL, 0);
@@ -273,7 +276,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     }
 
 
-    VOP_WRITE(file->of_vnode, kbuf, 0, nbyte, serv_sys_write_end, (void*)cont);
+    VOP_WRITE(file->of_vnode, kbuf, nbyte, file->of_offset, serv_sys_write_end, (void*)cont);
 }
 
 

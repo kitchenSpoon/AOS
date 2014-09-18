@@ -129,7 +129,7 @@ void serv_sys_read_end(void *token, int err, size_t size){
     cont_read_t *cont = (cont_read_t*)token;
 
     printf("serv_read_end 0.25\n");
-    
+
     /* Update file offset */
     if(!err){
         printf("serv_read_end 0.5\n");
@@ -139,7 +139,7 @@ void serv_sys_read_end(void *token, int err, size_t size){
     printf("serv_read_end 1\n");
     /* Reply app*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    printf("serv_read_end size = %d\n", size);
+    printf("serv_read_end size = %u\n", size);
     seL4_SetMR(0, (seL4_Word)size);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
@@ -162,6 +162,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     cont->reply_cap = reply_cap;
     cont->file = NULL;
 
+    printf("serv read2\n");
     //have to read multiple times if nbyte >= MAX_IO_BUFF
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);// || (nbyte >= MAX_IO_BUF);
     if(is_inval){
@@ -177,6 +178,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
         return;
     }
 
+    printf("serv read3\n");
     struct openfile *file;
     err = filetable_findfile(fd, &file);
     if (err) {
@@ -186,6 +188,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     }
     cont->file = file;
 
+    printf("serv read4\n");
     //check read permissions
     if(file->of_accmode != O_RDWR &&
         file->of_accmode != O_RDONLY){
@@ -194,7 +197,9 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
         return;
     }
 
-    VOP_READ(file->of_vnode, (char*)buf, nbyte, 0, serv_sys_read_end, (void*)cont);
+    printf("serv read5\n");
+    VOP_READ(file->of_vnode, (char*)buf, nbyte, file->of_offset, serv_sys_read_end, (void*)cont);
+    printf("serv read finish\n");
 }
 
 typedef struct {

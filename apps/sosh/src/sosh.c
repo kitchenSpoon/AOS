@@ -63,6 +63,7 @@ static int cat(int argc, char **argv) {
 
     close(stdout_fd);
 
+    printf("read = %d, write = %d\n", num_read, num_written);
     if (num_read == -1 || num_written == -1) {
         printf("error on write\n");
         return 1;
@@ -93,6 +94,7 @@ static int cp(int argc, char **argv) {
     while ((num_read = read(fd, buf, BUF_SIZ)) > 0)
         num_written = write(fd_out, buf, num_read);
 
+    printf("read = %d, write = %d\n", num_read, num_written);
     if (num_read == -1 || num_written == -1) {
         printf("error on cp\n");
         return 1;

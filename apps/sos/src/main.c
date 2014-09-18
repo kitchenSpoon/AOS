@@ -120,19 +120,23 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_READ:
     {
+        printf("sos read called\n");
         int fd        = (int)seL4_GetMR(1);
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
         serv_sys_read(reply_cap, fd, buf, nbyte);
+        printf("sos read finish\n");
 
         break;
     }
     case SOS_SYSCALL_WRITE:
     {
+        printf("sos write called\n");
         int fd          = (int)seL4_GetMR(1);
         seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
         size_t nbyte    = (size_t)seL4_GetMR(3);
         serv_sys_write(reply_cap, fd, buf, nbyte);
+        printf("sos write ended\n");
         break;
     }
     case SOS_SYSCALL_SLEEP:
@@ -590,8 +594,6 @@ int main(void) {
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
 
-    filesystem_init();
-
     /* Start the user application */
     start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
@@ -599,6 +601,8 @@ int main(void) {
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
+    /* Init file system */
+    filesystem_init();
     //frametable_test(TEST_1 | TEST_3);
 
     /* Wait on synchronous endpoint for IPC */

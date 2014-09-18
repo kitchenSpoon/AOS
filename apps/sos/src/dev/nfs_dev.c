@@ -34,7 +34,6 @@ static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf);
 extern fhandle_t mnt_point;
 
 struct nfs_data{
-    //TODO: change these to non-pointer types
     fhandle_t *fh;
     fattr_t   *fattr;
 };
@@ -53,7 +52,7 @@ typedef struct nfs_write_state{
 
 typedef struct nfs_read_state{
     char* app_buf;
-    serv_sys_write_cb_t callback;
+    serv_sys_read_cb_t callback;
     void* token;
 } nfs_read_state;
 
@@ -82,8 +81,27 @@ init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
     if (data == NULL) {
         return ENOMEM;
     }
-    data->fh = fh;
-    data->fattr = fattr;
+    data->fh = NULL;
+    data->fattr = NULL;
+
+    if (fh != NULL) {
+        data->fh = malloc(sizeof(fhandle_t));
+        if(data->fh == NULL){
+            free(data);
+            return ENOMEM;
+        }
+        memcpy(data->fh->data, fh->data, sizeof(fh->data));
+    }
+
+    if (fattr != NULL) {
+        data->fattr = malloc(sizeof(fattr_t));
+        if(data->fattr == NULL){
+            free(data->fh);
+            free(data);
+            return ENOMEM;
+        }
+        *(data->fattr) = *fattr;
+    }
 
     vn->vn_data = data;
 
@@ -104,41 +122,24 @@ static void
 nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
     printf("nfs_dev_create handler called\n");
     nfs_open_state_t *state = (nfs_open_state_t*)token;
-    nfs_open_state_t local_state = *state;
-    free(state);
     if(status == NFS_OK){
         int err = 0;
 
-        /* Copy data to our vnode*/
-        fhandle_t *our_fh = malloc(sizeof(fhandle_t));
-        if(our_fh == NULL){
-            local_state.callback(local_state.vfs_open_token, ENOMEM);
-            return;
-        }
-        memcpy(our_fh->data, fh->data, sizeof(fh->data));
-
-        fattr_t *our_fattr = malloc(sizeof(fattr_t));
-        if(our_fattr == NULL){
-            free(our_fh);
-            local_state.callback(local_state.vfs_open_token, ENOMEM);
-            return;
-        }
-        *our_fattr = *fattr;
-
         /* place fhandle_t into vnode and add vnode into mapping*/
-        err = init_helper(state->file, our_fh, our_fattr);
+        err = init_helper(state->file, fh, fattr);
         if (err) {
-            free(our_fh);
-            free(our_fattr);
-            local_state.callback(local_state.vfs_open_token, err);
+            state->callback(state->vfs_open_token, err);
+            free(state);
             return;
         }
 
-        local_state.callback(local_state.vfs_open_token, 0);
+        state->callback(state->vfs_open_token, 0);
+        free(state);
         return;
     } else {
-        //error, nfs fail to create file
-        local_state.callback(local_state.vfs_open_token, EFAULT);
+        //error, nfs failed to create file
+        state->callback(state->vfs_open_token, EFAULT);
+        free(state);
         return;
     }
 }
@@ -221,16 +222,20 @@ static int nfs_dev_eachclose(struct vnode *file, uint32_t flags){
 
 static int nfs_dev_lastclose(struct vnode *vn) {
     struct nfs_data *data = (struct nfs_data*)vn->vn_data;
-
-    free(data->fh);
-    free(data->fattr);
+    if (data->fh != NULL) {
+        free(data->fh);
+    }
+    if (data->fattr != NULL) {
+        free(data->fattr);
+    }
+    free(data);
     return 0;
 }
 
 static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
     //TODO: update fattr of the vnode
     int err = 0;
-    nfs_write_state *state = malloc(sizeof(nfs_write_state));
+    nfs_write_state *state = (nfs_write_state*)token;
     if(status == NFS_OK){
         /* Cast for convience */
 
@@ -258,15 +263,20 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
     }
     state->callback  = callback;
     state->token     = token;
-    nfs_write(&mnt_point, offset, nbytes, buf, nfs_dev_write_handler, (uintptr_t)state);
-    //need to check rpc status return value from nfs_write
+    enum rpc_stat status = nfs_write(&mnt_point, offset, nbytes, buf, nfs_dev_write_handler, (uintptr_t)state);
+    if (status != RPC_OK) {
+        free(state);
+        callback(token, EFAULT, 0);
+        return;
+    }
 }
 
 
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
     //TODO: update fattr of the vnode
+    printf("nfs_dev_read_handler called\n");
     int err = 0;
-    nfs_read_state *state = malloc(sizeof(nfs_read_state));
+    nfs_read_state *state = (nfs_read_state*)token;
     if(status == NFS_OK){
         err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count);
     } else {
@@ -275,12 +285,12 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
     }
 
     state->callback(state->token, err, count);
-    free(state->app_buf);
     free(state);
 }
 
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
                               serv_sys_read_cb_t callback, void *token){
+    printf("nfs_dev_read called\n");
     nfs_read_state *state = malloc(sizeof(nfs_read_state));
     if (state == NULL) {
         callback(token, ENOMEM, 0);
@@ -291,8 +301,14 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     state->token     = token;
 
     struct nfs_data *data = (struct nfs_data*)(file->vn_data);
-    nfs_read(data->fh, offset, nbytes, nfs_dev_read_handler, (uintptr_t)state);
+    enum rpc_stat status = nfs_read(data->fh, offset, nbytes, nfs_dev_read_handler, (uintptr_t)state);
+    if (status != RPC_OK) {
+        free(state);
+        callback(token, EFAULT, 0);
+        return;
+    }
 
+    printf("nfs_dev_read finish\n");
     return;
 }
 

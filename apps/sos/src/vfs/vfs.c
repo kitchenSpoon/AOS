@@ -19,29 +19,30 @@ vfs_open_3_end_create(void* vfs_open_token, int err) {
     assert(vfs_open_token != NULL);
 
     cont_vfs_open_t *cont = (cont_vfs_open_t*)vfs_open_token;
-    cont_vfs_open_t local_cont = *cont;
-    free(cont);
 
-    if (err || VOP_EACHOPEN(local_cont.vn, local_cont.openflags)) {
-        free(local_cont.vn->vn_name);
-        free(local_cont.vn->vn_ops);
-        free(local_cont.vn);
-        local_cont.callback(local_cont.file_open_token, err, NULL);
+    if (err || VOP_EACHOPEN(cont->vn, cont->openflags)) {
+        free(cont->vn->vn_name);
+        free(cont->vn->vn_ops);
+        free(cont->vn);
+        cont->callback(cont->file_open_token, err, NULL);
+        free(cont);
         return;
     }
 
-    err = vfs_vnt_insert(local_cont.vn);
+    err = vfs_vnt_insert(cont->vn);
     if (err) {
-        VOP_LASTCLOSE(local_cont.vn);
-        free(local_cont.vn->vn_name);
-        free(local_cont.vn->vn_ops);
-        free(local_cont.vn);
-        local_cont.callback(local_cont.file_open_token, err, NULL);
+        VOP_LASTCLOSE(cont->vn);
+        free(cont->vn->vn_name);
+        free(cont->vn->vn_ops);
+        free(cont->vn);
+        cont->callback(cont->file_open_token, err, NULL);
+        free(cont);
         return;
     }
 
-    local_cont.vn->vn_opencount = 1;
-    local_cont.callback(local_cont.file_open_token, 0, local_cont.vn);
+    cont->vn->vn_opencount = 1;
+    cont->callback(cont->file_open_token, 0, cont->vn);
+    free(cont);
 }
 
 static void
@@ -135,10 +136,9 @@ typedef struct {
 static void vfs_stat_end(void *token, int err) {
     //printf("vfs_stat_end called\n");
     cont_vfs_stat_t *cont = (cont_vfs_stat_t*)token;
-    cont_vfs_stat_t local_cont = *cont;
-    free(cont);
 
-    local_cont.callback(local_cont.serv_sys_stat_token, err);
+    cont->callback(cont->serv_sys_stat_token, err);
+    free(cont);
 }
 
 void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, serv_sys_stat_cb_t callback, void *token){

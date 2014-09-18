@@ -206,6 +206,7 @@ int sos_stat(const char *path, sos_stat_t *buf) {
     int err;
 
     printf("System call not implemented\n");
+    //TODO: remove this
     return 0;
     size_t size = 0;
     for(size = 0; size < MAXNAMLEN && path[size] != '\0'; size++);

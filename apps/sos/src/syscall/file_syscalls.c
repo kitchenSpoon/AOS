@@ -129,7 +129,7 @@ void serv_sys_read_end(void *token, int err, size_t size){
     cont_read_t *cont = (cont_read_t*)token;
 
     printf("serv_read_end 0.25\n");
-    
+
     /* Update file offset */
     if(!err){
         printf("serv_read_end 0.5\n");
@@ -198,7 +198,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     }
 
     printf("serv read5\n");
-    VOP_READ(file->of_vnode, (char*)buf, nbyte, 0, serv_sys_read_end, (void*)cont);
+    VOP_READ(file->of_vnode, (char*)buf, nbyte, file->of_offset, serv_sys_read_end, (void*)cont);
     printf("serv read finish\n");
 }
 

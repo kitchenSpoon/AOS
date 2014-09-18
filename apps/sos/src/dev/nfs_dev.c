@@ -54,7 +54,7 @@ typedef struct nfs_write_state{
 typedef struct nfs_read_state{
     seL4_CPtr reply_cap;
     char* app_buf;
-    serv_sys_write_cb_t callback;
+    serv_sys_read_cb_t callback;
     void* token;
 } nfs_read_state;
 
@@ -220,7 +220,7 @@ static int nfs_dev_lastclose(struct vnode *vn) {
 
 static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
     int err = 0;
-    nfs_write_state *state = malloc(sizeof(nfs_write_state));
+    nfs_write_state *state = (nfs_write_state*)token;
     if(status == NFS_OK){
         /* Cast for convience */
 
@@ -234,7 +234,6 @@ static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t
     }
 
     state->callback(state->token, err, count);
-    free(state);
 }
 
 //we do not need len anymore since it will be invalid when our callack finishes, please remove or not use it
@@ -254,22 +253,28 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
 
 
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
+    printf("nfs_dev_read handler called\n");
     int err = 0;
-    nfs_read_state *state = malloc(sizeof(nfs_read_state));
+    nfs_read_state *state = (nfs_read_state*)token;
+    printf("nfs_dev_read_handler status = %d\n",(int)status); 
     if(status == NFS_OK){
+        printf("nfs_dev_read handler 0.1\n");
         err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count);
+        printf("nfs_dev_read handler 0.2\n");
     } else {
         //error
         err = 1;
     }
 
+    printf("nfs_dev_read handler 1\n");
+    printf("nfs_read count = %d\n", count);
     state->callback(state->token, err, count);
-    free(state->app_buf);
-    free(state);
+    printf("nfs_dev_read handler finish\n");
 }
 
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
                               serv_sys_read_cb_t callback, void *token){
+    printf("nfs_dev_read called\n");
     nfs_read_state *state = malloc(sizeof(nfs_read_state));
     if (state == NULL) {
         callback(token, ENOMEM, 0);
@@ -282,6 +287,7 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     struct nfs_data *data = (struct nfs_data*)(file->vn_data);
     nfs_read(data->fh, offset, nbytes, nfs_dev_read_handler, (uintptr_t)state);
 
+    printf("nfs_dev_read finish\n");
     return;
 }
 

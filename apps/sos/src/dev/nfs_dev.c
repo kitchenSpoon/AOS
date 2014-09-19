@@ -316,6 +316,7 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     state->app_buf   = buf;
     state->callback  = callback;
     state->token     = token;
+    state->file      = file;
 
     struct nfs_data *data = (struct nfs_data*)(file->vn_data);
     enum rpc_stat status = nfs_read(data->fh, offset, nbytes, nfs_dev_read_handler, (uintptr_t)state);

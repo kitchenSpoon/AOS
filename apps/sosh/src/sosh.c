@@ -58,12 +58,12 @@ static int cat(int argc, char **argv) {
 
     assert(fd >= 0);
 
-    while ((num_read = read(fd, buf, BUF_SIZ)) > 0)
+    while ((num_read = read(fd, buf, BUF_SIZ)) > 0) {
         num_written = write(stdout_fd, buf, num_read);
+    }
 
     close(stdout_fd);
 
-    printf("read = %d, write = %d\n", num_read, num_written);
     if (num_read == -1 || num_written == -1) {
         printf("error on write\n");
         return 1;

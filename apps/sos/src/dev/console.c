@@ -24,7 +24,7 @@ static int con_eachclose(struct vnode *file, uint32_t flags);
 static int con_lastclose(struct vnode *file);
 static void con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
                      serv_sys_read_cb_t callback, void *token);
-static void con_write(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
+static void con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
                serv_sys_write_cb_t callback, void *token);
 
 struct console{
@@ -113,10 +113,6 @@ con_eachopen(struct vnode *file, int flags){
 static int
 con_eachclose(struct vnode *file, uint32_t flags){
     printf("con_eachclose\n");
-    printf("con_eachclose\n");
-    printf("con_eachclose\n");
-    printf("con_eachclose\n");
-    printf("con_eachclose\n");
     if(flags == O_RDWR || flags == O_RDONLY) {
         if(console.serial == NULL) {
             return EFAULT;
@@ -148,7 +144,7 @@ con_lastclose(struct vnode *con_vn) {
 
 static void
 //int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
-con_write(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
+con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
           serv_sys_write_cb_t callback, void *token)
 {
     printf("conwrite\n");

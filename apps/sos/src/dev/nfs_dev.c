@@ -235,12 +235,10 @@ static int nfs_dev_lastclose(struct vnode *vn) {
 static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
     //TODO: update fattr of the vnode
     int err = 0;
-    printf("nfs_dev_write handler count = %d\n", count);
-    printf("nfs_dev_write status = %d\n", status);
+    printf("nfs_dev_write_handler count = %d\n", count);
+    printf("nfs_dev_write_hander status = %d\n", status);
     nfs_write_state *state = (nfs_write_state*)token;
     if(status == NFS_OK){
-        /* Cast for convience */
-
         // can we write more data than the file can hold?
         /* Update openfile */
         //state->openfile->offset += count;
@@ -288,19 +286,20 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
         err = 1;
     }
 
-    state->callback(state->token, err, count);
+    state->callback(state->token, err, (size_t)count);
     free(state);
 }
 
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
                               serv_sys_read_cb_t callback, void *token){
+    assert(file != NULL);
     printf("nfs_dev_read called\n");
     nfs_read_state *state = malloc(sizeof(nfs_read_state));
     if (state == NULL) {
         callback(token, ENOMEM, 0);
         return;
     }
-    state->app_buf = buf;
+    state->app_buf   = buf;
     state->callback  = callback;
     state->token     = token;
 
@@ -313,7 +312,6 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     }
 
     printf("nfs_dev_read finish\n");
-    return;
 }
 
 static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){

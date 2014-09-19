@@ -19,7 +19,7 @@ struct vnode_ops {
     int (*vop_lastclose)(struct vnode *file);   // lastclose cleans up the vn_data
     void (*vop_read)(struct vnode *file, char* buf, size_t nbytes, size_t offset,
                             serv_sys_read_cb_t callback, void *token);
-    void (*vop_write)(struct vnode *file, const char* buf, size_t offset, size_t nbytes,
+    void (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
                             serv_sys_write_cb_t callback, void *token);
     void (*vop_getdirent)(struct vnode *dir, char *buf, size_t nbyte,
                           int pos, serv_sys_getdirent_cb_t callback, void *token);

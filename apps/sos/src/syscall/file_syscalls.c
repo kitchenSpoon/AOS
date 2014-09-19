@@ -125,21 +125,16 @@ typedef struct {
 } cont_read_t;
 
 void serv_sys_read_end(void *token, int err, size_t size){
-    printf("serv read end\n");
+    printf("serv_read_end called\n");
     cont_read_t *cont = (cont_read_t*)token;
-
-    printf("serv_read_end 0.25\n");
 
     /* Update file offset */
     if(!err){
-        printf("serv_read_end 0.5\n");
         cont->file->of_offset += size;
     }
 
-    printf("serv_read_end 1\n");
     /* Reply app*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    printf("serv_read_end size = %u\n", size);
     seL4_SetMR(0, (seL4_Word)size);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
@@ -165,12 +160,11 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     printf("serv read2\n");
     //have to read multiple times if nbyte >= MAX_IO_BUFF
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);// || (nbyte >= MAX_IO_BUF);
-    if(is_inval){
-        printf("err1.8\n");}
+    if(is_inval){ printf("err1.8\n"); }
+
     uint32_t permissions = 0;
     is_inval = is_inval || (!as_is_valid_memory(proc_getas(), buf, nbyte, &permissions));
-    if(is_inval){
-        printf("err1.9\n");}
+    if(is_inval) printf("err1.9\n");
     is_inval = is_inval || (!(permissions & seL4_CanWrite));
     if(is_inval){
         printf("err2\n");

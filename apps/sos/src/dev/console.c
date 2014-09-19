@@ -12,9 +12,6 @@
 #include "vfs/vnode.h"
 #include "vm/copyinout.h"
 
-//TODO: need to check with init & close to see if it works,
-//      also probably need to remove the global variable vnode console
-//      This means need to change vfs_open, file_open & con_init
 #define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
 

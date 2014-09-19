@@ -8,6 +8,7 @@
 #include <cspace/cspace.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "dev/nfs_dev.h"
 
@@ -48,9 +49,11 @@ typedef struct nfs_open_state{
 typedef struct nfs_write_state{
     serv_sys_write_cb_t callback;
     void* token;
+    struct vnode *file;
 } nfs_write_state;
 
 typedef struct nfs_read_state{
+    struct vnode *file;
     char* app_buf;
     serv_sys_read_cb_t callback;
     void* token;
@@ -150,11 +153,10 @@ nfs_dev_create(nfs_open_state_t *state){
     state->sattr.uid   = 0;
     state->sattr.gid   = 0;
     state->sattr.size  = 0;
-    //TODO: fix this
+    // No easy way to get the time, time(NULL) is not implemented
     state->sattr.atime.seconds = 0;
     state->sattr.atime.useconds = 0;
-    state->sattr.mtime.seconds = 0;
-    state->sattr.mtime.useconds = 0;
+    state->sattr.mtime = state->sattr.atime;
     nfs_create(&mnt_point, state->file->vn_name, &state->sattr, nfs_dev_create_handler, (uintptr_t)state);
 }
 
@@ -233,12 +235,18 @@ static int nfs_dev_lastclose(struct vnode *vn) {
 }
 
 static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
-    //TODO: update fattr of the vnode
-    int err = 0;
     printf("nfs_dev_write_handler count = %d\n", count);
     printf("nfs_dev_write_hander status = %d\n", status);
+
+    int err = 0;
     nfs_write_state *state = (nfs_write_state*)token;
+    assert(state != NULL);
+    struct nfs_data *data = (struct nfs_data*)state->file->vn_data;
+    assert(data != NULL);
+    *(data->fattr) = *fattr;
+
     if(status == NFS_OK){
+        //TODO: wtf is this?
         // can we write more data than the file can hold?
         /* Update openfile */
         //state->openfile->offset += count;
@@ -264,6 +272,7 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
     }
     state->callback  = callback;
     state->token     = token;
+    state->file      = file;
     struct nfs_data *data = (struct nfs_data *)file->vn_data;
     enum rpc_stat status = nfs_write(data->fh, offset, nbytes, buf, nfs_dev_write_handler, (uintptr_t)state);
     if (status != RPC_OK) {
@@ -275,10 +284,15 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
 
 
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
-    //TODO: update fattr of the vnode
     printf("nfs_dev_read_handler called\n");
     int err = 0;
     nfs_read_state *state = (nfs_read_state*)token;
+    assert(state != NULL);
+
+    struct nfs_data *nfs_data = (struct nfs_data*)state->file->vn_data;
+    assert(nfs_data != NULL);
+    *(nfs_data->fattr) = *fattr;
+
     if(status == NFS_OK){
         err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count);
     } else {

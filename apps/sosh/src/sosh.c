@@ -375,8 +375,6 @@ int main(void) {
     test_file_syscalls();
     test_dynamic_heap();
 */
-    in = open("anewfile", O_RDONLY);
-    assert(in >= 0);
     in = open("console", O_RDONLY);
     assert(in >= 0);
 

@@ -260,10 +260,9 @@ static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t
     free(state);
 }
 
-//we do not need len anymore since it will be invalid when our callack finishes, please remove or not use it
 static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
                               serv_sys_write_cb_t callback, void *token){
-    printf("nfs_dev_write buf = %s\n asdasdasdas \n",buf);
+    printf("nfs_dev_write buf = %s\n asdasdasdas \n", buf);
     printf("nfs_dev_write offset = %d\n", offset);
     nfs_write_state *state = malloc(sizeof(nfs_write_state));
     if (state == NULL) {
@@ -285,6 +284,7 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
 
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
     printf("nfs_dev_read_handler called\n");
+    printf("count = %d\n", count);
     int err = 0;
     nfs_read_state *state = (nfs_read_state*)token;
     assert(state != NULL);

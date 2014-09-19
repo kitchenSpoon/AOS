@@ -19,6 +19,7 @@
 
 #define MAX_PKT_SIZE    1536
 
+
 #ifdef CONFIG_LIB_ETHDRIVER_ZERO_COPY_RX
 /* LWiP provides a custom pbuf that you cannot actually store
  * any metadata or anything else in. So we define a custom one that has

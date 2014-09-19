@@ -140,7 +140,6 @@ con_lastclose(struct vnode *con_vn) {
 }
 
 static void
-//int con_write(struct vnode *file, const char* buf, size_t nbytes, size_t *len);
 con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
           serv_sys_write_cb_t callback, void *token)
 {
@@ -152,7 +151,6 @@ con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
     }
     struct serial* serial = console.serial;
 
-    printf("conwrite2\n");
     size_t tot_sent = 0;
     int tries = 0;
     while (tot_sent < nbytes && tries < MAX_SERIAL_SEND) {
@@ -160,12 +158,10 @@ con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
         tries++;
     }
 
-    printf("conwrite3\n");
     callback(token, 0, tot_sent);
 }
 
 static void
-//con_read(struct vnode *file, char* buf, size_t nbytes, seL4_CPtr reply_cap){
 con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
          serv_sys_read_cb_t callback, void *token)
 {

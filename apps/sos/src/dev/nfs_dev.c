@@ -222,9 +222,6 @@ static int nfs_dev_eachclose(struct vnode *file, uint32_t flags){
 //    (void)flags;
 
     printf("nfs_close\n");
-    printf("nfs_close\n");
-    printf("nfs_close\n");
-    printf("nfs_close\n");
     return 0;
 }
 
@@ -241,8 +238,8 @@ static int nfs_dev_lastclose(struct vnode *vn) {
 }
 
 static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count){
-    printf("nfs_dev_write_handler count = %d\n", count);
-    printf("nfs_dev_write_hander status = %d\n", status);
+    //printf("nfs_dev_write_handler count = %d\n", count);
+    //printf("nfs_dev_write_hander status = %d\n", status);
 
     int err = 0;
     nfs_write_state *state = (nfs_write_state*)token;
@@ -289,8 +286,8 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
 
 
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
-    printf("nfs_dev_read_handler called\n");
-    printf("count = %d\n", count);
+    //printf("nfs_dev_read_handler called\n");
+    //printf("count = %d\n", count);
     int err = 0;
     nfs_read_state *state = (nfs_read_state*)token;
     assert(state != NULL);
@@ -298,7 +295,7 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
     struct nfs_data *nfs_data = (struct nfs_data*)state->file->vn_data;
     assert(nfs_data != NULL);
     *(nfs_data->fattr) = *fattr;
-    printf("nfs read status = %d\n", status);
+    //printf("nfs read status = %d\n", status);
     if(status == NFS_OK){
         err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count);
     } else {
@@ -313,7 +310,7 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
                               serv_sys_read_cb_t callback, void *token){
     assert(file != NULL);
-    printf("nfs_dev_read called\n");
+    //printf("nfs_dev_read called\n");
     nfs_read_state *state = malloc(sizeof(nfs_read_state));
     if (state == NULL) {
         callback(token, ENOMEM, 0, false);
@@ -332,7 +329,7 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
         return;
     }
 
-    printf("nfs_dev_read finish\n");
+    //printf("nfs_dev_read finish\n");
 }
 
 static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){

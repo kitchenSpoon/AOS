@@ -47,6 +47,7 @@
 #define ROOT_PORT_MAX 1024
 
 #define UDP_PAYLOAD 1400
+//#define UDP_PAYLOAD 800
 
 #define RETRANSMIT_DELAY_MS 500
 

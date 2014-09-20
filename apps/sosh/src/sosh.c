@@ -30,6 +30,9 @@
 static int in;
 static sos_stat_t sbuf;
 
+static void benchmark();
+static int benchmark2();
+
 static void prstat(const char *name) {
     /* print out stat buf */
     printf("%c%c%c%c %8zu %8lu %s\n",
@@ -263,6 +266,13 @@ static int micro_time(int argc, char *argv[]) {
     return 0;
 }
 
+static uint64_t getmicro_time() {
+    struct timeval time;
+    gettimeofday(&time, NULL);
+    uint64_t micros = (uint64_t)time.tv_sec * US_IN_S + (uint64_t)time.tv_usec;
+    return micros;
+}
+
 struct command {
     char *name;
     int (*command)(int argc, char **argv);
@@ -270,7 +280,7 @@ struct command {
 
 struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-        {"time", second_time}, {"mtime", micro_time}, {"kill", kill} };
+        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2} };
 
 static void test_file_syscalls(void) {
     printf("Start file syscalls test...\n");
@@ -383,28 +393,35 @@ test_dynamic_heap(void) {
     printf("Exiting dynamic heap test\n");
 }
 
-static void bm_read(char* buf, size_t buf_size){
-    printf("Reading with IO buf request %u\n",sizeof(buf_size));
-    second_time(0, NULL);
+static void bm_read(char* filename, char* buf, size_t buf_size){
+    printf("Reading with IO buf request %u\n", buf_size);
 
-    int fd = open("read_test", O_RDONLY);
+    int fd = open(filename, O_RDONLY);
     assert(fd >= 0);
+    uint64_t start_time = getmicro_time();
 
-    while ( read(fd, buf, sizeof(buf)) > 0);
+    read(fd, buf, buf_size);
 
-    second_time(0, NULL);
+    uint64_t end_time = getmicro_time();
+    printf("time taken: %lu\n", (long unsigned)(end_time - start_time));
+    close(fd);
 }
 
-static void bm_write(char* buf, size_t buf_size){
-    printf("Writing with IO buf request %u\n",sizeof(buf_size));
-    second_time(0, NULL);
+static void bm_write(char* filename, char* buf, size_t buf_size){
+    printf("Writing with IO buf request %u\n", buf_size);
 
-    int fd = open("write_test", O_WRONLY);
+    int fd = open(filename, O_WRONLY);
     assert(fd >= 0);
+    uint64_t start_time = getmicro_time();
 
-    while ( write(fd, buf, buf_size) > 0);
+    size_t written = 0;
+    while (written < buf_size){
+        written += write(fd, buf+written, buf_size-written);
+    }
 
-    second_time(0, NULL);
+    uint64_t end_time = getmicro_time();
+    printf("time taken: %lu\n", (long unsigned)(end_time - start_time));
+    close(fd);
 }
 
 static void
@@ -413,25 +430,77 @@ benchmark(){
     printf("Reading\n");
     /* Reading with IO request changing*/
     printf("Reading with IO request changing\n");
-    char buf2[100000];
-    char *buf = &buf2;
-    bm_read(buf,1000);
-    bm_read(buf,5000);
-    bm_read(buf,10000);
-    bm_read(buf,50000);
-    bm_read(buf,100000);
+    char buf1000[1000];
+    char buf5000[5000];
+    char buf10000[10000];
+    char buf50000[50000];
+    char buf100000[100000];
+    char buf200000[200000];
+    char buf400000[400000];
+    char buf800000[800000];
+    char buf1600000[1600000];
+    char buf3200000[3200000];
+    bm_read("read_test_1000", (char*)buf1000,1000);
+    bm_write("write_test_1000", (char*)buf1000,1000);
+
+    bm_read("read_test_5000", (char*)buf5000,5000);
+    bm_write("write_test_5000", (char*)buf5000,5000);
+
+    bm_read("read_test_10000", (char*)buf10000,10000);
+    bm_write("write_test_10000", (char*)buf10000,10000);
+
+    bm_read("read_test_50000", (char*)buf50000,50000);
+    bm_write("write_test_50000", (char*)buf50000,50000);
+
+    bm_read("read_test_100000", (char*)buf100000,100000);
+    bm_write("write_test_100000", (char*)buf100000,100000);
+
+    bm_read("read_test_200000", (char*)buf200000,200000);
+    bm_write("write_test_200000", (char*)buf200000,200000);
+
+    bm_read("read_test_400000", (char*)buf400000,400000);
+    bm_write("write_test_400000", (char*)buf400000,400000);
+
+    bm_read("read_test_800000", (char*)buf800000,800000);
+    bm_write("write_test_800000", (char*)buf800000,800000);
+
+    bm_read("read_test_1600000", (char*)buf1600000,1600000);
+    bm_write("write_test_1600000", (char*)buf1600000, 1600000);
+
+    bm_read("read_test_3200000", (char*)buf3200000,3200000);
+    bm_write("write_test_3200000", (char*)buf3200000, 3200000);
     /* Reading with packet changing */
 
     /* Writes */
     printf("Writing\n");
     /* Writing with IO request changing*/
-    bm_write(buf,1000);
-    bm_write(buf,5000);
-    bm_write(buf,10000);
-    bm_write(buf,50000);
-    bm_write(buf,100000);
     /* Writing with packet changing */
+}
 
+static
+int benchmark2() {
+    char buf3200000[3200000];
+    bm_read("read_test_3200000_1", (char*)buf3200000, 3200000);
+    bm_write("write_test_3200000_1", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_3200000_2", (char*)buf3200000, 3200000);
+    bm_write("write_test_3200000_2", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_3200000_3", (char*)buf3200000, 3200000);
+    bm_write("write_test_3200000_3", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_3200000_4", (char*)buf3200000, 3200000);
+    bm_write("write_test_3200000_4", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_3200000_5", (char*)buf3200000, 3200000);
+    bm_write("write_test_3200000_5", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_3200000_6", (char*)buf3200000, 3200000);
+    bm_write("write_test_3200000_6", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_3200000_7", (char*)buf3200000, 3200000);
+    bm_write("write_test_3200000_7", (char*)buf3200000, 3200000);
+    return 0;
 }
 
 int main(void) {
@@ -444,10 +513,10 @@ int main(void) {
         r = sos_getdirent(i, buf, BUF_SIZ);
         printf("buf[%d] = %s\n", i, buf);
     }
-    test_file_syscalls();
     test_dynamic_heap();
     benchmark();
 */
+    test_file_syscalls();
     in = open("console", O_RDONLY);
     assert(in >= 0);
 

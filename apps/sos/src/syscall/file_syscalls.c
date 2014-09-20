@@ -131,8 +131,8 @@ typedef struct {
 } cont_read_t;
 
 void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
-    printf("serv_read_end called\n");
-    printf("serv_read_end size = %u\n", size);
+    //printf("serv_read_end called\n");
+    //printf("serv_read_end size = %u\n", size);
     cont_read_t *cont = (cont_read_t*)token;
 
     /* Update file offset */
@@ -141,7 +141,7 @@ void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
         cont->bytes_read += size;
     }
 
-    printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
+    //printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
     if(err || !more_to_read || cont->bytes_read >= cont->bytes_wanted){
         /* Reply app*/
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
@@ -154,11 +154,11 @@ void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
         /* Theres more stuff to read */
         VOP_READ(cont->file->of_vnode, cont->buf + cont->bytes_read, MIN(cont->bytes_wanted - cont->bytes_read, MAX_IO_BUF), cont->file->of_offset, serv_sys_read_end, (void*)cont);
     }
-    printf("serv_read_end out\n");
+    //printf("serv_read_end out\n");
 }
 
 void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
-    printf("serv read\n");
+    //printf("serv read\n");
     int err;
     cont_read_t *cont = malloc(sizeof(cont_read_t));
     if (cont == NULL) {
@@ -201,7 +201,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     }
 
     VOP_READ(file->of_vnode, (char*)buf, MIN(nbyte, MAX_IO_BUF), file->of_offset, serv_sys_read_end, (void*)cont);
-    printf("serv read finish\n");
+    //printf("serv read finish\n");
 }
 
 typedef struct {
@@ -218,7 +218,7 @@ static void serv_sys_write_2(cont_write_t *cont);
 
 static
 void serv_sys_write_end(void *token, int err, size_t size){
-    printf("serv_write_end\n");
+    //printf("serv_write_end\n");
     cont_write_t *cont = (cont_write_t*)token;
 
     if (!err) {
@@ -247,7 +247,7 @@ void serv_sys_write_end(void *token, int err, size_t size){
 
 void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
 
-    printf("serv_sys_write called\n");
+    //printf("serv_sys_write called\n");
     int err;
 
     cont_write_t *cont = malloc(sizeof(cont_write_t));
@@ -296,13 +296,13 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     cont->kbuf = kbuf;
 
     serv_sys_write_2(cont);
-    printf("serv_sys_write ended\n");
+    //printf("serv_sys_write ended\n");
 }
 
 /* Is inteded to be called repeatedly in this layer if the write data is too large */
 static void
 serv_sys_write_2(cont_write_t *cont) {
-    printf("serv_sys_write_2 called\n");
+    //printf("serv_sys_write_2 called\n");
     assert(cont != NULL);
 
     int err;
@@ -319,7 +319,7 @@ serv_sys_write_2(cont_write_t *cont) {
 
     VOP_WRITE(cont->file->of_vnode, cont->kbuf, wanna_send, cont->file->of_offset,
               serv_sys_write_end, (void*)cont);
-    printf("serv_sys_write_2 ended\n");
+    //printf("serv_sys_write_2 ended\n");
 }
 
 typedef struct {

@@ -208,7 +208,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
             console.start = console_start_ori;
             con_read_state.is_blocked = 0;
             printf("console err \n");
-            callback(token, EFAULT, 0);
+            callback(token, EFAULT, 0, false);
             return;
         }
 
@@ -226,7 +226,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
 
         con_read_state.is_blocked = 0;
         printf("console read size = %d\n",len);
-        callback(token, 0, len);
+        callback(token, 0, len, false);
     } else {
         //printf("con_read: blocked\n");
         con_read_state.file       = file;

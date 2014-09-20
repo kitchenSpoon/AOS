@@ -262,8 +262,8 @@ static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t
 
 static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
                               serv_sys_write_cb_t callback, void *token){
-    printf("nfs_dev_write buf = %s\n asdasdasdas \n", buf);
-    printf("nfs_dev_write offset = %d\n", offset);
+    //printf("nfs_dev_write buf = %s\n asdasdasdas \n", buf);
+    //printf("nfs_dev_write offset = %d\n", offset);
     nfs_write_state *state = malloc(sizeof(nfs_write_state));
     if (state == NULL) {
         callback(token, ENOMEM, 0);
@@ -300,7 +300,7 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
         err = 1;
     }
 
-    state->callback(state->token, err, (size_t)count);
+    state->callback(state->token, err, (size_t)count, count != 0);
     free(state);
 }
 
@@ -310,7 +310,7 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     printf("nfs_dev_read called\n");
     nfs_read_state *state = malloc(sizeof(nfs_read_state));
     if (state == NULL) {
-        callback(token, ENOMEM, 0);
+        callback(token, ENOMEM, 0, false);
         return;
     }
     state->app_buf   = buf;
@@ -322,7 +322,7 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     enum rpc_stat status = nfs_read(data->fh, offset, nbytes, nfs_dev_read_handler, (uintptr_t)state);
     if (status != RPC_OK) {
         free(state);
-        callback(token, EFAULT, 0);
+        callback(token, EFAULT, 0, false);
         return;
     }
 

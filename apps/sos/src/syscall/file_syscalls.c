@@ -130,7 +130,7 @@ typedef struct {
     char* buf;
 } cont_read_t;
 
-void serv_sys_read_end(void *token, int err, size_t size){
+void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
     printf("serv_read_end called\n");
     printf("serv_read_end size = %u\n", size);
     cont_read_t *cont = (cont_read_t*)token;
@@ -142,7 +142,7 @@ void serv_sys_read_end(void *token, int err, size_t size){
     }
 
     printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
-    if(err || size == 0 || cont->bytes_read >= cont->bytes_wanted){
+    if(err || !more_to_read || cont->bytes_read >= cont->bytes_wanted){
         /* Reply app*/
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)cont->bytes_read);
@@ -174,41 +174,32 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     cont->bytes_read = 0;
     cont->bytes_wanted = nbyte;
 
-    printf("serv read2\n");
     //have to read multiple times if nbyte >= MAX_IO_BUFF
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);// || (nbyte >= MAX_IO_BUF);
-    if(is_inval){ printf("err1.8\n"); }
 
     uint32_t permissions = 0;
     is_inval = is_inval || (!as_is_valid_memory(proc_getas(), buf, nbyte, &permissions));
-    if(is_inval) printf("err1.9\n");
     is_inval = is_inval || (!(permissions & seL4_CanWrite));
     if(is_inval){
-        printf("err2\n");
-        serv_sys_read_end((void*)cont, EINVAL, 0);
+        serv_sys_read_end((void*)cont, EINVAL, 0, false);
         return;
     }
 
-    printf("serv read3\n");
     struct openfile *file;
     err = filetable_findfile(fd, &file);
     if (err) {
-        printf("err3\n");
-        serv_sys_read_end((void*)cont, EINVAL, 0);
+        serv_sys_read_end((void*)cont, EINVAL, 0, false);
         return;
     }
     cont->file = file;
 
-    printf("serv read4\n");
     //check read permissions
     if(file->of_accmode != O_RDWR &&
         file->of_accmode != O_RDONLY){
-        printf("err4\n");
-        serv_sys_read_end((void*)cont, EACCES, 0);
+        serv_sys_read_end((void*)cont, EACCES, 0, false);
         return;
     }
 
-    printf("serv read5\n");
     VOP_READ(file->of_vnode, (char*)buf, MIN(nbyte, MAX_IO_BUF), file->of_offset, serv_sys_read_end, (void*)cont);
     printf("serv read finish\n");
 }
@@ -233,7 +224,7 @@ void serv_sys_write_end(void *token, int err, size_t size){
     if (!err) {
         cont->file->of_offset += size;
         cont->start += size;
-        printf("cont->start = %u, cont->nbyte = %u\n", cont->start, cont->nbyte);
+        //printf("cont->start = %u, cont->nbyte = %u\n", cont->start, cont->nbyte);
         if (cont->start < cont->nbyte) {
             /* Continue writing if haven't finished yet */
             serv_sys_write_2(cont);

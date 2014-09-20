@@ -27,7 +27,7 @@
 typedef void (*serv_sys_getdirent_cb_t)(void *token, int err, size_t size) ;
 typedef void (*serv_sys_open_cb_t)(void *token, int err, int fd) ;
 typedef void (*serv_sys_write_cb_t)(void *token, int err, size_t size) ;
-typedef void (*serv_sys_read_cb_t)(void *token, int err, size_t size) ;
+typedef void (*serv_sys_read_cb_t)(void *token, int err, size_t size, bool more_to_read) ;
 typedef void (*serv_sys_stat_cb_t)(void *token, int err) ;
 
 /*

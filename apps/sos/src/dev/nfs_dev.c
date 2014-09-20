@@ -292,7 +292,7 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
     struct nfs_data *nfs_data = (struct nfs_data*)state->file->vn_data;
     assert(nfs_data != NULL);
     *(nfs_data->fattr) = *fattr;
-
+    printf("nfs read status = %d\n", status);
     if(status == NFS_OK){
         err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count);
     } else {

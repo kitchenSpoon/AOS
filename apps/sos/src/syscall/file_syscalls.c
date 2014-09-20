@@ -122,24 +122,35 @@ void serv_sys_close(seL4_CPtr reply_cap, int fd){
 typedef struct {
     seL4_CPtr reply_cap;
     struct openfile *file;
+    size_t bytes_read;
+    size_t bytes_wanted;
+    char* buf;
 } cont_read_t;
 
 void serv_sys_read_end(void *token, int err, size_t size){
     printf("serv_read_end called\n");
+    printf("serv_read_end size = %u\n", size);
     cont_read_t *cont = (cont_read_t*)token;
 
     /* Update file offset */
     if(!err){
         cont->file->of_offset += size;
+        cont->bytes_read += size;
     }
 
-    /* Reply app*/
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)size);
-    seL4_Send(cont->reply_cap, reply);
-    cspace_free_slot(cur_cspace, cont->reply_cap);
+    printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
+    if(err || size == 0 || cont->bytes_read >= cont->bytes_wanted){
+        /* Reply app*/
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)cont->bytes_read);
+        seL4_Send(cont->reply_cap, reply);
+        cspace_free_slot(cur_cspace, cont->reply_cap);
 
-    free(cont);
+        free(cont);
+    } else {
+        /* Theres more stuff to read */
+        VOP_READ(cont->file->of_vnode, cont->buf + cont->bytes_read, MIN(cont->bytes_wanted - cont->bytes_read, MAX_IO_BUF), cont->file->of_offset, serv_sys_read_end, (void*)cont);
+    }
     printf("serv_read_end out\n");
 }
 
@@ -156,6 +167,9 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     }
     cont->reply_cap = reply_cap;
     cont->file = NULL;
+    cont->buf = (char*)buf;
+    cont->bytes_read = 0;
+    cont->bytes_wanted = nbyte;
 
     printf("serv read2\n");
     //have to read multiple times if nbyte >= MAX_IO_BUFF
@@ -192,7 +206,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     }
 
     printf("serv read5\n");
-    VOP_READ(file->of_vnode, (char*)buf, nbyte, file->of_offset, serv_sys_read_end, (void*)cont);
+    VOP_READ(file->of_vnode, (char*)buf, MIN(nbyte, MAX_IO_BUF), file->of_offset, serv_sys_read_end, (void*)cont);
     printf("serv read finish\n");
 }
 
@@ -236,6 +250,8 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     cont->reply_cap = reply_cap;
     cont->file = NULL;
 
+    //check me
+    nbyte = MIN(nbyte,MAX_IO_BUF);
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES) || (nbyte >= MAX_IO_BUF);
     is_inval = is_inval || (!is_range_mapped(buf, nbyte));
     if(is_inval){

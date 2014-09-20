@@ -59,9 +59,10 @@ static int cat(int argc, char **argv) {
     assert(fd >= 0);
 
     while ((num_read = read(fd, buf, BUF_SIZ)) > 0) {
+    printf("cat, num_read = %d, num_write = %d\n",num_read,num_written);
         num_written = write(stdout_fd, buf, num_read);
     }
-
+    printf("cat, num_read = %d, num_write = %d\n",num_read,num_written);
     close(stdout_fd);
 
     if (num_read == -1 || num_written == -1) {

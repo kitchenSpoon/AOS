@@ -277,6 +277,7 @@ static void test_file_syscalls(void) {
     int fd, fd2, ret;
     char buf[] = "This is cool!!\n";
     char buf2[] = "This is even cooler!!!\n";
+    char buf3[10];
 
     printf("Test open & write, should see: %s", buf);
     fd = open("console", O_RDWR);
@@ -312,7 +313,7 @@ static void test_file_syscalls(void) {
     fd = open("console", O_RDONLY);
     assert(fd >= 0);
 
-    ret = write(fd, buf, sizeof(buf)); // should fail
+    ret = write(fd, buf3, sizeof(buf3)); // should fail
     assert(ret < 0);
     printf("Failed, as expected!\n");
 
@@ -321,12 +322,28 @@ static void test_file_syscalls(void) {
     assert(ret == 0);
     printf("Done\n---\n");
 
+    /* Read from write only file */
+    printf("Testing reading a write only file\n");
+    fd = open("console", O_WRONLY);
+    assert(fd >= 0);
+
+    ret = read(fd, buf, sizeof(buf)); // should fail
+    assert(ret < 0);
+    printf("Failed, as expected!\n");
+
+    printf("Closing the file\n");
+    ret = close(fd);
+    assert(ret == 0);
+    printf("Done\n---\n");
+
+    /* Reading twice for console */
     printf("Test opening read two times\n");
     fd = open("console", O_RDWR);
     assert(fd > 0);
     fd2 = open("console", O_RDONLY);
     assert(fd2 < 0);
     printf("Failed, as expected!\n");
+
 
     ret = close(fd);
     assert(ret == 0);
@@ -366,6 +383,57 @@ test_dynamic_heap(void) {
     printf("Exiting dynamic heap test\n");
 }
 
+static void bm_read(char* buf, size_t buf_size){
+    printf("Reading with IO buf request %u\n",sizeof(buf_size));
+    second_time(0, NULL);
+
+    int fd = open("read_test", O_RDONLY);
+    assert(fd >= 0);
+
+    while ( read(fd, buf, sizeof(buf)) > 0);
+
+    second_time(0, NULL);
+}
+
+static void bm_write(char* buf, size_t buf_size){
+    printf("Writing with IO buf request %u\n",sizeof(buf_size));
+    second_time(0, NULL);
+
+    int fd = open("write_test", O_WRONLY);
+    assert(fd >= 0);
+
+    while ( write(fd, buf, buf_size) > 0);
+
+    second_time(0, NULL);
+}
+
+static void
+benchmark(){
+    /* Reads */
+    printf("Reading\n");
+    /* Reading with IO request changing*/
+    printf("Reading with IO request changing\n");
+    char buf2[100000];
+    char *buf = &buf2;
+    bm_read(buf,1000);
+    bm_read(buf,5000);
+    bm_read(buf,10000);
+    bm_read(buf,50000);
+    bm_read(buf,100000);
+    /* Reading with packet changing */
+
+    /* Writes */
+    printf("Writing\n");
+    /* Writing with IO request changing*/
+    bm_write(buf,1000);
+    bm_write(buf,5000);
+    bm_write(buf,10000);
+    bm_write(buf,50000);
+    bm_write(buf,100000);
+    /* Writing with packet changing */
+
+}
+
 int main(void) {
     char buf[BUF_SIZ];
     char *argv[MAX_ARGS];
@@ -378,6 +446,7 @@ int main(void) {
     }
     test_file_syscalls();
     test_dynamic_heap();
+    benchmark();
 */
     in = open("console", O_RDONLY);
     assert(in >= 0);

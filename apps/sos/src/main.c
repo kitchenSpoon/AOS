@@ -121,7 +121,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_READ:
     {
-        printf("\n---sos read called at %lu---\n", time_stamp());
+        printf("\n---sos read called at %lu---\n", (long unsigned)time_stamp());
         int fd        = (int)seL4_GetMR(1);
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
@@ -131,7 +131,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_WRITE:
     {
-        printf("\n---sos write called at %lu---\n", time_stamp());
+        printf("\n---sos write called at %lu---\n", (long unsigned)time_stamp());
         int fd          = (int)seL4_GetMR(1);
         seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
         size_t nbyte    = (size_t)seL4_GetMR(3);
@@ -150,7 +150,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_GETDIRENT:
     {
-        printf("\n---sos getdirent called at %lu---\n", time_stamp());
+        printf("\n---sos getdirent called at %lu---\n", (long unsigned)time_stamp());
         int pos          = (int)seL4_GetMR(1);
         char *name       = (char *)seL4_GetMR(2);
         size_t nbyte     = (size_t)seL4_GetMR(3);

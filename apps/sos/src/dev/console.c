@@ -54,6 +54,12 @@ con_init(struct vnode *con_vn) {
     con_vn->vn_ops->vop_read      = con_read;
     con_vn->vn_ops->vop_write     = con_write;
 
+    con_vn->sattr.st_type = ST_FILE;
+    con_vn->sattr.st_mode = S_IWUSR | S_IRUSR;
+    con_vn->sattr.st_size = 0;
+    con_vn->sattr.st_mtime.seconds = 0;
+    con_vn->sattr.st_mtime.useconds = 0;
+
     con_vn->vn_data     = NULL;
     con_vn->initialised = true;
 

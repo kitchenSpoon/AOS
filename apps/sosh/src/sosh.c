@@ -54,9 +54,9 @@ static int cat(int argc, char **argv) {
     printf("<%s>\n", argv[1]);
 
     fd = open(argv[1], O_RDONLY);
+    assert(fd >= 0);
     stdout_fd = open("console", O_WRONLY);
 
-    assert(fd >= 0);
 
     while ((num_read = read(fd, buf, BUF_SIZ)) > 0) {
     printf("cat, num_read = %d, num_write = %d\n",num_read,num_written);

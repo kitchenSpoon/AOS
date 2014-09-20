@@ -32,26 +32,40 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
     assert(token != NULL);
 
     cont_file_open_t *cont = (cont_file_open_t*)token;
-    cont_file_open_t local_cont = *cont;
-    free(cont);
 
     if (err) {
-        local_cont.callback(local_cont.token, err, -1);
+        cont->callback(cont->token, err, -1);
+        free(cont);
         return;
     }
 
+    // Compare openning permission with file permission
+    int accmode = cont->flags & O_ACCMODE;
+    printf("------accmode = %s\n", accmode == O_RDONLY ? "O_RDONLY" : "O_WRONLY");
+    bool file_readable = vn->sattr.st_mode & S_IRUSR;
+    bool file_writable = vn->sattr.st_mode & S_IWUSR;
+    printf("file_readable = %d, file_writable = %d\n", (int)file_readable, (int)file_writable);
+    if ((accmode == O_RDONLY && !file_readable) ||
+        (accmode == O_WRONLY && !file_writable) ||
+        (accmode == O_RDWR && !(file_readable && file_writable)))
+    {
+        cont->callback(cont->token, EINVAL, -1);
+        free(cont);
+        return;
+    }
     struct openfile *file;
     int fd;
 
     file = malloc(sizeof(struct openfile));
     printf("created an openfile at %p\n", file);
     if (file == NULL) {
-        local_cont.callback(local_cont.token, ENOMEM, -1);
+        cont->callback(cont->token, ENOMEM, -1);
+        free(cont);
         return;
     }
 
     file->of_offset = 0;
-    file->of_accmode = local_cont.flags & O_ACCMODE;
+    file->of_accmode = accmode;
     file->of_refcount = 1;
     file->of_vnode = vn;
 
@@ -59,12 +73,14 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
     err = filetable_placefile(file, &fd);
     if (err) {
         free(file);
-        vfs_close(vn, local_cont.flags);
-        local_cont.callback(local_cont.token, err, -1);
+        vfs_close(vn, cont->flags);
+        cont->callback(cont->token, err, -1);
+        free(cont);
         return;
     }
 
-    local_cont.callback(local_cont.token, 0, fd);
+    cont->callback(cont->token, 0, fd);
+    free(cont);
 }
 
 void

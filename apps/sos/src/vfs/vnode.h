@@ -10,6 +10,7 @@ struct vnode {
     int vn_opencount;
     char *vn_name;
     void *vn_data;                  /* Filesystem-specific data */
+    sos_stat_t sattr;
     struct vnode_ops *vn_ops; /* Functions on this vnode */
 };
 

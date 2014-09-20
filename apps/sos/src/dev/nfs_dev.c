@@ -104,6 +104,12 @@ init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
             return ENOMEM;
         }
         *(data->fattr) = *fattr;
+
+        vn->sattr.st_type = ST_FILE;
+        vn->sattr.st_mode = fattr->mode;
+        vn->sattr.st_size = fattr->size;
+        vn->sattr.st_mtime.seconds = fattr->mtime.seconds;
+        vn->sattr.st_mtime.useconds = fattr->mtime.useconds;
     }
 
     vn->vn_data = data;
@@ -399,7 +405,6 @@ static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
     if(file == NULL) return EFAULT;
     if(file->vn_data == NULL) return EFAULT;
 
-    //need to check if fattr has pointers in it
     struct nfs_data *data = (struct nfs_data*)file->vn_data;
     fattr_t *fattr = (data->fattr);
 

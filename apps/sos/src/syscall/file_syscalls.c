@@ -13,9 +13,12 @@
 #include "proc/proc.h"
 #include "syscall/syscall.h"
 #include "vm/copyinout.h"
+#include "vm/vm.h"
 
 #define MAX_SERIAL_TRY  0x100
 #define MAX_IO_BUF      0x1000
+
+#define UDP_SIZE        1400
 
 /*
  * Check if the user pages from VADDR to VADDR+NBYTE are mapped
@@ -213,30 +216,47 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
 typedef struct {
     seL4_CPtr reply_cap;
     struct openfile *file;
+    char *buf;
+    char *kbuf;
+    size_t nbyte;
+    size_t start;
 } cont_write_t;
 
+static void serv_sys_write_end(void *token, int err, size_t size);
+static void serv_sys_write_2(cont_write_t *cont);
 
+static
 void serv_sys_write_end(void *token, int err, size_t size){
     printf("serv_write_end\n");
     cont_write_t *cont = (cont_write_t*)token;
 
-    /* Update file offset */
-    if(!err){
+    if (!err) {
         cont->file->of_offset += size;
+        cont->start += size;
+        printf("cont->start = %u, cont->nbyte = %u\n", cont->start, cont->nbyte);
+        if (cont->start < cont->nbyte) {
+            /* Continue writing if haven't finished yet */
+            serv_sys_write_2(cont);
+            return;
+        }
     }
 
     /* Reply app*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)size);
+    seL4_SetMR(0, (seL4_Word)cont->start);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
 
+    if (cont->kbuf != NULL) {
+        err = frame_free((seL4_Word)cont->kbuf);
+        assert(!err);
+    }
     free(cont);
 }
 
 void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
 
-    printf("write\n");
+    printf("serv_sys_write called\n");
     int err;
 
     cont_write_t *cont = malloc(sizeof(cont_write_t));
@@ -247,12 +267,15 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
-    cont->reply_cap = reply_cap;
-    cont->file = NULL;
 
-    //check me
-    nbyte = MIN(nbyte,MAX_IO_BUF);
-    bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES) || (nbyte >= MAX_IO_BUF);
+    cont->reply_cap = reply_cap;
+    cont->file      = NULL;
+    cont->buf       = (char*)buf;
+    cont->kbuf      = NULL;
+    cont->nbyte     = nbyte;
+    cont->start     = 0;
+
+    bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);
     is_inval = is_inval || (!is_range_mapped(buf, nbyte));
     if(is_inval){
         serv_sys_write_end((void*)cont, EINVAL, 0);
@@ -260,17 +283,6 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     }
 
     struct openfile *file;
-    char kbuf[MAX_IO_BUF];
-
-    err = copyin((seL4_Word)kbuf, (seL4_Word)buf, nbyte);
-    if (err) {
-        serv_sys_write_end((void*)cont, EINVAL, 0);
-        return;
-    }
-
-    //might be buggy here
-    kbuf[nbyte] = '\0';
-
     err = filetable_findfile(fd, &file);
     if (err) {
         serv_sys_write_end((void*)cont, EINVAL, 0);
@@ -285,10 +297,39 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         return;
     }
 
+    char *kbuf = (char*)frame_alloc();
+    if (kbuf == NULL) {
+        serv_sys_write_end((void*)cont, ENOMEM, 0);
+        return;
+    }
+    cont->kbuf = kbuf;
 
-    VOP_WRITE(file->of_vnode, kbuf, nbyte, file->of_offset, serv_sys_write_end, (void*)cont);
+    serv_sys_write_2(cont);
+    printf("serv_sys_write ended\n");
 }
 
+/* Is inteded to be called repeatedly in this layer if the write data is too large */
+static void
+serv_sys_write_2(cont_write_t *cont) {
+    printf("serv_sys_write_2 called\n");
+    assert(cont != NULL);
+
+    int err;
+
+    // If start >= nbyte, you don't need to write anymore
+    assert(cont->start < cont->nbyte);
+    size_t wanna_send = MIN(cont->nbyte - cont->start, (size_t)UDP_SIZE);
+
+    err = copyin((seL4_Word)cont->kbuf, (seL4_Word)(cont->buf+cont->start), wanna_send);
+    if (err) {
+        serv_sys_write_end((void*)cont, EINVAL, 0);
+        return;
+    }
+
+    VOP_WRITE(cont->file->of_vnode, cont->kbuf, wanna_send, cont->file->of_offset,
+              serv_sys_write_end, (void*)cont);
+    printf("serv_sys_write_2 ended\n");
+}
 
 typedef struct {
     seL4_CPtr reply_cap;

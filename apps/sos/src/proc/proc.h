@@ -27,7 +27,7 @@ struct process {
 
 process_t tty_test_process;
 
-#define curproc     (cur_proc())
+#define CURPROC     (cur_proc())
 
 process_t* cur_proc(void);
 addrspace_t* proc_getas(void);

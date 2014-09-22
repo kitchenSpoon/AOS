@@ -158,7 +158,7 @@ file_close(int fd)
         /* leave file open for possible retry */
         return result;
     }
-    curproc->p_filetable->ft_openfiles[fd] = NULL;
+    CURPROC->p_filetable->ft_openfiles[fd] = NULL;
     printf("file_close_out\n");
 
     return 0;
@@ -177,23 +177,23 @@ filetable_init(const char *inpath, const char *outpath,
     int fd;
 
     /* catch memory leaks, repeated calls */
-    assert(curproc->p_filetable == NULL);
+    assert(CURPROC->p_filetable == NULL);
 
-    curproc->p_filetable = malloc(sizeof(struct filetable));
-    if (curproc->p_filetable == NULL) {
+    CURPROC->p_filetable = malloc(sizeof(struct filetable));
+    if (CURPROC->p_filetable == NULL) {
         return ENOMEM;
     }
 
     /* NULL-out the table */
     for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
-        curproc->p_filetable->ft_openfiles[fd] = NULL;
+        CURPROC->p_filetable->ft_openfiles[fd] = NULL;
     }
 
     /* Initialise stdin, stdout & stderr */
     //TODO: Change these numbers to use constants
-    curproc->p_filetable->ft_openfiles[0] = (struct openfile *)1;
-    curproc->p_filetable->ft_openfiles[1] = (struct openfile *)1;
-    curproc->p_filetable->ft_openfiles[2] = (struct openfile *)1;
+    CURPROC->p_filetable->ft_openfiles[0] = (struct openfile *)1;
+    CURPROC->p_filetable->ft_openfiles[1] = (struct openfile *)1;
+    CURPROC->p_filetable->ft_openfiles[2] = (struct openfile *)1;
 
 
     return 0;
@@ -207,7 +207,7 @@ filetable_init(const char *inpath, const char *outpath,
 int
 filetable_findfile(int fd, struct openfile **file)
 {
-    struct filetable *ft = curproc->p_filetable;
+    struct filetable *ft = CURPROC->p_filetable;
 
     if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         return EBADF;
@@ -230,7 +230,7 @@ int
 filetable_placefile(struct openfile *file, int *fd)
 {
     printf("openfile1 still at %p\n", file);
-    struct filetable *ft = curproc->p_filetable;
+    struct filetable *ft = CURPROC->p_filetable;
     int i;
 
     for (i = 0; i < PROCESS_MAX_FILES; i++) {

@@ -16,17 +16,16 @@
 #include "vfs/vnode.h"
 #include "vm/copyinout.h"
 #include "dev/clock.h"
-#include "syscall/syscall.h"
 
 static int nfs_dev_eachopen(struct vnode *file, int flags);
 static int nfs_dev_eachclose(struct vnode *file, uint32_t flags);
 static int nfs_dev_lastclose(struct vnode *file);
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
-                              serv_sys_read_cb_t callback, void *token);
+                              vop_read_cb_t callback, void *token);
 static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
-                              serv_sys_write_cb_t callback, void *token);
+                              vop_write_cb_t callback, void *token);
 static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte,
-                      int pos, serv_sys_getdirent_cb_t callback, void *token);
+                      int pos, vop_getdirent_cb_t callback, void *token);
 static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf);
 
 #define MAX_IO_BUF 0x1000
@@ -41,13 +40,13 @@ struct nfs_data{
 
 typedef struct nfs_open_state{
     struct vnode *file;
-    vfs_open_cb_t callback;
-    void *vfs_open_token;
+    nfs_dev_init_cb_t callback;
+    void *token;
     sattr_t sattr;
 } nfs_open_state_t;
 
 typedef struct nfs_write_state{
-    serv_sys_write_cb_t callback;
+    vop_write_cb_t callback;
     void* token;
     struct vnode *file;
 } nfs_write_state;
@@ -55,13 +54,13 @@ typedef struct nfs_write_state{
 typedef struct nfs_read_state{
     struct vnode *file;
     char* app_buf;
-    serv_sys_read_cb_t callback;
+    vop_read_cb_t callback;
     void* token;
 } nfs_read_state;
 
 typedef struct nfs_stat_state{
     sos_stat_t* stat_buf;
-    vfs_stat_cb_t callback;
+    nfs_dev_stat_cb_t callback;
     void* token;
 } nfs_stat_state_t;
 
@@ -70,7 +69,7 @@ typedef struct nfs_getdirent_state{
     size_t nbyte;
     char* app_buf;
     nfscookie_t cookie;
-    serv_sys_getdirent_cb_t callback;
+    vop_getdirent_cb_t callback;
     void* token;
 } nfs_getdirent_state;
 
@@ -137,17 +136,17 @@ nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
         /* place fhandle_t into vnode and add vnode into mapping*/
         err = init_helper(state->file, fh, fattr);
         if (err) {
-            state->callback(state->vfs_open_token, err);
+            state->callback(state->token, err);
             free(state);
             return;
         }
 
-        state->callback(state->vfs_open_token, 0);
+        state->callback(state->token, 0);
         free(state);
         return;
     } else {
         //error, nfs failed to create file
-        state->callback(state->vfs_open_token, EFAULT);
+        state->callback(state->token, EFAULT);
         free(state);
         return;
     }
@@ -174,7 +173,7 @@ nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
 
     if(status == NFS_OK){
         err = init_helper(state->file, fh, fattr);
-        state->callback(state->vfs_open_token, err);
+        state->callback(state->token, err);
         free(state);
         return;
     }
@@ -183,22 +182,22 @@ nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
 }
 
 void
-nfs_dev_init(struct vnode* vn, vfs_open_cb_t callback, void *vfs_open_token) {
+nfs_dev_init(struct vnode* vn, nfs_dev_init_cb_t callback, void *token) {
     printf("nfs_dev_init called\n");
     nfs_open_state_t *state = malloc(sizeof(nfs_open_state_t));
     if (state == NULL) {
-        callback(vfs_open_token, ENOMEM);
+        callback(token, ENOMEM);
         return;
     }
 
     state->file            = vn;
     state->callback        = callback;
-    state->vfs_open_token  = vfs_open_token;
+    state->token           = token;
 
     enum rpc_stat status = nfs_lookup(&mnt_point, vn->vn_name, nfs_dev_lookup_handler, (uintptr_t)state);
     if (status != RPC_OK) {
         free(state);
-        callback(vfs_open_token, EFAULT);
+        callback(token, EFAULT);
         return;
     }
 }
@@ -264,7 +263,7 @@ static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t
 }
 
 static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
-                              serv_sys_write_cb_t callback, void *token){
+                              vop_write_cb_t callback, void *token){
     //printf("nfs_dev_write buf = %s\n asdasdasdas \n", buf);
     //printf("nfs_dev_write offset = %d\n", offset);
     nfs_write_state *state = malloc(sizeof(nfs_write_state));
@@ -308,7 +307,7 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
 }
 
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
-                              serv_sys_read_cb_t callback, void *token){
+                              vop_read_cb_t callback, void *token){
     assert(file != NULL);
     //printf("nfs_dev_read called\n");
     nfs_read_state *state = malloc(sizeof(nfs_read_state));
@@ -384,7 +383,7 @@ static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int
 }
 
 static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int pos,
-                              serv_sys_getdirent_cb_t callback, void *token){
+                              vop_getdirent_cb_t callback, void *token){
     nfs_getdirent_state *state = malloc(sizeof(nfs_getdirent_state));
     if (state == NULL) {
         callback(token, ENOMEM, 0);
@@ -446,7 +445,7 @@ void nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
     free(state);
 }
 
-void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callback, void *token) {
+void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf, nfs_dev_stat_cb_t callback, void *token) {
     //printf("nfs_dev_getstat called\n");
     assert(path != NULL);
     assert(buf != NULL);

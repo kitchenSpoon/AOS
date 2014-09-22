@@ -1,8 +1,10 @@
 #ifndef _SOS_VNODE_H_
 #define _SOS_VNODE_H_
 
+#include <sos.h>
 #include <stdio.h>
 #include <sel4/sel4.h>
+//TODO: remove this
 #include "syscall/syscall.h"
 
 struct vnode {
@@ -14,19 +16,22 @@ struct vnode {
     struct vnode_ops *vn_ops; /* Functions on this vnode */
 };
 
+typedef void (*vop_read_cb_t)(void *token, int err, size_t size, bool more_to_read) ;
+typedef void (*vop_write_cb_t)(void *token, int err, size_t size) ;
+typedef void (*vop_getdirent_cb_t)(void *token, int err, size_t size) ;
+
 struct vnode_ops {
     int (*vop_eachopen)(struct vnode *file, int flags);
     int (*vop_eachclose)(struct vnode *file, uint32_t flags);
     int (*vop_lastclose)(struct vnode *file);   // lastclose cleans up the vn_data
     void (*vop_read)(struct vnode *file, char* buf, size_t nbytes, size_t offset,
-                            serv_sys_read_cb_t callback, void *token);
+                            vop_read_cb_t callback, void *token);
     void (*vop_write)(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
-                            serv_sys_write_cb_t callback, void *token);
+                            vop_write_cb_t callback, void *token);
     void (*vop_getdirent)(struct vnode *dir, char *buf, size_t nbyte,
-                          int pos, serv_sys_getdirent_cb_t callback, void *token);
+                          int pos, vop_getdirent_cb_t callback, void *token);
     int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
 };
-
 #define __VOP(vn, sym) ((vn)->vn_ops->vop_##sym)
 
 #define VOP_EACHOPEN(vn, flags)                     (__VOP(vn, eachopen)(vn, flags))

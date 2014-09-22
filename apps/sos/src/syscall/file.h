@@ -21,9 +21,9 @@ struct openfile {
 	int of_refcount;
 };
 
+typedef void (*file_open_cb_t)(void *token, int err, int fd) ;
 /* opens a file (must be kernel pointers in the args) */
-typedef void (*file_open_cb_t)(void *token, int err, struct vnode *vn);
-void file_open(char *filename, int flags, serv_sys_open_cb_t callback, void *token);
+void file_open(char *filename, int flags, file_open_cb_t callback, void *token);
 
 /* closes a file */
 int file_close(int fd);

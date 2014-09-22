@@ -18,8 +18,6 @@
 #define MAX_SERIAL_TRY  0x100
 #define MAX_IO_BUF      0x1000
 
-#define UDP_SIZE        1400
-
 /*
  * Check if the user pages from VADDR to VADDR+NBYTE are mapped
  */
@@ -309,7 +307,7 @@ serv_sys_write_2(cont_write_t *cont) {
 
     // If start >= nbyte, you don't need to write anymore
     assert(cont->start < cont->nbyte);
-    size_t wanna_send = MIN(cont->nbyte - cont->start, (size_t)UDP_SIZE);
+    size_t wanna_send = MIN(cont->nbyte - cont->start, (size_t)PAGE_SIZE);
 
     err = copyin((seL4_Word)cont->kbuf, (seL4_Word)(cont->buf+cont->start), wanna_send);
     if (err) {

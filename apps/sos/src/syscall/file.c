@@ -7,7 +7,6 @@
 #include "vfs/vfs.h"
 #include "vfs/vnode.h"
 #include "proc/proc.h"
-#include "syscall/syscall.h"
 #include "syscall/file.h"
 #include "dev/console.h"
 
@@ -17,7 +16,7 @@
 //      Especially when they open the same file
 
 typedef struct {
-    serv_sys_open_cb_t callback;
+    file_open_cb_t callback;
     void *token;
     int flags;
 } cont_file_open_t;
@@ -84,7 +83,7 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
 }
 
 void
-file_open(char *filename, int flags, serv_sys_open_cb_t callback, void *token)
+file_open(char *filename, int flags, file_open_cb_t callback, void *token)
 {
     printf("file_open called\n");
     int accmode = flags & O_ACCMODE;

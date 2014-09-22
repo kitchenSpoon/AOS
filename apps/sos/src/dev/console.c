@@ -20,9 +20,9 @@ static int con_eachopen(struct vnode *file, int flags);
 static int con_eachclose(struct vnode *file, uint32_t flags);
 static int con_lastclose(struct vnode *file);
 static void con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
-                     serv_sys_read_cb_t callback, void *token);
+                     vop_read_cb_t callback, void *token);
 static void con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
-               serv_sys_write_cb_t callback, void *token);
+               vop_write_cb_t callback, void *token);
 
 struct console{
     char buf[MAX_IO_BUF];
@@ -38,7 +38,7 @@ struct con_read_state{
     struct vnode *file;
     char* buf;
     size_t nbytes;
-    serv_sys_read_cb_t callback;
+    vop_read_cb_t callback;
     void* token;
     size_t offset;
 } con_read_state;
@@ -53,6 +53,8 @@ con_init(struct vnode *con_vn) {
     con_vn->vn_ops->vop_lastclose = con_lastclose;
     con_vn->vn_ops->vop_read      = con_read;
     con_vn->vn_ops->vop_write     = con_write;
+    con_vn->vn_ops->vop_getdirent = NULL;
+    con_vn->vn_ops->vop_stat      = NULL;
 
     con_vn->sattr.st_type = ST_FILE;
     con_vn->sattr.st_mode = S_IWUSR | S_IRUSR;
@@ -147,7 +149,7 @@ con_lastclose(struct vnode *con_vn) {
 
 static void
 con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
-          serv_sys_write_cb_t callback, void *token)
+          vop_write_cb_t callback, void *token)
 {
     printf("conwrite\n");
     (void)offset;
@@ -169,7 +171,7 @@ con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
 
 static void
 con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
-         serv_sys_read_cb_t callback, void *token)
+         vop_read_cb_t callback, void *token)
 {
     printf("con_read called\n");
     (void)offset;

@@ -52,15 +52,15 @@ as_destroy(addrspace_t *as) {
         return;
     }
 
-    //Free page directory
-    if(as->as_pd_regs != NULL){
-        //TODO actually free them
-        for(int i = 0; i < N_PAGETABLES; i++){
-            if(as->as_pd_regs[i] != NULL){
-                frame_free((seL4_Word)as->as_pd_regs[i]);
-            }
-        }
-    }
+//    //Free page directory
+//    if(as->as_pd_regs != NULL){
+//        //TODO actually free them
+//        for(int i = 0; i < N_PAGETABLES; i++){
+//            if(as->as_pd_regs[i] != NULL){
+//                frame_free((seL4_Word)as->as_pd_regs[i]);
+//            }
+//        }
+//    }
 
     //Free heap
     //Free stack
@@ -81,7 +81,7 @@ _region_overlap(region_t* r1, region_t* r2) {
  * Initialise the new reigon and make sure it does not overlap with other
  * regions
  */
-static int 
+static int
 _region_init(addrspace_t *as, seL4_Word vaddr, size_t sz,
         int rights, struct region* nregion)
 {
@@ -184,7 +184,7 @@ as_define_heap(addrspace_t *as) {
         return EINVAL;
     }
     /* Find a location for the heap base */
-    seL4_Word heap_base = 1*PAGE_SIZE;	
+    seL4_Word heap_base = 1*PAGE_SIZE;
     for (region_t* r = as->as_rhead; r != NULL; r = r->next) {
         if (r->vtop > heap_base) {
             heap_base = r->vtop;

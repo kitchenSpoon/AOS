@@ -30,8 +30,8 @@
 static int in;
 static sos_stat_t sbuf;
 
-static void benchmark();
-static int benchmark2();
+static int benchmark(int argc, char *argv[]);
+static int benchmark2(int argc, char *argv[]);
 
 static void prstat(const char *name) {
     /* print out stat buf */
@@ -424,8 +424,10 @@ static void bm_write(char* filename, char* buf, size_t buf_size){
     close(fd);
 }
 
-static void
-benchmark(){
+static int
+benchmark(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
     /* Reads */
     printf("Reading\n");
     /* Reading with IO request changing*/
@@ -477,8 +479,10 @@ benchmark(){
     /* Writing with packet changing */
 }
 
-static
-int benchmark2() {
+static int
+benchmark2(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
     char buf3200000[3200000];
     bm_read("read_test_3200000_1", (char*)buf3200000, 3200000);
     bm_write("write_test_3200000_1", (char*)buf3200000, 3200000);

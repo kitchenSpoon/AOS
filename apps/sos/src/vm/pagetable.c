@@ -124,7 +124,8 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
 
         as->as_pd_caps[x] = (pagetable_t)frame_alloc();
         if (as->as_pd_caps[x] == 0) {
-            frame_free((seL4_Word)as->as_pd_regs[x]);
+            err = frame_free((seL4_Word)as->as_pd_regs[x]);
+            assert(err == FRAMETABLE_OK);
             return ENOMEM;
         }
     }
@@ -141,13 +142,14 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
         return ENOMEM;
     }
     err = frame_get_cap(kvaddr, &kframe_cap);
-    assert(!err); // There should be no error
+    assert(err == FRAMETABLE_OK); // There should be no error
 
 
     /* Copy the frame cap as we need to map it into 2 address spaces */
     frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, permissions);
     if (frame_cap == CSPACE_NULL) {
-        frame_free(kvaddr);
+        err = frame_free(kvaddr);
+        assert(err == FRAMETABLE_OK);
         return EFAULT;
     }
 
@@ -155,7 +157,8 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
     err = _map_page(as, frame_cap, vpage, permissions,
                     seL4_ARM_Default_VMAttributes);
     if (err) {
-        frame_free(kvaddr);
+        err = frame_free(kvaddr);
+        assert(err == FRAMETABLE_OK);
         cspace_delete_cap(cur_cspace, frame_cap);
         return err;
     }
@@ -201,8 +204,8 @@ int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap) 
 
     seL4_Word kvaddr = as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
     err = frame_get_cap(kvaddr, kframe_cap);
-    if (err) {
-        return err;
+    if (err != FRAMETABLE_OK) {
+        return EFAULT;
     }
     return 0;
 }

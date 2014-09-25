@@ -238,7 +238,7 @@ void serv_sys_write_end(void *token, int err, size_t size){
 
     if (cont->kbuf != NULL) {
         err = frame_free((seL4_Word)cont->kbuf);
-        assert(!err);
+        assert(err == FRAMETABLE_OK);
     }
     free(cont);
 }

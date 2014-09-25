@@ -538,7 +538,8 @@ frametable_test(uint32_t test_mask) {
 
             printf("Page #%d allocated at %p\n",  i, (int*) vaddr);
 
-            frame_free(vaddr);
+            int result = frame_free(vaddr);
+            assert(result == FRAMETABLE_OK);
         }
         printf("Done!!!\n");
 

@@ -7,6 +7,8 @@
 #include <ut_manager/ut.h>
 #include <errno.h>
 
+#include <sys/panic.h>
+
 #include "vm/vm.h"
 #include "vm/mapping.h"
 #include "vm/vmem_layout.h"
@@ -20,7 +22,7 @@
 
 #define FRAME_INVALID            (-1)
 
-#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART) 
+#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
 #define VADDR_TO_ID(vaddr)  (((vaddr) - FRAME_VSTART) / PAGE_SIZE)
 
 /* Frame table entry structure */
@@ -34,10 +36,13 @@ typedef struct {
 } frame_entry_t;
 
 
-frame_entry_t *frametable;
-int first_free;                     // Index of the first free/untyped frame
+static frame_entry_t *frametable;
 static bool frame_initialised;
-size_t frametable_reserved;           // # of frames the frametable consumes
+
+static size_t frametable_sz;
+static size_t frametable_reserved;           // # of frames the frametable consumes
+static int first_free;                     // Index of the first free frame
+
 
 /*
  * This function allocate a frame cap and then map it to the indicated VADDR
@@ -50,18 +55,18 @@ _map_to_sel4(const seL4_ARM_PageDirectory pd, const seL4_Word vaddr, seL4_Word *
     /* Allocate memory */
     *paddr = ut_alloc(seL4_PageBits);
     if (*paddr == 0) {
-        return ENOMEM;
+        return FRAMETABLE_FAILED;
     }
 
     /* Retype memory */
-    cspace_err_t cspace_err = cspace_ut_retype_addr(*paddr, 
-                                                    seL4_ARM_SmallPageObject, 
+    cspace_err_t cspace_err = cspace_ut_retype_addr(*paddr,
+                                                    seL4_ARM_SmallPageObject,
                                                     seL4_PageBits,
-                                                    cur_cspace, 
+                                                    cur_cspace,
                                                     cap);
     if (cspace_err != CSPACE_NOERROR) {
         ut_free(*paddr, seL4_PageBits);
-        return EFAULT;
+        return FRAMETABLE_FAILED;
     }
 
     /* Map memory */
@@ -69,17 +74,17 @@ _map_to_sel4(const seL4_ARM_PageDirectory pd, const seL4_Word vaddr, seL4_Word *
     if (err) {
         ut_free(*paddr, seL4_PageBits);
         cspace_delete_cap(cur_cspace, *cap);
-        return EFAULT;
+        return FRAMETABLE_FAILED;
     }
 
-    return 0;
+    return FRAMETABLE_OK;
 }
 
 int
 frame_init(void){
 
     /* Calculate the amount of memory required for the frame table */
-    size_t frametable_sz = NFRAMES * sizeof(frame_entry_t);
+    frametable_sz = NFRAMES * sizeof(frame_entry_t);
     frametable = (frame_entry_t*)ID_TO_VADDR(0);
 
     /* Allocate memory for frametable to use */
@@ -113,18 +118,20 @@ frame_init(void){
         frametable[i].fte_next_free = (i == NFRAMES-1) ? FRAME_INVALID : i+1;
     }
 
+    /* Set the number of remaining free frames */
+
     frame_initialised = true;
 
-    return 0;
+    return FRAMETABLE_OK;
 }
 
 seL4_Word frame_alloc(void){
 
-    if (!frame_initialised) {
-        return 0;
-    }
+    conditional_panic(!frame_initialised, "error: frame_alloc(), frametable is not initalised");
+
     if(first_free == FRAME_INVALID) {
-        return 0;
+        /* No more free frame */
+        return NULL;
     }
 
     int err;
@@ -136,7 +143,7 @@ seL4_Word frame_alloc(void){
     err = _map_to_sel4(seL4_CapInitThreadPD, vaddr,
                           &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
     if (err) {
-        return 0;
+        return NULL;
     }
 
     frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
@@ -155,18 +162,15 @@ seL4_Word frame_alloc(void){
 
 int frame_free(seL4_Word vaddr){
     /* May have concurency issues */
-    
-    if (!frame_initialised) {
-        /* Why is frame uninitialised? */
-        return EFAULT;
-    }
+
+    conditional_panic(!frame_initialised, "error: frame_free(), frametable is not initalised");
 
     int id = (int)VADDR_TO_ID(vaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
-        return EINVAL;
+        return FRAMETABLE_INVAL;
     }
     if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
-        return EINVAL;
+        return FRAMETABLE_INVAL;
     }
 
     seL4_Word paddr = frametable[id].fte_paddr;
@@ -187,23 +191,21 @@ int frame_free(seL4_Word vaddr){
     frametable[id].fte_next_free = first_free;
     first_free = id;
 
-    return 0;
+    return FRAMETABLE_OK;
 }
 
 int
 frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap) {
     *frame_cap = -1;
-    if (!frame_initialised) {
-        return EFAULT;
-    }
+    conditional_panic(!frame_initialised, "error: frame_get_cap(), frametable is not initalised");
 
     int id = (int)VADDR_TO_ID(vaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
-        return EINVAL;
+        return FRAMETABLE_INVAL;
     }
     if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
-        return EINVAL;
+        return FRAMETABLE_INVAL;
     }
     *frame_cap = frametable[id].fte_cap;
-    return 0;
+    return FRAMETABLE_OK;
 }

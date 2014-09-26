@@ -94,6 +94,55 @@ _map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_Word vaddr,
 }
 
 int
+sos_swap_page_map(addrspace_t *as, seL4_Word vaddr, seL4_Word kvaddr, uint32_t permissions) {
+    if (as == NULL) {
+        return EINVAL;
+    }
+
+    if (as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
+        /* Did you even call as_create? */
+        return EFAULT;
+    }
+
+    int x, y, err;
+    seL4_Word vpage;
+    seL4_CPtr kframe_cap, frame_cap;
+
+
+    vpage = PAGE_ALIGN(vaddr);
+    x = PT_L1_INDEX(vpage);
+    y = PT_L2_INDEX(vpage);
+
+    //as->as_pd_regs[x][y] should never be null
+    assert(as->as_pd_regs[x] != NULL);
+    //assert(as->as_pd_regs[x][y] != NULL);
+    assert(!(as->as_pd_regs[x][y] & PTE_IN_USE_BIT));
+    assert(kvaddr);
+
+    err = frame_get_cap(kvaddr, &kframe_cap);
+    assert(!err); // There should be no error
+
+    /* Copy the frame cap as we need to map it into 2 address spaces */
+    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, permissions);
+    if (frame_cap == CSPACE_NULL) {
+        return EFAULT;
+    }
+
+    /* Map the frame into application's address spaces */
+    err = _map_page(as, frame_cap, vpage, permissions,
+                    seL4_ARM_Default_VMAttributes);
+    if (err) {
+        cspace_delete_cap(cur_cspace, frame_cap);
+        return err;
+    }
+
+    /* Insert PTE into application's pagetable */
+    as->as_pd_regs[x][y] = kvaddr | PTE_IN_USE_BIT;
+    as->as_pd_caps[x][y] = frame_cap;
+    return 0;
+}
+
+int
 sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
     if (as == NULL) {
         return EINVAL;
@@ -169,6 +218,17 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
 int
 sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
     return 0;
+}
+
+bool
+sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
+    if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
+        return false;
+    }
+
+    int x = PT_L1_INDEX(vaddr);
+    int y = PT_L2_INDEX(vaddr);
+    return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_SWAPPED));
 }
 
 bool

@@ -563,7 +563,7 @@ filesystem_init(void) {
     vn->vn_ops = malloc(sizeof(struct vnode_ops));
     conditional_panic(vn->vn_ops == NULL, "Failed to allocate mountpoint vnode memory\n");
 
-    err = nfs_dev_init_mntpoint(vn, &mnt_point);
+    err = nfs_dev_init_mntpoint_vnode(vn, &mnt_point);
     conditional_panic(err, "Failed to initialise mountpoint vnode\n");
 
     vn->vn_opencount = 1;

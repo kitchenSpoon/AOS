@@ -203,7 +203,7 @@ nfs_dev_init(struct vnode* vn, nfs_dev_init_cb_t callback, void *token) {
 }
 
 int
-nfs_dev_init_mntpoint(struct vnode* vn, fhandle_t *mnt_point) {
+nfs_dev_init_mntpoint_vnode(struct vnode* vn, fhandle_t *mnt_point) {
     int err;
     err = init_helper(vn, mnt_point, NULL);
     return err;
@@ -476,4 +476,18 @@ static void nfs_dev_timeout_handler(uint32_t id, void *data){
 
 void nfs_dev_setup_timeout(void){
     register_timer(100000, nfs_dev_timeout_handler, NULL); //100ms
+}
+
+int nfs_dev_get_fhandle(struct vnode *vn, fhandle_t **fh) {
+    if (fh == NULL || vn == NULL) {
+        return EINVAL;
+    }
+    if (vn->vn_data == NULL) {
+        return EFAULT;
+    }
+
+    struct nfs_data *data = (struct nfs_data*)vn->vn_data;
+    *fh = data->fh;
+
+    return 0;
 }

@@ -7,6 +7,8 @@
 #include <nfs/nfs.h>
 #include <limits.h>
 #include <sel4/sel4.h>
+#include <strings.h>
+#include <nfs/nfs.h>
 
 #include "vfs/vfs.h"
 #include "vm/swap.h"
@@ -34,13 +36,53 @@ int swap_check_valid_offset(seL4_Word offset){
     return 0;
 }
 
-int swap_init(){
-    bzero(free_slots, sizeof(free_slots));
-    return 0;
+typedef struct {
+    swap_init_cb_t callback;
+    void *token;
+} swap_init_cont_t;
+
+static void
+swap_init_end(void *token, int err, struct vnode *vn) {
+    if (token == NULL) {
+        printf("Error in swap_init_end: data corrupted. This shouldn't happen, check it.\n");
+        return;
+    }
+
+    swap_init_cont_t *cont = (swap_init_cont_t*)token;
+
+    if (err) {
+        cont->callback(cont->token, err);
+        free(cont);
+        return;
+    }
+
+    err = nfs_dev_get_fhandle(vn, &swap_fh);
+    if (err) {
+        printf("Failed to get the swap file's fhandle, will fail when swapping is needed\n");
+        cont->callback(cont->token, EFAULT);
+        free(cont);
+        return;
+    }
+
+    cont->callback(cont->token, 0);
+    free(cont);
 }
 
-int swap_find_free_slots(){
-    //loops 32 times
+void swap_init(swap_init_cb_t callback, void *token){
+    bzero(free_slots, sizeof(free_slots));
+
+    swap_init_cont_t *cont = malloc(sizeof(swap_init_cont_t));
+    if (cont == NULL) {
+        callback(token, ENOMEM);
+        return;
+    }
+    cont->callback = callback;
+    cont->token    = token;
+
+    vfs_open(SWAP_FILE_NAME, O_RDWR, swap_init_end, (void*)cont);
+}
+
+int swap_find_free_slot(void){
     for(uint32_t i = 0; i < NUM_FREE_SLOTS; i++){
         for(uint32_t j = 0; j < NUM_BITS; j++){
             if(!(free_slots[i] & (1<<j))){
@@ -129,12 +171,20 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     return err;
 }
 
-/*
-int swap_out(){
-    int slot = swap_find_free_slots();
-    if(slot == -1){
+
+int swap_out(seL4_Word kvaddr){
+    int free_slot = swap_find_free_slot();
+    if(free_slot == -1){
         return -1;
     }
 
+//    nfs_write(
+//typedef void (*nfs_write_cb_t)(uintptr_t token, enum nfs_stat status, 
+//                               fattr_t *fattr, int count);
+//enum rpc_stat nfs_write(const fhandle_t *fh, int offset, int count, 
+//                        const void *data,
+//                        nfs_write_cb_t callback, uintptr_t token);
+//    nfs_write();
+    return 0;
 }
-*/
+

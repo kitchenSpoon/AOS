@@ -23,7 +23,7 @@ typedef void (*swap_init_cb_t)(void *token, int err);
 
 void swap_init(swap_init_cb_t callback, void *token);
 int swap_find_free_slot(void);
-int swap_in(addrspace_t as, seL4_Word vaddr, seL4_Word free_kvaddr);
+int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token);
 int swap_out(seL4_Word kvaddr);
 
 #endif /* _LIBOS_SWAP_H */

@@ -32,4 +32,10 @@ int frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap);
 
 int sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr);
 
+/*
+ * Lock/Unlock a frame
+ */
+int frame_lock_frame(seL4_Word vaddr);
+int frame_unlock_frame(seL4_Word vaddr);
+
 #endif /* _LIBOS_VM_H_ */

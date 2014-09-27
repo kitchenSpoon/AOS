@@ -122,7 +122,7 @@ int sos_swap_page_map(addrspace_t *as, seL4_Word vaddr, seL4_Word kvaddr, uint32
  * Unmap a page in into the page table
  * Returns 0 if successful
  */
-int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
+int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);
 
 /* Check if page at address VADDR is mapped */
 bool sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr);

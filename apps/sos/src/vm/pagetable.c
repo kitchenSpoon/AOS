@@ -216,8 +216,26 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
 }
 
 int
-sos_page_unmap(pagedir_t* pd, seL4_Word vaddr){
-    return 0;
+sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
+    if(as == NULL || as->as_pd_caps == NULL) return -1;
+
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    int x           = PT_L1_INDEX(vpage);
+    int y           = PT_L2_INDEX(vpage);
+
+    int err = 0;
+    if(as->as_pd_caps[x] != NULL){
+        err = seL4_ARM_Page_Unmap(as->as_pd_caps[x][y]);
+    } else {
+        err = 1;
+    }
+
+    if(!err){
+        //unset PTE_IN_USE_BIT?
+        //since we are using this to simulate reference bit we dont want to unset that bit
+    }
+
+    return err;
 }
 
 bool

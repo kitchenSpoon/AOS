@@ -31,6 +31,7 @@ typedef struct {
     seL4_ARM_PageDirectory fte_pd;
     int fte_status;
     int fte_next_free;
+    bool frame_locked;
 } frame_entry_t;
 
 
@@ -99,6 +100,7 @@ frame_init(void){
         frametable[i].fte_status    = FRAME_STATUS_ALLOCATED;
         frametable[i].fte_pd        = seL4_CapInitThreadPD;
         frametable[i].fte_next_free = FRAME_INVALID;
+        frametable[i].frame_locked = false;
     }
 
     /* Mark the number of frames occupied by the frametable */
@@ -142,6 +144,7 @@ seL4_Word frame_alloc(void){
     frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
     frametable[ind].fte_vaddr  = vaddr;
     frametable[ind].fte_pd     = seL4_CapInitThreadPD;
+    frametable[ind].frame_locked = false;
 
     /* Zero fill memory */
     bzero((void *)(vaddr), (size_t)PAGE_SIZE);
@@ -167,6 +170,11 @@ int frame_free(seL4_Word vaddr){
     }
     if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
         return EINVAL;
+    }
+
+    //frame to be freed should not be locked
+    if(frametable[id].frame_locked) {
+        return EFAULT;
     }
 
     seL4_Word paddr = frametable[id].fte_paddr;
@@ -206,4 +214,48 @@ frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap) {
     }
     *frame_cap = frametable[id].fte_cap;
     return 0;
+}
+
+int frame_lock_frame(seL4_Word vaddr){
+     if (!frame_initialised) {
+        return EFAULT;
+    }
+
+    int id = (int)VADDR_TO_ID(vaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return EINVAL;
+    }
+    if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
+        return EINVAL;
+    }
+
+    //might need to do this atomically?
+    if(frametable[id].frame_locked == true) {
+        return EINVAL;
+    } else {
+        frametable[id].frame_locked = true;
+        return 0;
+    } 
+}
+
+int frame_unlock_frame(seL4_Word vaddr){
+     if (!frame_initialised) {
+        return EFAULT;
+    }
+
+    int id = (int)VADDR_TO_ID(vaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return EINVAL;
+    }
+    if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
+        return EINVAL;
+    }
+
+    //might need to do this atomically?
+    if(frametable[id].frame_locked == false) {
+        return EINVAL;
+    } else {
+        frametable[id].frame_locked = false;
+        return 0;
+    } 
 }

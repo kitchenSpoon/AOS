@@ -191,6 +191,7 @@ void handle_pagefault(void) {
         assert(reply_cap != CSPACE_NULL);
 
         err = sos_VMFaultHandler(fault_addr, fsr);
+        //err = sos_VMFaultHandler(reply_cap, fault_addr, fsr);
         if (err) {
             /* SOS doesn't handle the fault, the process is doing something
              * wrong, kill it! */

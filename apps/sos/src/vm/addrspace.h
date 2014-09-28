@@ -124,6 +124,9 @@ int sos_swap_page_map(addrspace_t *as, seL4_Word vaddr, seL4_Word kvaddr, uint32
  */
 int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);
 
+/* Check if page at address VADDR is swapped */
+bool sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr);
+
 /* Check if page at address VADDR is mapped */
 bool sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr);
 

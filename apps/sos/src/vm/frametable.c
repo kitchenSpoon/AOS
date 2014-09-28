@@ -259,3 +259,10 @@ int frame_unlock_frame(seL4_Word vaddr){
         return 0;
     } 
 }
+
+seL4_Word get_free_frame_kvaddr(){
+    if(first_free != FRAME_INVALID){
+        (seL4_Word)ID_TO_VADDR(first_free);
+    }
+    return FRAME_INVALID;
+}

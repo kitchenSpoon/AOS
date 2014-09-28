@@ -116,6 +116,7 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
 
 
     //map application page
+    //this automaticallys sets the page as not swapped out
     err = sos_swap_page_map(state->as, state->vaddr, state->kvaddr, state->rights);
     if(err){
         state->callback((uintptr_t)state->token, err);

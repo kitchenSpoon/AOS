@@ -35,6 +35,58 @@ _region_probe(struct addrspace* as, seL4_Word addr) {
     return NULL;
 }
 
+//int
+//sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr){
+//    if (fault_addr == 0) {
+//        /* Derefenrecing NULL? */
+//        return EINVAL;
+//    }
+//
+//    addrspace_t *as = proc_getas();
+//    if (as == NULL) {
+//        /* Kernel is probably failed when bootstraping */
+//        return EFAULT;
+//    }
+//
+//    if (sos_page_is_mapped(as, fault_addr)) {
+//        /* Check if page is swapped in */
+//        if(sos_page_is_swapped()){
+//            /* Swapped it back in */
+//            if(!enough_memory){
+//                //swap_out
+//            }
+//            region_t* reg = _region_probe(as, fault_addr);
+//            token = malloc(sizeof(token));
+//            swap_in(as, reg->rights, fault_addr,?kvaddr?,VMF_swap_in_done,token);
+//        } else {
+//            /* This must be a readonly fault */
+//            return EACCES;
+//        }
+//    } else {
+//        int err;
+//        bool fault_when_write = (bool)(fsr & RW_BIT);
+//        bool fault_when_read = !fault_when_write;
+//
+//        /* Check if the fault address is in a valid region */
+//        region_t* reg = _region_probe(as, fault_addr);
+//        if(reg != NULL){
+//            if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
+//                return EACCES;
+//            }
+//            if (fault_when_read && !(reg->rights & seL4_CanRead)) {
+//                return EACCES;
+//            }
+//            err = sos_page_map(as, fault_addr, reg->rights);
+//            if (err) {
+//                return err;
+//            }
+//
+//            return 0;
+//        }
+//    }
+//    return EFAULT;
+//}
+
 int
 sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr){
     if (fault_addr == 0) {

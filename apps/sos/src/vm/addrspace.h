@@ -108,10 +108,21 @@ int elf_load(addrspace_t *as, char* elf_file);
 int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions);
 
 /*
+ * Map a page into the shadow Pagetable with an existing frame in sos
+ * @param as - The addrspace we will perform the mapping
+ * @param app_sel4_pd - the sel4 page directory of the user level app
+ * @param vaddr - the user level virtual address that need to be mapped
+ * @param kvaddr - the kernel level virtual address
+ *
+ * @Returns 0 if succesful
+ */
+int sos_swap_page_map(addrspace_t *as, seL4_Word vaddr, seL4_Word kvaddr, uint32_t permissions);
+
+/*
  * Unmap a page in into the page table
  * Returns 0 if successful
  */
-int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
+int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);
 
 /* Check if page at address VADDR is mapped */
 bool sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr);

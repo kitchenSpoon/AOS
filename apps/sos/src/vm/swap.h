@@ -1,6 +1,7 @@
 #ifndef _LIBOS_SWAP_H_
 #define _LIBOS_SWAP_H_
-
+#include <stdio.h>
+#include <assert.h>
 #include <stdint.h>
 #include <errno.h>
 
@@ -8,6 +9,7 @@
 #include "vfs/vnode.h"
 
 typedef void (*swap_out_cb_t)(void *token, int err);
+typedef void (*swap_in_cb_t)(uintptr_t token, int err);
 
 /*
  * Perform a swap in
@@ -16,7 +18,7 @@ typedef void (*swap_out_cb_t)(void *token, int err);
  * @param vaddr - The page data that we want to swap in
  * @param free_kvaddr - The memory that we we are copying data to
  */
-int swap_in(addrspace_t as, seL4_Word vaddr, seL4_Word free_kvaddr);
+int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token);
 
 /*
  * Perform a swap out for the frame pointed to by kvaddr

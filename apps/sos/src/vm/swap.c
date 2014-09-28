@@ -9,6 +9,7 @@
 #include <sel4/sel4.h>
 #include <nfs/nfs.h>
 
+#include "tool/utility.h"
 #include "vfs/vfs.h"
 #include "vm/swap.h"
 #include "dev/nfs_dev.h"
@@ -116,10 +117,10 @@ typedef struct {
     seL4_Word vaddr;
     addrspace_t *as;
     seL4_CapRights rights;
+    size_t bytes_read;
 } swap_in_cont_t;
 
-void swap_in_handler(uintptr_t token, enum nfs_stat status,
-                                fattr_t *fattr, int count, void* data){
+void swap_in_end(uintptr_t token){
     int err = 0;
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
@@ -155,13 +156,30 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
 
     free(state);
 }
+void swap_in_handler(uintptr_t token, enum nfs_stat status,
+                                fattr_t *fattr, int count, void* data){
+    int err = 0;
+    swap_in_cont_t *state = (swap_in_cont_t*)token;
+    if(status != NFS_OK){
+        state->callback((uintptr_t)state->token, 1);
+        free(state);
+        return;
+    }
 
+    state->bytes_read += count;
+    if(state->bytes_read < PAGE_SIZE){
+        enum rpc_stat status = nfs_read(swap_fh, offset + state->bytes_read, MAX(PAGE_SIZE - state->bytes_read, NFS_SEND_SIZE), swap_in_handler, (uintptr_t)swap_cont);
+        //copy to our buf
+    } else {
+        swap_in_end(token);
+    }
+}
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token){
 
     int err = 0;
     //check if swap file handler is initalized
     if(swap_fh == NULL){
-        return err;
+        return EFAULT;
     }
 
     int offset = vaddr & PTE_SWAP_OFFSET;
@@ -170,15 +188,24 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
         return err;
     }
 
+
     /* Set our continuations */
     swap_in_cont_t *swap_cont = malloc(sizeof(swap_in_cont_t));
-    swap_cont->callback = callback;
-    swap_cont->token    = token;
-    swap_cont->kvaddr   = kvaddr;
-    swap_cont->vaddr    = vaddr;
-    swap_cont->as       = as;
-    swap_cont->rights   = rights;
+    swap_cont->callback   = callback;
+    swap_cont->token      = token;
+    swap_cont->kvaddr     = kvaddr;
+    swap_cont->vaddr      = vaddr;
+    swap_cont->as         = as;
+    swap_cont->rights     = rights;
+    swap_cont->bytes_read = 0;
+    char *buf = malloc(PAGE_SIZE);
+    if(buf == NULL){
+        free(swap_cont);
+        return err;
+    }
+    swap_cont->buf      = buf;
 
+    //TODO:need to check if we have read the whole page
     enum rpc_stat status = nfs_read(swap_fh, offset, PAGE_SIZE, swap_in_handler, (uintptr_t)swap_cont);
     if(status != RPC_OK){
         err = 1;
@@ -212,7 +239,7 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     }
     cont->written += (size_t)count;
     if (cont->written < PAGE_SIZE) {
-        enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written, NFS_SEND_SIZE,
+        enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written, MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->written),
                             (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
         if (status != RPC_OK) {
             cont->callback(cont->token, EFAULT);
@@ -220,6 +247,8 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
             return;
         }
     }
+    cont->callback(cont->token, 0);
+    free(cont);
 }
 
 static void

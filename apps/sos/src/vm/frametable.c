@@ -120,6 +120,13 @@ frame_init(void){
     return 0;
 }
 
+bool frame_has_free(void) {
+    if (!frame_initialised) {
+        return false;
+    }
+    return (first_free != FRAME_INVALID);
+}
+
 seL4_Word frame_alloc(void){
 
     if (!frame_initialised) {
@@ -158,7 +165,7 @@ seL4_Word frame_alloc(void){
 
 int frame_free(seL4_Word vaddr){
     /* May have concurency issues */
-    
+
     if (!frame_initialised) {
         /* Why is frame uninitialised? */
         return EFAULT;

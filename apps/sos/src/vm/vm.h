@@ -11,6 +11,11 @@
  */
 int frame_init(void);
 
+
+/*
+ * Check if there is still free frame in the frametable
+ */
+bool frame_has_free(void);
 /*
  * Allocate a new frame that could be used in SOS.
  *

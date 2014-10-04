@@ -32,6 +32,8 @@
 #include "proc/proc.h"
 #include "vm/addrspace.h"
 #include "syscall/syscall.h"
+#include "vm/swap.h"
+#include <limits.h>
 
 #include <autoconf.h>
 
@@ -582,6 +584,60 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     return badged_cap;
 }
 
+typedef struct {
+    seL4_Word kvaddr;
+    int free_slot;
+} swap_test_cont;
+
+void swap_test3(uintptr_t token, int err){
+    printf("swapping test 3\n");
+    swap_test_cont *cont = (swap_test_cont*)token;
+    printf("%s\n",(char*)(cont->kvaddr));
+}
+
+void swap_test2(void *token, int err){
+    printf("swapping test 2\n");
+    addrspace_t *as = proc_getas();
+    swap_test_cont *cont = (swap_test_cont*)token;
+    //region_t* reg = _region_probe(as, token->kvaddr);
+    //0x07 == allrights
+    
+    //fake vaddr
+    seL4_Word vaddr = (cont->free_slot)<<2;
+    printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
+    swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test3, token);
+}
+
+void swap_test(uint32_t id, void *data){
+    printf("swap test\n");
+
+    swap_test_cont *cont1 = malloc(sizeof(swap_test_cont));
+    char* p_stuff = (char*)frame_alloc();
+    cont1->kvaddr = (seL4_Word)p_stuff;
+    cont1->free_slot = 0; // should be 0
+    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
+    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+        //printf("swap loop at = %d\n", i);
+        p_stuff[i] = 'a';
+    }
+    p_stuff[PAGE_SIZE-1] = '\0';
+    printf("string = %s\n", p_stuff);
+    swap_out((seL4_Word)p_stuff, swap_test2, (void*)cont1);
+
+    swap_test_cont *cont2 = malloc(sizeof(swap_test_cont));
+    char* p_stuff2 = (char*)frame_alloc();
+    cont2->kvaddr = (seL4_Word)p_stuff2;
+    cont2->free_slot = 1; // should be 1
+    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
+    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+        //printf("swap loop at = %d\n", i);
+        p_stuff2[i] = 'b';
+    }
+    p_stuff2[PAGE_SIZE-1] = '\0';
+    printf("string = %s\n", p_stuff2);
+    swap_out((seL4_Word)p_stuff2, swap_test2, (void*)cont2);
+}
+
 /*
  * Main entry point - called by crt.
  */
@@ -605,6 +661,9 @@ int main(void) {
     /* Init file system */
     filesystem_init();
     //frametable_test(TEST_1 | TEST_3);
+
+    /* Register swap test */
+    register_timer(1000000, swap_test, NULL); //100ms
 
     /* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

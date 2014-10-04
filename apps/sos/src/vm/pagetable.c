@@ -113,13 +113,34 @@ sos_swap_page_map(addrspace_t *as, seL4_Word vaddr, seL4_Word kvaddr, uint32_t p
     x = PT_L1_INDEX(vpage);
     y = PT_L2_INDEX(vpage);
 
-    //as->as_pd_regs[x][y] should never be null
-    assert(as->as_pd_regs[x] != NULL);
-    //assert(as->as_pd_regs[x][y] != NULL);
-    assert(!(as->as_pd_regs[x][y] & PTE_IN_USE_BIT));
-    assert(kvaddr);
+//    //as->as_pd_regs[x][y] should never be null
+//    assert(as->as_pd_regs[x] != NULL);
+//    //assert(as->as_pd_regs[x][y] != NULL);
+//    assert(!(as->as_pd_regs[x][y] & PTE_IN_USE_BIT));
+//    assert(kvaddr);
 
+    if (as->as_pd_regs[x] == NULL) {
+        assert(as->as_pd_caps[x] == NULL);
+
+        /* Create pagetable if needed */
+        as->as_pd_regs[x] = (pagetable_t)frame_alloc();
+        if (as->as_pd_regs[x] == NULL) {
+            return ENOMEM;
+        }
+
+        as->as_pd_caps[x] = (pagetable_t)frame_alloc();
+        if (as->as_pd_caps[x] == 0) {
+            frame_free((seL4_Word)as->as_pd_regs[x]);
+            return ENOMEM;
+        }
+    }
+
+    if (as->as_pd_regs[x][y] & PTE_IN_USE_BIT) {
+        /* page already mapped */
+        return EINVAL;
+    }
     err = frame_get_cap(kvaddr, &kframe_cap);
+    printf("pagetable, sos_swap_page_map, err = %d\n", err);
     assert(!err); // There should be no error
 
     /* Copy the frame cap as we need to map it into 2 address spaces */

@@ -46,13 +46,13 @@ swap_lock_slot(seL4_Word offset){
 
 static void
 swap_free_slot(int slot){
-    free_slots[slot/NUM_FREE_SLOTS] &= 0<<(slot%NUM_FREE_SLOTS);
+    free_slots[slot/NUM_FREE_SLOTS] &= ~(1<<(slot%NUM_FREE_SLOTS));
     return;
 }
 
 static void
 swap_lock_slot(int slot){
-    free_slots[slot/NUM_FREE_SLOTS] &= 1<<(slot%NUM_FREE_SLOTS);
+    free_slots[slot/NUM_FREE_SLOTS] |= 1<<(slot%NUM_FREE_SLOTS);
     return;
 }
 
@@ -65,6 +65,7 @@ static int
 swap_find_free_slot(void){
     for(uint32_t i = 0; i < NUM_FREE_SLOTS; i++){
         for(uint32_t j = 0; j < NUM_BITS; j++){
+            printf("i = %d, j = %d, free_slots[i] = %u\n", i, j, free_slots[i]);
             if(!(free_slots[i] & (1<<j))){
                 return i*NUM_FREE_SLOTS + j;
             }
@@ -134,6 +135,7 @@ typedef struct {
 } swap_in_cont_t;
 
 void swap_in_end(uintptr_t token, int err){
+    printf("swap in end entered\n");
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
     if(err){
@@ -152,7 +154,9 @@ void swap_in_end(uintptr_t token, int err){
         return;
     }
 
-    //set frame lock free
+    //TODO update the as->as_pd[x][y] so that it reflects correct vaddr,
+
+    //TODO set frame lock free
 
     //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
     state->callback((uintptr_t)state->token, err);
@@ -165,6 +169,7 @@ void swap_in_end(uintptr_t token, int err){
 }
 void swap_in_handler(uintptr_t token, enum nfs_stat status,
                                 fattr_t *fattr, int count, void* data){
+    printf("swap in handler entered\n");
     int err = 0;
     swap_in_cont_t *state = (swap_in_cont_t*)token;
     if(status != NFS_OK){
@@ -179,9 +184,9 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
     if(state->bytes_read < PAGE_SIZE){
         //enum rpc_stat status = nfs_read(swap_fh, offset + state->bytes_read, MIN(PAGE_SIZE - state->bytes_read, NFS_SEND_SIZE),
         //                     swap_in_handler, (uintptr_t)swap_cont);
+        int free_slot = (state->vaddr & PTE_SWAP_OFFSET)>>2;
 
-        int free_slot = state->vaddr & PTE_SWAP_OFFSET;;
-
+        printf("bytes read = %u, free_slot = %d\n",state->bytes_read, free_slot);
         enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE + state->bytes_read, MIN(NFS_SEND_SIZE, PAGE_SIZE - state->bytes_read),
                                swap_in_handler, (uintptr_t)state);
         if (status != RPC_OK) {
@@ -193,18 +198,20 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
     }
 }
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token){
-
+    printf("swap in entered\n");
     int err = 0;
     //check if swap file handler is initalized
     if(swap_fh == NULL){
         return EFAULT;
     }
 
-    int free_slot = vaddr & PTE_SWAP_OFFSET;;
+    int free_slot = (vaddr & PTE_SWAP_OFFSET)>>2;
     err = swap_check_valid_offset(free_slot);
     if(err){
         return err;
     }
+
+    printf("swap in checked valid\n");
 
     /* Set our continuations */
     swap_in_cont_t *swap_cont = malloc(sizeof(swap_in_cont_t));
@@ -216,8 +223,13 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     swap_cont->rights     = rights;
     swap_cont->bytes_read = 0;
 
+    printf("swap in checked valid\n");
+
+    //TODO lock frame
+    /*TODO free the slot*/
+
     /* Lock the slot */
-    swap_lock_slot(free_slot);
+    //swap_lock_slot(free_slot);
 
     enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE , PAGE_SIZE, swap_in_handler, (uintptr_t)swap_cont);
     /* if status != RPC_OK this function will return error however the swap_in_handler might still run, bugg?*/
@@ -240,39 +252,65 @@ typedef struct {
 
 static void
 swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
+    printf("swap out 4 entered\n");
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
     if (cont == NULL) {
         printf("NFS or swap.c is broken!!!\n");
         return;
     }
 
+    printf("swap out 4 basic check\n");
     if (status != NFS_OK || fattr == NULL || count < 0) {
+        //TODO unlock frame
         cont->callback(cont->token, EFAULT);
         free(cont);
         return;
     }
     cont->written += (size_t)count;
     if (cont->written < PAGE_SIZE) {
+        printf("swap out 4 reading more\n");
         enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written, MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->written),
                             (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
         if (status != RPC_OK) {
+            //TODO unlock frame
             cont->callback(cont->token, EFAULT);
             free(cont);
             return;
         }
+        return;
     }
+    printf("swap out 4 calling back up\n");
+    //TODO unlock frame
     cont->callback(cont->token, 0);
     free(cont);
 }
 
 static void
 swap_out_3(swap_out_cont_t *cont) {
+    printf("swap out 3 entered\n");
     assert(cont != NULL); //Kernel code is buggy if this happens
+
+    int free_slot = swap_find_free_slot();
+    printf("swapout free slot = %d\n", free_slot);
+    if(free_slot < 0){
+        //TODO unlock frame
+        cont->callback(cont->token, EFAULT);
+        free(cont);
+        return;
+    }
+
+    swap_lock_slot(free_slot);
+    printf("free slot = %d, bits = %d\n", free_slot, free_slots[0]);
+    cont->free_slot = free_slot;
+
+    //TODO update the as->as_pd[x][y] so that it reflects free slot,
+
 
     //TODO: lock down the frame before writing
     enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE, NFS_SEND_SIZE,
                         (void*)cont->kvaddr, swap_out_4_nfs_write_cb, (uintptr_t)cont);
     if (status != RPC_OK) {
+        //TODO unlock frame
         cont->callback(cont->token, EFAULT);
         free(cont);
         return;
@@ -281,11 +319,13 @@ swap_out_3(swap_out_cont_t *cont) {
 
 static void
 swap_out_2_init_callback(void *token, int err) {
+    printf("swap out 2 init entered\n");
     assert(token != NULL); // Should not happen
 
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
 
     if (err) {
+        //TODO unlock frame
         cont->callback(cont->token, err);
         free(cont);
         return;
@@ -296,11 +336,9 @@ swap_out_2_init_callback(void *token, int err) {
 
 void
 swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
-    int free_slot = swap_find_free_slot();
-    if(free_slot < 0){
-        callback(token, EFAULT);
-        return;
-    }
+    printf("swap out entered\n");
+
+    //TODO lock frame
 
     /* Create the continuation here to be used in subsequent functions */
     swap_out_cont_t *cont = malloc(sizeof(swap_out_cont_t));
@@ -311,7 +349,6 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     cont->callback  = callback;
     cont->token     = token;
     cont->kvaddr    = kvaddr;
-    cont->free_slot = free_slot;
     cont->written   = 0;
 
     /* Initialise the swap file if it hasn't been there */
@@ -319,5 +356,6 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
         swap_init(swap_out_2_init_callback, (void*)cont);
         return;
     }
+
     swap_out_3(cont);
 }

@@ -30,7 +30,7 @@ uint32_t free_slots[NUM_FREE_SLOTS];
 
 fhandle_t *swap_fh;
 
-static void
+/*static void
 swap_free_slot(seL4_Word offset){
     int slot = offset/(NUM_FREE_SLOTS * NUM_BITS);
     free_slots[slot/NUM_FREE_SLOTS] &= 0<<(slot%NUM_FREE_SLOTS);
@@ -40,6 +40,18 @@ swap_free_slot(seL4_Word offset){
 static void
 swap_lock_slot(seL4_Word offset){
     int slot = offset/(NUM_FREE_SLOTS * NUM_BITS);
+    free_slots[slot/NUM_FREE_SLOTS] &= 1<<(slot%NUM_FREE_SLOTS);
+    return;
+}*/
+
+static void
+swap_free_slot(int slot){
+    free_slots[slot/NUM_FREE_SLOTS] &= 0<<(slot%NUM_FREE_SLOTS);
+    return;
+}
+
+static void
+swap_lock_slot(int slot){
     free_slots[slot/NUM_FREE_SLOTS] &= 1<<(slot%NUM_FREE_SLOTS);
     return;
 }
@@ -115,16 +127,16 @@ typedef struct {
     void* token;
     seL4_Word kvaddr;
     seL4_Word vaddr;
+    int free_slot;
     addrspace_t *as;
     seL4_CapRights rights;
     size_t bytes_read;
 } swap_in_cont_t;
 
-void swap_in_end(uintptr_t token){
-    int err = 0;
+void swap_in_end(uintptr_t token, int err){
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
-    if(status != NFS_OK){
+    if(err){
         state->callback((uintptr_t)state->token, 1);
         free(state);
         return;
@@ -140,19 +152,14 @@ void swap_in_end(uintptr_t token){
         return;
     }
 
-    //write the content into application's page through sos
-    //char* src = (char*)data;
-    //char* des = state->kvaddr;
-    //*des = *src;
-    memcpy((void*)(state->kvaddr), data, PAGE_SIZE);
-
     //set frame lock free
 
     //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
     state->callback((uintptr_t)state->token, err);
 
     //set that slot in bitmap as free
-    swap_free_slot(state->vaddr & PTE_SWAP_OFFSET);
+    int free_slot = state->vaddr & PTE_SWAP_OFFSET;;
+    swap_free_slot(free_slot);
 
     free(state);
 }
@@ -161,17 +168,28 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
     int err = 0;
     swap_in_cont_t *state = (swap_in_cont_t*)token;
     if(status != NFS_OK){
-        state->callback((uintptr_t)state->token, 1);
-        free(state);
+        swap_in_end(token, EFAULT);
         return;
     }
 
+    /* Copy page in */
+    memcpy((void*)(state->kvaddr) + state->bytes_read, data, count);
+
     state->bytes_read += count;
     if(state->bytes_read < PAGE_SIZE){
-        enum rpc_stat status = nfs_read(swap_fh, offset + state->bytes_read, MAX(PAGE_SIZE - state->bytes_read, NFS_SEND_SIZE), swap_in_handler, (uintptr_t)swap_cont);
-        //copy to our buf
+        //enum rpc_stat status = nfs_read(swap_fh, offset + state->bytes_read, MIN(PAGE_SIZE - state->bytes_read, NFS_SEND_SIZE),
+        //                     swap_in_handler, (uintptr_t)swap_cont);
+
+        int free_slot = state->vaddr & PTE_SWAP_OFFSET;;
+
+        enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE + state->bytes_read, MIN(NFS_SEND_SIZE, PAGE_SIZE - state->bytes_read),
+                               swap_in_handler, (uintptr_t)state);
+        if (status != RPC_OK) {
+            swap_in_end(token, EFAULT);
+            return;
+        }
     } else {
-        swap_in_end(token);
+        swap_in_end(token, err);
     }
 }
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token){
@@ -182,12 +200,11 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
         return EFAULT;
     }
 
-    int offset = vaddr & PTE_SWAP_OFFSET;
-    err = swap_check_valid_offset(offset);
+    int free_slot = vaddr & PTE_SWAP_OFFSET;;
+    err = swap_check_valid_offset(free_slot);
     if(err){
         return err;
     }
-
 
     /* Set our continuations */
     swap_in_cont_t *swap_cont = malloc(sizeof(swap_in_cont_t));
@@ -198,15 +215,12 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     swap_cont->as         = as;
     swap_cont->rights     = rights;
     swap_cont->bytes_read = 0;
-    char *buf = malloc(PAGE_SIZE);
-    if(buf == NULL){
-        free(swap_cont);
-        return err;
-    }
-    swap_cont->buf      = buf;
 
-    //TODO:need to check if we have read the whole page
-    enum rpc_stat status = nfs_read(swap_fh, offset, PAGE_SIZE, swap_in_handler, (uintptr_t)swap_cont);
+    /* Lock the slot */
+    swap_lock_slot(free_slot);
+
+    enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE , PAGE_SIZE, swap_in_handler, (uintptr_t)swap_cont);
+    /* if status != RPC_OK this function will return error however the swap_in_handler might still run, bugg?*/
     if(status != RPC_OK){
         err = 1;
         //printf("swap_in rpc error = %d\n", status);

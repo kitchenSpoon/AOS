@@ -516,7 +516,10 @@ int main(void) {
     test_dynamic_heap();
     benchmark();
 */
-    test_file_syscalls();
+//    test_file_syscalls();
+  
+    //test_swapping();
+  
     in = open("console", O_RDONLY);
     assert(in >= 0);
 

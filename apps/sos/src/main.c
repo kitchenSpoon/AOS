@@ -192,8 +192,8 @@ void handle_pagefault(void) {
         reply_cap = cspace_save_reply_cap(cur_cspace);
         assert(reply_cap != CSPACE_NULL);
 
-        err = sos_VMFaultHandler(fault_addr, fsr);
-        //err = sos_VMFaultHandler(reply_cap, fault_addr, fsr);
+        //err = sos_VMFaultHandler(fault_addr, fsr);
+        err = sos_VMFaultHandler(reply_cap, fault_addr, fsr);
         if (err) {
             /* SOS doesn't handle the fault, the process is doing something
              * wrong, kill it! */
@@ -589,25 +589,60 @@ typedef struct {
     int free_slot;
 } swap_test_cont;
 
-void swap_test3(uintptr_t token, int err){
+void swap_test3(void* token, int err){
     printf("swapping test 3\n");
     swap_test_cont *cont = (swap_test_cont*)token;
     printf("%s\n",(char*)(cont->kvaddr));
 }
 
-void swap_test2(void *token, int err){
+void swap_test2_swap_out(void *token, int err){
+    printf("swapin going to swap something out again\n");
+    swap_test_cont *cont = (swap_test_cont*)token;
+    printf("%s\n",(char*)(cont->kvaddr));
+
+    /* swapout */
+    swap_test_cont *cont3 = malloc(sizeof(swap_test_cont));
+    char* p_stuff3 = (char*)frame_alloc();
+    cont3->kvaddr = (seL4_Word)p_stuff3;
+    cont3->free_slot = 0; // should be 0
+    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
+    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+        //printf("swap loop at = %d\n", i);
+        p_stuff3[i] = 'c';
+    }
+    //asd
+    p_stuff3[PAGE_SIZE-1] = '\0';
+    printf("string = %s\n", p_stuff3);
+    swap_out((seL4_Word)p_stuff3, swap_test3, (void*)cont3);
+}
+
+void swap_test2_out_again(void *token, int err){
+    /* swapin */
     printf("swapping test 2\n");
     addrspace_t *as = proc_getas();
     swap_test_cont *cont = (swap_test_cont*)token;
     //region_t* reg = _region_probe(as, token->kvaddr);
     //0x07 == allrights
     
-    //fake vaddr
+    //TODO fix this, fake vaddr, this is a hack
+    seL4_Word vaddr = (cont->free_slot)<<2;
+    printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
+    swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test2_swap_out, token);
+}
+
+void swap_test2(void *token, int err){
+    /* swapin */
+    printf("swapping test 2\n");
+    addrspace_t *as = proc_getas();
+    swap_test_cont *cont = (swap_test_cont*)token;
+    //region_t* reg = _region_probe(as, token->kvaddr);
+    //0x07 == allrights
+    
+    //TODO fix this, fake vaddr, this is a hack
     seL4_Word vaddr = (cont->free_slot)<<2;
     printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
     swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test3, token);
 }
-
 void swap_test(uint32_t id, void *data){
     printf("swap test\n");
 
@@ -635,7 +670,7 @@ void swap_test(uint32_t id, void *data){
     }
     p_stuff2[PAGE_SIZE-1] = '\0';
     printf("string = %s\n", p_stuff2);
-    swap_out((seL4_Word)p_stuff2, swap_test2, (void*)cont2);
+    swap_out((seL4_Word)p_stuff2, swap_test2_out_again, (void*)cont2);
 }
 
 /*

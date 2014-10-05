@@ -134,12 +134,12 @@ typedef struct {
     size_t bytes_read;
 } swap_in_cont_t;
 
-void swap_in_end(uintptr_t token, int err){
+void swap_in_end(void* token, int err){
     printf("swap in end entered\n");
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
     if(err){
-        state->callback((uintptr_t)state->token, 1);
+        state->callback((void *)state->token, 1);
         free(state);
         return;
     }
@@ -149,17 +149,19 @@ void swap_in_end(uintptr_t token, int err){
     //this automaticallys sets the page as not swapped out
     err = sos_swap_page_map(state->as, state->vaddr, state->kvaddr, state->rights);
     if(err){
-        state->callback((uintptr_t)state->token, err);
+        state->callback((void*)state->token, err);
         free(state);
         return;
     }
 
     //TODO update the as->as_pd[x][y] so that it reflects correct vaddr,
+    //as->as_pd[x][y] = ((state->kvaddr)<<2) | (as->as_pd[x][y] & 3);
+    //UPDATE_PAGETABLE_REG();
 
     //TODO set frame lock free
 
     //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
-    state->callback((uintptr_t)state->token, err);
+    state->callback((void*)state->token, err);
 
     //set that slot in bitmap as free
     int free_slot = state->vaddr & PTE_SWAP_OFFSET;;
@@ -173,7 +175,7 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
     int err = 0;
     swap_in_cont_t *state = (swap_in_cont_t*)token;
     if(status != NFS_OK){
-        swap_in_end(token, EFAULT);
+        swap_in_end((void*)token, EFAULT);
         return;
     }
 
@@ -190,11 +192,11 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
         enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE + state->bytes_read, MIN(NFS_SEND_SIZE, PAGE_SIZE - state->bytes_read),
                                swap_in_handler, (uintptr_t)state);
         if (status != RPC_OK) {
-            swap_in_end(token, EFAULT);
+            swap_in_end((void*)token, EFAULT);
             return;
         }
     } else {
-        swap_in_end(token, err);
+        swap_in_end((void*)token, err);
     }
 }
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token){
@@ -205,6 +207,11 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
         return EFAULT;
     }
 
+    //use vaddr to get as->as_pd[x][y]
+    //and then use it to get the free slot
+    //this is currently a hack
+    //
+    //
     int free_slot = (vaddr & PTE_SWAP_OFFSET)>>2;
     err = swap_check_valid_offset(free_slot);
     if(err){
@@ -304,7 +311,7 @@ swap_out_3(swap_out_cont_t *cont) {
     cont->free_slot = free_slot;
 
     //TODO update the as->as_pd[x][y] so that it reflects free slot,
-
+    //as->as_pd[x][y] = (free_slot<<2) | (as_pd[x][y] & 3);
 
     //TODO: lock down the frame before writing
     enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE, NFS_SEND_SIZE,

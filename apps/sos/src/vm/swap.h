@@ -9,7 +9,7 @@
 #include "vfs/vnode.h"
 
 typedef void (*swap_out_cb_t)(void *token, int err);
-typedef void (*swap_in_cb_t)(uintptr_t token, int err);
+typedef void (*swap_in_cb_t)(void *token, int err);
 
 /*
  * Perform a swap in

@@ -35,8 +35,8 @@ int frame_free(seL4_Word vaddr);
  */
 int frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap);
 
-//int sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr);
-int sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr);
+int sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr);
+//int sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr);
 
 /*
  * Lock/Unlock a frame

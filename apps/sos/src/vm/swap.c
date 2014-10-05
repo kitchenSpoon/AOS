@@ -65,7 +65,7 @@ static int
 swap_find_free_slot(void){
     for(uint32_t i = 0; i < NUM_FREE_SLOTS; i++){
         for(uint32_t j = 0; j < NUM_BITS; j++){
-            printf("i = %d, j = %d, free_slots[i] = %u\n", i, j, free_slots[i]);
+            //printf("i = %d, j = %d, free_slots[i] in decimal = %u\n", i, j, free_slots[i]);
             if(!(free_slots[i] & (1<<j))){
                 return i*NUM_FREE_SLOTS + j;
             }
@@ -309,6 +309,7 @@ swap_out_3(swap_out_cont_t *cont) {
     swap_lock_slot(free_slot);
     printf("free slot = %d, bits = %d\n", free_slot, free_slots[0]);
     cont->free_slot = free_slot;
+        printf("swapout 3 err123\n");
 
     //TODO update the as->as_pd[x][y] so that it reflects free slot,
     //as->as_pd[x][y] = (free_slot<<2) | (as_pd[x][y] & 3);
@@ -318,6 +319,7 @@ swap_out_3(swap_out_cont_t *cont) {
                         (void*)cont->kvaddr, swap_out_4_nfs_write_cb, (uintptr_t)cont);
     if (status != RPC_OK) {
         //TODO unlock frame
+        printf("swapout 3 err\n");
         cont->callback(cont->token, EFAULT);
         free(cont);
         return;

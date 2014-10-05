@@ -30,8 +30,9 @@
 static int in;
 static sos_stat_t sbuf;
 
-static void benchmark();
+static int benchmark();
 static int benchmark2();
+static int thresh();
 
 static void prstat(const char *name) {
     /* print out stat buf */
@@ -280,7 +281,7 @@ struct command {
 
 struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2} };
+        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2}, {"thresh", thresh} };
 
 static void test_file_syscalls(void) {
     printf("Start file syscalls test...\n");
@@ -424,7 +425,7 @@ static void bm_write(char* filename, char* buf, size_t buf_size){
     close(fd);
 }
 
-static void
+static int
 benchmark(){
     /* Reads */
     printf("Reading\n");
@@ -475,6 +476,7 @@ benchmark(){
     printf("Writing\n");
     /* Writing with IO request changing*/
     /* Writing with packet changing */
+    return 0;
 }
 
 static
@@ -500,6 +502,20 @@ int benchmark2() {
 
     bm_read("read_test_3200000_7", (char*)buf3200000, 3200000);
     bm_write("write_test_3200000_7", (char*)buf3200000, 3200000);
+    return 0;
+}
+
+static
+int thresh(int argc, char *argv[]) {
+    if (argc != 3 ){//|| !isdigit(argv[1])) {
+        printf("Usage: thresh num_kilobytes test_char\n");
+        return 1;
+    }
+    char *big_buf = malloc(atoi(argv[1])*1024);
+    for(int i = 0; i < atoi(argv[1])*1024; i++){
+        big_buf[i] = argv[2][0];
+        printf("%c",big_buf[i]);
+    }
     return 0;
 }
 

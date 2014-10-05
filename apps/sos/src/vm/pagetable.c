@@ -189,11 +189,13 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
         /* Create pagetable if needed */
         as->as_pd_regs[x] = (pagetable_t)frame_alloc();
         if (as->as_pd_regs[x] == NULL) {
+            printf("sos_page_map err 1\n");
             return ENOMEM;
         }
 
         as->as_pd_caps[x] = (pagetable_t)frame_alloc();
         if (as->as_pd_caps[x] == 0) {
+            printf("sos_page_map err 2\n");
             frame_free((seL4_Word)as->as_pd_regs[x]);
             return ENOMEM;
         }
@@ -208,6 +210,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
     /* First we create a frame in SOS */
     kvaddr = frame_alloc();
     if (!kvaddr) {
+        printf("sos_page_map err 3\n");
         return ENOMEM;
     }
     err = frame_get_cap(kvaddr, &kframe_cap);

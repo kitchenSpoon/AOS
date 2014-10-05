@@ -15,6 +15,9 @@
 #include "vm/swap.h"
 #include "proc/proc.h"
 
+#define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
+#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART) 
+
 #define RW_BIT    (1<<11)
 static
 region_t*
@@ -44,7 +47,13 @@ typedef struct {
     seL4_Word kvaddr;
 } VMF_cont_t;
 
+seL4_Word rand_chance_swap(){
+    int id = rand() % NFRAMES;
+    return ID_TO_VADDR(id);
+}
+
 void sos_VMFaultHandler_end(void* token, int err){
+    printf("sos_vmf_end\n");
     //reply
 
     VMF_cont_t *state = (VMF_cont_t*)token;
@@ -65,15 +74,30 @@ void sos_VMFaultHandler_end(void* token, int err){
 }
 
 void sos_VMFaultHandler_swap_in_end(void* token, int err){
+    printf("sos_vmf_swapout to swapin, swap in ends\n");
     sos_VMFaultHandler_end(token, err);
 }
 
-
-void sos_VMFaultHandler_swap_out_end(void* token){
+void sos_VMFaultHandler_swapout_to_swapin(void* token, int err){
+    printf("sos_vmf_swapout to swapin\n");
     VMF_cont_t *state = (VMF_cont_t*)token;
     region_t* reg = _region_probe(state->as, state->vaddr);
     swap_in(state->as, reg->rights, state->vaddr, state->kvaddr, sos_VMFaultHandler_swap_in_end, token);
 }
+
+void sos_VMFaultHandler_swapout_to_pagein(void* token, int err){
+    printf("sos_vmf_swapout to pagein\n");
+    VMF_cont_t *state = (VMF_cont_t*)token;
+    printf("sos_vmf_swapout to pagein1\n");
+    region_t* reg = _region_probe(state->as, state->vaddr);
+    printf("sos_vmf_swapout to pagein2\n");
+    //this is hacky
+    //frame_free(state->kvaddr);
+
+    err = sos_page_map(state->as, state->vaddr, reg->rights);
+    printf("sos_vmf_swapout to pagein3 err = %d\n", err);
+}
+
 int
 sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr){
     if (fault_addr == 0) {
@@ -89,6 +113,8 @@ sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr){
 
     VMF_cont_t *token = malloc(sizeof(VMF_cont_t));
     token->reply = reply;
+    token->as = as;
+    token->vaddr = fault_addr;
 
     if (sos_page_is_mapped(as, fault_addr)) {
         /* Check if page is swapped in */
@@ -96,7 +122,9 @@ sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr){
             /* Swapped it back in */
             seL4_Word kvaddr = get_free_frame_kvaddr();
             if(kvaddr == -1){//not enough_memory){
-                //swap_out(sos_VMFaultHandler_swap_out_end);
+                kvaddr = rand_chance_swap();
+                token->kvaddr = kvaddr;
+                swap_out(kvaddr, sos_VMFaultHandler_swapout_to_swapin, (void*)token);
             } else {
               region_t* reg = _region_probe(as, fault_addr);
               token = malloc(sizeof(token));
@@ -124,7 +152,15 @@ sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr){
             //TODO check if we have enough memory here
             seL4_Word kvaddr = get_free_frame_kvaddr();
             if(kvaddr == -1){//not enough_memory){
-                //swap_out(sos_VMFaultHandler_swap_out_end);
+                for(int i = 0; i < 10; i++){
+                    kvaddr = rand_chance_swap();
+
+                    token->kvaddr = kvaddr;
+                    printf("swapout vm fault not eno mem\n");
+                    swap_out(kvaddr ,sos_VMFaultHandler_swapout_to_pagein, (void*)token);
+                    printf("swapout vm fault not eno mem2\n");
+
+                }
             } else {
                 err = sos_page_map(as, fault_addr, reg->rights);
                 if (err) {

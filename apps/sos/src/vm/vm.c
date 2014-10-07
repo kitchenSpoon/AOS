@@ -82,7 +82,10 @@ void sos_VMFaultHandler_swapout_to_swapin(void* token, int err){
     printf("sos_vmf_swapout to swapin\n");
     VMF_cont_t *state = (VMF_cont_t*)token;
     region_t* reg = _region_probe(state->as, state->vaddr);
-    swap_in(state->as, reg->rights, state->vaddr, state->kvaddr, sos_VMFaultHandler_swap_in_end, token);
+    err = swap_in(state->as, reg->rights, state->vaddr, state->kvaddr, sos_VMFaultHandler_swap_in_end, token);
+    if(err) {
+        //something
+    }
 }
 
 void sos_VMFaultHandler_swapout_to_pagein(void* token, int err){
@@ -96,6 +99,8 @@ void sos_VMFaultHandler_swapout_to_pagein(void* token, int err){
 
     err = sos_page_map(state->as, state->vaddr, reg->rights);
     printf("sos_vmf_swapout to pagein3 err = %d\n", err);
+
+    sos_VMFaultHandler_end(token, 0);
 }
 
 int
@@ -124,15 +129,23 @@ sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr){
             if(kvaddr == -1){//not enough_memory){
                 kvaddr = rand_chance_swap();
                 token->kvaddr = kvaddr;
-                swap_out(kvaddr, sos_VMFaultHandler_swapout_to_swapin, (void*)token);
+                swap_out(kvaddr, fault_addr, sos_VMFaultHandler_swapout_to_swapin, (void*)token);
+                return 0;
             } else {
               region_t* reg = _region_probe(as, fault_addr);
               token = malloc(sizeof(token));
+              //kvaddr is 1 because of some random reason, fix this when this code is actually called
               seL4_Word kvaddr = 1;//find_free_frame();
-              swap_in(as, reg->rights, fault_addr,kvaddr,sos_VMFaultHandler_swap_in_end,token);
+              int err = swap_in(as, reg->rights, fault_addr,kvaddr,sos_VMFaultHandler_swap_in_end,token);
+              if(err){
+                //something
+                return err;
+              }
+              return 0;
             }
         } else {
             /* This must be a readonly fault */
+            printf("vmf err1\n");
             return EACCES;
         }
     } else {
@@ -144,21 +157,23 @@ sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr){
         region_t* reg = _region_probe(as, fault_addr);
         if(reg != NULL){
             if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
+            printf("vmf err2\n");
                 return EACCES;
             }
             if (fault_when_read && !(reg->rights & seL4_CanRead)) {
+            printf("vmf err3\n");
                 return EACCES;
             }
             //TODO check if we have enough memory here
             seL4_Word kvaddr = get_free_frame_kvaddr();
             if(kvaddr == -1){//not enough_memory){
-                for(int i = 0; i < 10; i++){
+                for(int i = 0; i < 1; i++){
                     kvaddr = rand_chance_swap();
 
                     token->kvaddr = kvaddr;
-                    printf("swapout vm fault not eno mem\n");
-                    swap_out(kvaddr ,sos_VMFaultHandler_swapout_to_pagein, (void*)token);
-                    printf("swapout vm fault not eno mem2\n");
+                    printf("vm fault not enough memory, performing swapout now\n");
+                    swap_out(kvaddr , fault_addr, sos_VMFaultHandler_swapout_to_pagein, (void*)token);
+                    printf("vm fault swapout done\n");
 
                 }
             } else {
@@ -166,12 +181,14 @@ sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr){
                 if (err) {
                     return err;
                 }
+                sos_VMFaultHandler_end(token, 0);
             }
             return 0;
         }
-        sos_VMFaultHandler_end(token, err);
+        printf("vmf region is NULL\n");
+        sos_VMFaultHandler_end(token, EFAULT);
+        return EFAULT;
     }
-
     return EFAULT;
 }
 

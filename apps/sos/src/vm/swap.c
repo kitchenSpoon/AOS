@@ -147,7 +147,7 @@ void swap_in_end(void* token, int err){
 
     //map application page
     //this automaticallys sets the page as not swapped out
-    err = sos_swap_page_map(state->as, state->vaddr, state->kvaddr, state->rights);
+    err = sos_page_map(state->as, state->vaddr, state->rights);
     if(err){
         state->callback((void*)state->token, err);
         free(state);
@@ -222,6 +222,9 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
 
     /* Set our continuations */
     swap_in_cont_t *swap_cont = malloc(sizeof(swap_in_cont_t));
+    if(swap_cont == NULL){
+        return EFAULT;
+    }
     swap_cont->callback   = callback;
     swap_cont->token      = token;
     swap_cont->kvaddr     = kvaddr;
@@ -253,6 +256,7 @@ typedef struct {
     swap_out_cb_t callback;
     void *token;
     seL4_Word kvaddr;
+    seL4_Word vaddr;
     int free_slot;
     size_t written;
 } swap_out_cont_t;
@@ -288,6 +292,7 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     }
     printf("swap out 4 calling back up\n");
     //TODO unlock frame
+    frame_free(cont->kvaddr);
     cont->callback(cont->token, 0);
     free(cont);
 }
@@ -309,7 +314,6 @@ swap_out_3(swap_out_cont_t *cont) {
     swap_lock_slot(free_slot);
     printf("free slot = %d, bits = %d\n", free_slot, free_slots[0]);
     cont->free_slot = free_slot;
-        printf("swapout 3 err123\n");
 
     //TODO update the as->as_pd[x][y] so that it reflects free slot,
     //as->as_pd[x][y] = (free_slot<<2) | (as_pd[x][y] & 3);
@@ -344,7 +348,7 @@ swap_out_2_init_callback(void *token, int err) {
 }
 
 void
-swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
+swap_out(seL4_Word kvaddr, seL4_Word vaddr, swap_out_cb_t callback, void *token) {
     printf("swap out entered\n");
 
     //TODO lock frame
@@ -358,6 +362,7 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     cont->callback  = callback;
     cont->token     = token;
     cont->kvaddr    = kvaddr;
+    cont->vaddr    = vaddr;
     cont->written   = 0;
 
     /* Initialise the swap file if it hasn't been there */

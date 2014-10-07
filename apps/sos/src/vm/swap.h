@@ -27,6 +27,6 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
  * @param callback - the function that will be called when swap_out finished
  * @param token - this will be passed unchanged to the callback function
  */
-void swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token);
+void swap_out(seL4_Word kvaddr, seL4_Word vaddr, swap_out_cb_t callback, void *token);
 
 #endif /* _LIBOS_SWAP_H */

@@ -139,19 +139,30 @@ seL4_Word frame_alloc(void){
     int err;
     int ind = first_free;
 
-    /* Allocate and map this frame */
     seL4_Word vaddr = (seL4_Word)ID_TO_VADDR(ind);
 
-    err = _map_to_sel4(seL4_CapInitThreadPD, vaddr,
-                          &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
-    if (err) {
-        return 0;
-    }
+    //If this assert fails then our first_free is buggy
+    assert(frametable[ind].fte_status != FRAME_STATUS_ALLOCATED);
 
-    frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
-    frametable[ind].fte_vaddr  = vaddr;
-    frametable[ind].fte_pd     = seL4_CapInitThreadPD;
-    frametable[ind].frame_locked = false;
+    if(frametable[ind].fte_status == FRAME_STATUS_FREE){
+        frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
+        frametable[ind].fte_vaddr  = vaddr;
+        frametable[ind].frame_locked = false;
+    } else {
+
+        /* Allocate and map this frame */
+
+        err = _map_to_sel4(seL4_CapInitThreadPD, vaddr,
+                              &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
+        if (err) {
+            return 0;
+        }
+
+        frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
+        frametable[ind].fte_vaddr  = vaddr;
+        frametable[ind].fte_pd     = seL4_CapInitThreadPD;
+        frametable[ind].frame_locked = false;
+    }
 
     /* Zero fill memory */
     bzero((void *)(vaddr), (size_t)PAGE_SIZE);
@@ -160,6 +171,7 @@ seL4_Word frame_alloc(void){
     first_free = frametable[ind].fte_next_free;
 
     assert(IS_PAGESIZE_ALIGNED(vaddr));
+
     return vaddr;
 }
 
@@ -181,22 +193,31 @@ int frame_free(seL4_Word vaddr){
 
     //frame to be freed should not be locked
     if(frametable[id].frame_locked) {
+        //dont crash sos
         return EFAULT;
     }
 
     seL4_Word paddr = frametable[id].fte_paddr;
     seL4_CPtr frame_cap = frametable[id].fte_cap;
 
-    /* "Freeing" the frame */
-    int err = seL4_ARM_Page_Unmap(frame_cap);
-    assert(!err);
-    frametable[id].fte_status = FRAME_STATUS_FREE;
+    //TODO update this condition/heuristic
+    if(1){
+        /* We dont actually free the frame */
+        frametable[id].fte_status = FRAME_STATUS_FREE;
+    } else {
+        /* "Freeing" the frame */
+        int err = seL4_ARM_Page_Unmap(frame_cap);
+        assert(!err);
+        //frametable[id].fte_status = FRAME_STATUS_FREE;
 
-    /* Untyping the frame */
-    cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, frame_cap);
-    assert(cspace_err == CSPACE_NOERROR);
-    ut_free(paddr, seL4_PageBits);
-    frametable[id].fte_status = FRAME_STATUS_UNTYPED;
+        /* Untyping the frame */
+        cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, frame_cap);
+        assert(cspace_err == CSPACE_NOERROR);
+        ut_free(paddr, seL4_PageBits);
+        frametable[id].fte_status = FRAME_STATUS_UNTYPED;
+
+    }
+
 
     /* Update free frame list */
     frametable[id].fte_next_free = first_free;

@@ -171,6 +171,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
 
     if (as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         /* Did you even call as_create? */
+        printf("sos_page_map err einval 0\n");
         return EFAULT;
     }
 
@@ -203,10 +204,22 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
 
     if (as->as_pd_regs[x][y] & PTE_IN_USE_BIT) {
         /* page already mapped */
-        return EINVAL;
+        printf("sos_page_map err vaddr = %p\n",(void *)vaddr);
+        printf("sos_page_map err einval 1\n");
+        //currently this error happens because multiple VM fault on the same
+        //address is being called. When the first fault successfully map a page
+        //the second VM fault does not know that and it tries to mape a page again
+        //and fail. 
+        //The reason behind this behaviour is because VM fault is asynchronous
+        //and im calling swapout multiple times before mapping a page
+
+        //TODO fix this or make sure it is okay to leave it this way
+        return 0;
+        //return EINVAL;
     }
 
 
+    printf("sos_page_map vaddr = %p\n",(void *)vaddr);
     /* First we create a frame in SOS */
     kvaddr = frame_alloc();
     if (!kvaddr) {

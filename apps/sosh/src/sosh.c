@@ -512,6 +512,10 @@ int thresh(int argc, char *argv[]) {
         return 1;
     }
     char *big_buf = malloc(atoi(argv[1])*1024);
+    if(big_buf == NULL) {
+        printf("thresh failed to allocate enough memory\n");
+        return 0;
+    }
     for(int i = 0; i < atoi(argv[1])*1024; i++){
         big_buf[i] = argv[2][0];
         printf("%c",big_buf[i]);

@@ -198,14 +198,15 @@ void handle_pagefault(void) {
             /* SOS doesn't handle the fault, the process is doing something
              * wrong, kill it! */
             // Just not replying to it for now
-            printf("Process is (pretend to be) killed\n");
+            //printf("Process is (pretend to be) killed\n");
+            printf("Process is blocked err = %d\n",err);
         } else {
-            seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-            seL4_Send(reply_cap, reply);
+            //seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+            //seL4_Send(reply_cap, reply);
         }
 
         /* Free the saved reply cap */
-        cspace_free_slot(cur_cspace, reply_cap);
+        //cspace_free_slot(cur_cspace, reply_cap);
     }
 }
 
@@ -611,9 +612,10 @@ void swap_test2_swap_out(void *token, int err){
         p_stuff3[i] = 'c';
     }
     //asd
+    seL4_Word dummy_vaddr;
     p_stuff3[PAGE_SIZE-1] = '\0';
     printf("string = %s\n", p_stuff3);
-    swap_out((seL4_Word)p_stuff3, swap_test3, (void*)cont3);
+    swap_out((seL4_Word)p_stuff3, dummy_vaddr, swap_test3, (void*)cont3);
 }
 
 void swap_test2_out_again(void *token, int err){
@@ -640,11 +642,19 @@ void swap_test2(void *token, int err){
     
     //TODO fix this, fake vaddr, this is a hack
     seL4_Word vaddr = (cont->free_slot)<<2;
+    char * p_stuff = (char*)cont->kvaddr;
+    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+        //printf("swap loop at = %d\n", i);
+        p_stuff[i] = '0';
+    }
+    p_stuff[PAGE_SIZE-1] = '\0';
+    printf("string = %s\n", p_stuff);
     printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
     swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test3, token);
 }
 void swap_test(uint32_t id, void *data){
     printf("swap test\n");
+    seL4_Word dummy_vaddr;
 
     swap_test_cont *cont1 = malloc(sizeof(swap_test_cont));
     char* p_stuff = (char*)frame_alloc();
@@ -657,7 +667,7 @@ void swap_test(uint32_t id, void *data){
     }
     p_stuff[PAGE_SIZE-1] = '\0';
     printf("string = %s\n", p_stuff);
-    swap_out((seL4_Word)p_stuff, swap_test2, (void*)cont1);
+    swap_out((seL4_Word)p_stuff, dummy_vaddr, swap_test2, (void*)cont1);
 
     swap_test_cont *cont2 = malloc(sizeof(swap_test_cont));
     char* p_stuff2 = (char*)frame_alloc();
@@ -670,7 +680,7 @@ void swap_test(uint32_t id, void *data){
     }
     p_stuff2[PAGE_SIZE-1] = '\0';
     printf("string = %s\n", p_stuff2);
-    swap_out((seL4_Word)p_stuff2, swap_test2_out_again, (void*)cont2);
+    swap_out((seL4_Word)p_stuff2, dummy_vaddr, swap_test2, (void*)cont2);
 }
 
 /*

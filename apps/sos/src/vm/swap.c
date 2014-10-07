@@ -31,27 +31,27 @@ uint32_t free_slots[NUM_FREE_SLOTS];
 fhandle_t *swap_fh;
 
 /*static void
-swap_free_slot(seL4_Word offset){
+_unset_slot(seL4_Word offset){
     int slot = offset/(NUM_FREE_SLOTS * NUM_BITS);
     free_slots[slot/NUM_FREE_SLOTS] &= 0<<(slot%NUM_FREE_SLOTS);
     return;
 }
 
 static void
-swap_lock_slot(seL4_Word offset){
+_set_slot(seL4_Word offset){
     int slot = offset/(NUM_FREE_SLOTS * NUM_BITS);
     free_slots[slot/NUM_FREE_SLOTS] &= 1<<(slot%NUM_FREE_SLOTS);
     return;
 }*/
 
 static void
-swap_free_slot(int slot){
+_unset_slot(int slot){
     free_slots[slot/NUM_FREE_SLOTS] &= ~(1<<(slot%NUM_FREE_SLOTS));
     return;
 }
 
 static void
-swap_lock_slot(int slot){
+_set_slot(int slot){
     free_slots[slot/NUM_FREE_SLOTS] |= 1<<(slot%NUM_FREE_SLOTS);
     return;
 }
@@ -165,7 +165,7 @@ void swap_in_end(void* token, int err){
 
     //set that slot in bitmap as free
     int free_slot = state->vaddr & PTE_SWAP_OFFSET;;
-    swap_free_slot(free_slot);
+    _unset_slot(free_slot);
 
     free(state);
 }
@@ -210,8 +210,6 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     //use vaddr to get as->as_pd[x][y]
     //and then use it to get the free slot
     //this is currently a hack
-    //
-    //
     int free_slot = (vaddr & PTE_SWAP_OFFSET)>>2;
     err = swap_check_valid_offset(free_slot);
     if(err){
@@ -239,7 +237,7 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     /*TODO free the slot*/
 
     /* Lock the slot */
-    //swap_lock_slot(free_slot);
+    //_set_slot(free_slot);
 
     enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE , PAGE_SIZE, swap_in_handler, (uintptr_t)swap_cont);
     /* if status != RPC_OK this function will return error however the swap_in_handler might still run, bugg?*/
@@ -311,7 +309,7 @@ swap_out_3(swap_out_cont_t *cont) {
         return;
     }
 
-    swap_lock_slot(free_slot);
+    _set_slot(free_slot);
     printf("free slot = %d, bits = %d\n", free_slot, free_slots[0]);
     cont->free_slot = free_slot;
 

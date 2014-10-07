@@ -16,12 +16,22 @@ int frame_init(void);
  * Check if there is still free frame in the frametable
  */
 bool frame_has_free(void);
+
+
+/*
+ * Callback for frame_alloc
+ * @param kvaddr the return kernel address that SOS can use or NULL if there is
+ *               no more memory
+ */
+typedef void (*frame_alloc_cb_t)(void *token, seL4_Word kvaddr);
+
 /*
  * Allocate a new frame that could be used in SOS.
- *
- * Returns the vaddr of the allocated frame or NULL if failed
+ * This is an asynchronous function, when it finishes,
+ * it will call the *callback* function with *token* passed in unchanged
  */
-seL4_Word frame_alloc(void);
+int frame_alloc(frame_alloc_cb_t callback, void *token);
+//seL4_Word frame_alloc(void);
 
 /*
  * Free the frame with this SOS's vaddr
@@ -35,8 +45,11 @@ int frame_free(seL4_Word vaddr);
  */
 int frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap);
 
-int sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr);
-//int sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr);
+/*
+ * Handle VM fault for SOS
+ * This will be the one who reply to the client
+ */
+void sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr);
 
 /*
  * Lock/Unlock a frame
@@ -46,6 +59,7 @@ int frame_unlock_frame(seL4_Word vaddr);
 
 /*
  * Get kvaddr of a avaliable frame
+ * TODO: I don't think this is necessary anymore - Vy
  */
 seL4_Word get_free_frame_kvaddr();
 

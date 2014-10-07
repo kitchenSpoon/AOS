@@ -186,27 +186,12 @@ void handle_pagefault(void) {
         // we don't handle this
     } else {
         seL4_CPtr reply_cap;
-        int err;
 
         /* Save the caller */
         reply_cap = cspace_save_reply_cap(cur_cspace);
         assert(reply_cap != CSPACE_NULL);
 
-        //err = sos_VMFaultHandler(fault_addr, fsr);
-        err = sos_VMFaultHandler(reply_cap, fault_addr, fsr);
-        if (err) {
-            /* SOS doesn't handle the fault, the process is doing something
-             * wrong, kill it! */
-            // Just not replying to it for now
-            //printf("Process is (pretend to be) killed\n");
-            printf("Process is blocked err = %d\n",err);
-        } else {
-            //seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-            //seL4_Send(reply_cap, reply);
-        }
-
-        /* Free the saved reply cap */
-        //cspace_free_slot(cur_cspace, reply_cap);
+        sos_VMFaultHandler(reply_cap, fault_addr, fsr);
     }
 }
 
@@ -612,7 +597,7 @@ void swap_test2_swap_out(void *token, int err){
         p_stuff3[i] = 'c';
     }
     //asd
-    seL4_Word dummy_vaddr;
+    seL4_Word dummy_vaddr = 0xdeadbeef;
     p_stuff3[PAGE_SIZE-1] = '\0';
     printf("string = %s\n", p_stuff3);
     swap_out((seL4_Word)p_stuff3, dummy_vaddr, swap_test3, (void*)cont3);
@@ -654,7 +639,7 @@ void swap_test2(void *token, int err){
 }
 void swap_test(uint32_t id, void *data){
     printf("swap test\n");
-    seL4_Word dummy_vaddr;
+    seL4_Word dummy_vaddr = 0xdeadbeef;
 
     swap_test_cont *cont1 = malloc(sizeof(swap_test_cont));
     char* p_stuff = (char*)frame_alloc();

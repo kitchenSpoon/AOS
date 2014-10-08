@@ -139,16 +139,6 @@ void swap_in_end(void* token, int err){
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
     if(err){
-        state->callback((void *)state->token, 1);
-        free(state);
-        return;
-    }
-
-
-    //map application page
-    //this automaticallys sets the page as not swapped out
-    err = sos_page_map(state->as, state->vaddr, state->rights);
-    if(err){
         state->callback((void*)state->token, err);
         free(state);
         return;
@@ -168,6 +158,21 @@ void swap_in_end(void* token, int err){
     _unset_slot(free_slot);
 
     free(state);
+}
+
+void swap_in_page_map(void* token, int err){
+    printf("swap in page map entered\n");
+    swap_in_cont_t *state = (swap_in_cont_t*)token;
+
+    if(err){
+        state->callback((void *)state->token, 1);
+        free(state);
+        return;
+    }
+
+    //map application page
+    //this automaticallys sets the page as not swapped out
+    sos_page_map(state->as, state->vaddr, state->rights, swap_in_end, token);
 }
 void swap_in_handler(uintptr_t token, enum nfs_stat status,
                                 fattr_t *fattr, int count, void* data){
@@ -196,7 +201,7 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
             return;
         }
     } else {
-        swap_in_end((void*)token, err);
+        swap_in_page_map((void*)token, err);
     }
 }
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token){

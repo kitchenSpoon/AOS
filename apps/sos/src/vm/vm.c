@@ -47,11 +47,11 @@ typedef struct {
     seL4_Word kvaddr;
 } VMF_cont_t;
 
-static seL4_Word
-rand_chance_swap(){
-    int id = rand() % NFRAMES;
-    return ID_TO_VADDR(id);
-}
+//static seL4_Word
+//rand_chance_swap(){
+//    int id = rand() % NFRAMES;
+//    return ID_TO_VADDR(id);
+//}
 
 static void
 sos_VMFaultHandler_reply(void* token, int err){

@@ -496,64 +496,85 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
 #define TEST_1      1
 #define TEST_2      2
 #define TEST_3      4
+int ftc1, ftc2, ftc3;
+static void
+ft_test_1(void* token, seL4_Word kvaddr) {
+    (void)token;
+    int err;
+    assert(kvaddr);
+    printf("ft_test_1: kvaddr[%d] = 0x%08x\n", ftc1, kvaddr);
+    ftc1++;
+
+    /* Test you can touch the page */
+    *(int*)kvaddr = 0x37;
+    assert(*(int*)kvaddr == 0x37);
+
+    if (ftc1 < 10) {
+        err = frame_alloc(ft_test_1, NULL);
+        assert(!err);
+    } else {
+        printf("ft_test_1: Done!!!\n");
+    }
+}
+
+static void
+ft_test_2(void* token, seL4_Word kvaddr) {
+    (void)token;
+    int err;
+    printf("ft_test_2: kvaddr[%d] = 0x%08x\n", ftc2, kvaddr);
+    assert(kvaddr);
+    ftc2++;
+
+    /* Test you can touch the page */
+    int val = rand();
+    *(int*)kvaddr = val;
+    assert(*(int*)kvaddr == val);
+
+    err = frame_alloc(ft_test_2, NULL);
+    assert(!err);
+}
+
+static void
+ft_test_3(void* token, seL4_Word kvaddr) {
+    (void)token;
+    int err;
+    printf("ft_test_3: kvaddr[%d] = 0x%08x\n", ftc3, kvaddr);
+    assert(kvaddr);
+
+    /* Test you can touch the page */
+    int val = rand();
+    *(int*)kvaddr = val;
+    assert(*(int*)kvaddr == val);
+    frame_free(kvaddr);
+
+    err = frame_alloc(ft_test_3, NULL);
+    assert(!err);
+}
+
 static void
 frametable_test(uint32_t test_mask) {
+    int err;
+    srand(0);
     if (test_mask & TEST_1) {
         printf("Starting test 1...\n");
-        /* Allocate 10 pages and make sure you can touch them all */
-        for (int i = 0; i < 10; i++) {
-            /* Allocate a page */
-            seL4_Word vaddr = frame_alloc();
-            assert(vaddr);
-
-            /* Test you can touch the page */
-            *(int*)vaddr = 0x37;
-            assert(*(int*)vaddr == 0x37);
-
-            printf("Page #%d allocated at %p\n",  i, (void *) vaddr);
-        }
-        printf("Done!!!\n");
+        printf("Allocate 10 frames and touch them\n");
+        ftc1 = 0;
+        err = frame_alloc(ft_test_1, NULL);
+        assert(!err);
     }
     if (test_mask & TEST_2) {
         printf("Starting test 2...\n");
-        /* Test that you eventually run out of memory gracefully,
-           and doesn't crash */
-        int i = 0;
-        for (;;i++) {
-            /* Allocate a page */
-            seL4_Word vaddr = frame_alloc();
-            //printf("vaddr = 0x%08x\n", vaddr);
-            if (!vaddr) {
-                printf("Out of memory!\n");
-                break;
-            }
-
-            /* Test you can touch the page */
-            *(int*)vaddr = 0x37;
-            assert(*(int*)vaddr == 0x37);
-        }
-        printf("Allocated %d frames\n", i);
-        printf("Done!!!\n");
+        printf("Test that frame_alloc does not run out of memory thanks to swap out\n");
+        ftc2 = 0;
+        err = frame_alloc(ft_test_2, NULL);
+        assert(!err);
     }
     if (test_mask & TEST_3) {
         printf("Starting test 3...\n");
-        /* Test that you never run out of memory if you always free frames.
-           This loop should never finish */
-        for (int i = 0;; i++) {
-            /* Allocate a page */
-            seL4_Word vaddr = frame_alloc();
-            assert(vaddr != 0);
-
-            /* Test you can touch the page */
-            *(int*)vaddr = 0x37;
-            assert(*(int*)vaddr == 0x37);
-
-            printf("Page #%d allocated at %p\n",  i, (int*) vaddr);
-
-            frame_free(vaddr);
-        }
-        printf("Done!!!\n");
-
+        printf("Test that you never run out of memory if you always free frames.\n");
+        ftc3 = 0;
+        err = frame_alloc(ft_test_3, NULL);
+        assert(!err);
     }
 }
 
@@ -593,103 +614,103 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     return badged_cap;
 }
 
-typedef struct {
-    seL4_Word kvaddr;
-    int free_slot;
-} swap_test_cont;
-
-void swap_test3(void* token, int err){
-    printf("swapping test 3\n");
-    swap_test_cont *cont = (swap_test_cont*)token;
-    printf("%s\n",(char*)(cont->kvaddr));
-}
-
-void swap_test2_swap_out(void *token, int err){
-    printf("swapin going to swap something out again\n");
-    swap_test_cont *cont = (swap_test_cont*)token;
-    printf("%s\n",(char*)(cont->kvaddr));
-
-    /* swapout */
-    swap_test_cont *cont3 = malloc(sizeof(swap_test_cont));
-    char* p_stuff3 = (char*)frame_alloc();
-    cont3->kvaddr = (seL4_Word)p_stuff3;
-    cont3->free_slot = 0; // should be 0
-    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
-    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
-        //printf("swap loop at = %d\n", i);
-        p_stuff3[i] = 'c';
-    }
-    //asd
-    seL4_Word dummy_vaddr = 0xdeadbeef;
-    p_stuff3[PAGE_SIZE-1] = '\0';
-    printf("string = %s\n", p_stuff3);
-    swap_out((seL4_Word)p_stuff3, dummy_vaddr, swap_test3, (void*)cont3);
-}
-
-void swap_test2_out_again(void *token, int err){
-    /* swapin */
-    printf("swapping test 2\n");
-    addrspace_t *as = proc_getas();
-    swap_test_cont *cont = (swap_test_cont*)token;
-    //region_t* reg = _region_probe(as, token->kvaddr);
-    //0x07 == allrights
-    
-    //TODO fix this, fake vaddr, this is a hack
-    seL4_Word vaddr = (cont->free_slot)<<2;
-    printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
-    swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test2_swap_out, token);
-}
-
-void swap_test2(void *token, int err){
-    /* swapin */
-    printf("swapping test 2\n");
-    addrspace_t *as = proc_getas();
-    swap_test_cont *cont = (swap_test_cont*)token;
-    //region_t* reg = _region_probe(as, token->kvaddr);
-    //0x07 == allrights
-    
-    //TODO fix this, fake vaddr, this is a hack
-    seL4_Word vaddr = (cont->free_slot)<<2;
-    char * p_stuff = (char*)cont->kvaddr;
-    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
-        //printf("swap loop at = %d\n", i);
-        p_stuff[i] = '0';
-    }
-    p_stuff[PAGE_SIZE-1] = '\0';
-    printf("string = %s\n", p_stuff);
-    printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
-    swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test3, token);
-}
-void swap_test(uint32_t id, void *data){
-    printf("swap test\n");
-    seL4_Word dummy_vaddr = 0xdeadbeef;
-
-    swap_test_cont *cont1 = malloc(sizeof(swap_test_cont));
-    char* p_stuff = (char*)frame_alloc();
-    cont1->kvaddr = (seL4_Word)p_stuff;
-    cont1->free_slot = 0; // should be 0
-    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
-    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
-        //printf("swap loop at = %d\n", i);
-        p_stuff[i] = 'a';
-    }
-    p_stuff[PAGE_SIZE-1] = '\0';
-    printf("string = %s\n", p_stuff);
-    swap_out((seL4_Word)p_stuff, dummy_vaddr, swap_test2, (void*)cont1);
-
-    swap_test_cont *cont2 = malloc(sizeof(swap_test_cont));
-    char* p_stuff2 = (char*)frame_alloc();
-    cont2->kvaddr = (seL4_Word)p_stuff2;
-    cont2->free_slot = 1; // should be 1
-    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
-    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
-        //printf("swap loop at = %d\n", i);
-        p_stuff2[i] = 'b';
-    }
-    p_stuff2[PAGE_SIZE-1] = '\0';
-    printf("string = %s\n", p_stuff2);
-    swap_out((seL4_Word)p_stuff2, dummy_vaddr, swap_test2, (void*)cont2);
-}
+//typedef struct {
+//    seL4_Word kvaddr;
+//    int free_slot;
+//} swap_test_cont;
+//
+//void swap_test3(void* token, int err){
+//    printf("swapping test 3\n");
+//    swap_test_cont *cont = (swap_test_cont*)token;
+//    printf("%s\n",(char*)(cont->kvaddr));
+//}
+//
+//void swap_test2_swap_out(void *token, int err){
+//    printf("swapin going to swap something out again\n");
+//    swap_test_cont *cont = (swap_test_cont*)token;
+//    printf("%s\n",(char*)(cont->kvaddr));
+//
+//    /* swapout */
+//    swap_test_cont *cont3 = malloc(sizeof(swap_test_cont));
+//    char* p_stuff3 = (char*)frame_alloc();
+//    cont3->kvaddr = (seL4_Word)p_stuff3;
+//    cont3->free_slot = 0; // should be 0
+//    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
+//    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+//        //printf("swap loop at = %d\n", i);
+//        p_stuff3[i] = 'c';
+//    }
+//    //asd
+//    seL4_Word dummy_vaddr = 0xdeadbeef;
+//    p_stuff3[PAGE_SIZE-1] = '\0';
+//    printf("string = %s\n", p_stuff3);
+//    swap_out((seL4_Word)p_stuff3, dummy_vaddr, swap_test3, (void*)cont3);
+//}
+//
+//void swap_test2_out_again(void *token, int err){
+//    /* swapin */
+//    printf("swapping test 2\n");
+//    addrspace_t *as = proc_getas();
+//    swap_test_cont *cont = (swap_test_cont*)token;
+//    //region_t* reg = _region_probe(as, token->kvaddr);
+//    //0x07 == allrights
+//
+//    //TODO fix this, fake vaddr, this is a hack
+//    seL4_Word vaddr = (cont->free_slot)<<2;
+//    printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
+//    swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test2_swap_out, token);
+//}
+//
+//void swap_test2(void *token, int err){
+//    /* swapin */
+//    printf("swapping test 2\n");
+//    addrspace_t *as = proc_getas();
+//    swap_test_cont *cont = (swap_test_cont*)token;
+//    //region_t* reg = _region_probe(as, token->kvaddr);
+//    //0x07 == allrights
+//
+//    //TODO fix this, fake vaddr, this is a hack
+//    seL4_Word vaddr = (cont->free_slot)<<2;
+//    char * p_stuff = (char*)cont->kvaddr;
+//    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+//        //printf("swap loop at = %d\n", i);
+//        p_stuff[i] = '0';
+//    }
+//    p_stuff[PAGE_SIZE-1] = '\0';
+//    printf("string = %s\n", p_stuff);
+//    printf("swap_test2 kvaddr = %p\n",(void*)cont->kvaddr);
+//    swap_in(as, 0x07 , vaddr, cont->kvaddr, swap_test3, token);
+//}
+//void swap_test(uint32_t id, void *data){
+//    printf("swap test\n");
+//    seL4_Word dummy_vaddr = 0xdeadbeef;
+//
+//    swap_test_cont *cont1 = malloc(sizeof(swap_test_cont));
+//    char* p_stuff = //(char*)frame_alloc();
+//    cont1->kvaddr = (seL4_Word)p_stuff;
+//    cont1->free_slot = 0; // should be 0
+//    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
+//    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+//        //printf("swap loop at = %d\n", i);
+//        p_stuff[i] = 'a';
+//    }
+//    p_stuff[PAGE_SIZE-1] = '\0';
+//    printf("string = %s\n", p_stuff);
+//    swap_out((seL4_Word)p_stuff, dummy_vaddr, swap_test2, (void*)cont1);
+//
+//    swap_test_cont *cont2 = malloc(sizeof(swap_test_cont));
+//    char* p_stuff2 = (char*)frame_alloc();
+//    cont2->kvaddr = (seL4_Word)p_stuff2;
+//    cont2->free_slot = 1; // should be 1
+//    printf("swap total loops = %d\n",PAGE_SIZE/sizeof(char));
+//    for(int i = 0; i < PAGE_SIZE/sizeof(char); i++) {
+//        //printf("swap loop at = %d\n", i);
+//        p_stuff2[i] = 'b';
+//    }
+//    p_stuff2[PAGE_SIZE-1] = '\0';
+//    printf("string = %s\n", p_stuff2);
+//    swap_out((seL4_Word)p_stuff2, dummy_vaddr, swap_test2, (void*)cont2);
+//}
 
 /*
  * Main entry point - called by crt.
@@ -713,14 +734,14 @@ int main(void) {
 
     /* Init file system */
     filesystem_init();
-    //frametable_test(TEST_1 | TEST_3);
+    frametable_test(TEST_1 | TEST_2);
 
-    /* Register swap test */
-    register_timer(1000000, swap_test, NULL); //100ms
+    ///* Register swap test */
+    //register_timer(1000000, swap_test, NULL); //100ms
 
-    /* Wait on synchronous endpoint for IPC */
-    dprintf(0, "\nSOS entering syscall loop\n");
-    syscall_loop(_sos_ipc_ep_cap);
+    ///* Wait on synchronous endpoint for IPC */
+    //dprintf(0, "\nSOS entering syscall loop\n");
+    //syscall_loop(_sos_ipc_ep_cap);
 
     /* Not reached */
     return 0;

@@ -301,6 +301,7 @@ typedef struct{
 
 
 void start_first_process_part3(void* token, int err){ 
+    printf("start first process part3\n");
     conditional_panic(err, "Failed to load elf image");
     start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
 
@@ -333,6 +334,10 @@ void start_first_process_part3(void* token, int err){
 }
 
 void start_first_process_part2(void* token, addrspace_t *as){ 
+    printf("start first process part2\n");
+    if(as->as_pd_caps == NULL || as->as_pd_regs == NULL){
+        printf("WTF\n");
+    }
     start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
 
     tty_test_process.as = as;
@@ -343,6 +348,7 @@ void start_first_process_part2(void* token, addrspace_t *as){
 }
 
 void start_first_process(char* app_name, seL4_CPtr fault_ep) {
+    printf("start first process\n");
     int err;
 
     //seL4_Word stack_addr;
@@ -410,15 +416,19 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
+    printf("start first process part magic\n");
 
     /* Initialise the continuation preparing to call as_create */
     start_first_process_cont_t* cont = malloc(sizeof(start_first_process_cont_t));
     conditional_panic(cont == NULL, "Unable to allocate memory for first process");
 
+    printf("start first process part magic\n");
     cont->elf_base = elf_base;
 
+    printf("start first process part magic\n");
     /* initialise address space */
     as_create(tty_test_process.vroot, start_first_process_part2, (void*)cont);
+    printf("start first process part magic\n");
 }
 
 static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
@@ -726,8 +736,6 @@ int main(void) {
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
 
-    /* Start the user application */
-    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     /* Initialize timer driver */
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
@@ -740,9 +748,12 @@ int main(void) {
     ///* Register swap test */
     //register_timer(1000000, swap_test, NULL); //100ms
 
+    /* Start the user application */
+    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
+
     ///* Wait on synchronous endpoint for IPC */
-    //dprintf(0, "\nSOS entering syscall loop\n");
-    //syscall_loop(_sos_ipc_ep_cap);
+    dprintf(0, "\nSOS entering syscall loop\n");
+    syscall_loop(_sos_ipc_ep_cap);
 
     /* Not reached */
     return 0;

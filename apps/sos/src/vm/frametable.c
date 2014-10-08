@@ -144,6 +144,7 @@ typedef struct {
 
 static void
 frame_alloc_end(void* token, int err){
+    printf("frame alloc end\n");
 
     if (token == NULL) {
         printf("error: frame_alloc_end: shit happened\n");
@@ -209,6 +210,7 @@ frame_alloc_end(void* token, int err){
 
 static void
 frame_alloc_swap_out_cb(void *token, int err) {
+    printf("frame alloc cb\n");
     assert(token != NULL); // if this is NULL, memory is corrupted
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
@@ -225,6 +227,7 @@ frame_alloc_swap_out_cb(void *token, int err) {
 }
 
 int frame_alloc(frame_alloc_cb_t callback, void* token){
+    printf("frame alloc\n");
 
     if (!frame_initialised) {
         callback(token, 0);
@@ -241,6 +244,7 @@ int frame_alloc(frame_alloc_cb_t callback, void* token){
 
     /* If we do not have enough memory, start swapping frames out */
     if(first_free == FRAME_INVALID) {
+        printf("frame alloc no memory\n");
         seL4_Word kvaddr = rand_swap_victim();
         // the frame returned is not locked
 

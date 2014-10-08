@@ -64,6 +64,7 @@ typedef struct {
 
 static void
 load_segment_into_vspace3(void* token, int err){
+    printf("load segment into vspace3\n");
     load_segment_cont_t* cont = (load_segment_cont_t*)token;
     if (err) {
         cont->callback(cont->token, err);
@@ -109,6 +110,7 @@ load_segment_into_vspace3(void* token, int err){
 }
 
 static void load_segment_into_vspace2(void* token, int err){
+    printf("load segment into vspace2\n");
 
     load_segment_cont_t* cont = (load_segment_cont_t*)token;
 
@@ -117,10 +119,12 @@ static void load_segment_into_vspace2(void* token, int err){
         seL4_Word vpage;
         vpage = PAGE_ALIGN(cont->dst);
 
+        printf("load segment into vspace2 page map\n");
         sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token);
         return;
     }
 
+    printf("load segment into vspace2 out\n");
     cont->callback(cont->token, 0);
     free(cont);
 }
@@ -130,6 +134,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
                                     unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
                                     unsigned long permissions, load_segment_cb_t callback, void* token) {
+    printf("load segment into vspace\n");
     assert(file_size <= segment_size);
 
     load_segment_cont_t* cont = malloc(sizeof(load_segment_cont_t));
@@ -146,7 +151,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
     cont->callback = callback;
     cont->token = token;
 
-    load_segment_into_vspace2((void*)token, 0);
+    load_segment_into_vspace2((void*)cont, 0);
 
     return 0;
 }
@@ -207,15 +212,18 @@ typedef struct {
 } elf_load_cont_t;
 
 void elf_load_part2(void* token, int err){
+    printf("elf_load... part 2\n");
 
     elf_load_cont_t* cont = (elf_load_cont_t*)token;
     if (err) {
+        printf("elf_load... part 2 err\n");
         cont->callback(cont->token, err);
         free(cont);
         return;
     }
 
     if(cont->i < cont->num_headers) {
+        printf("cont->i = %d, cont->num_headers = %lu\n",cont->i,cont->num_headers);
         char *source_addr;
         unsigned long flags, file_size, segment_size, vaddr, rights;
 
@@ -224,6 +232,7 @@ void elf_load_part2(void* token, int err){
             //this simulates a continue
             cont->i++;
             elf_load_part2(token, 0);
+            return;
         }
 
         /* Fetch information about this segment. */
@@ -237,8 +246,10 @@ void elf_load_part2(void* token, int err){
         /* Define the region */
         dprintf(1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
 
+        printf("elf_load... part 2.2\n");
         err = as_define_region(cont->as, vaddr, segment_size, rights);
         if (err) {
+            printf("elf_load... part 2 err2 \n");
             cont->callback(cont->token, err);
             free(cont);
             return;
@@ -246,10 +257,13 @@ void elf_load_part2(void* token, int err){
 
         cont->i++;
 
+        printf("elf_load... part 2.3\n");
         /* Copy it across into the vspace. */
         err = load_segment_into_vspace(cont->as, source_addr, segment_size, file_size,
                                        vaddr, rights, elf_load_part2, (void*)cont);
+        printf("elf_load... part 2.4\n");
         if (err) {
+            printf("elf_load... part 2 err load segment\n");
             cont->callback(cont->token, err);
             free(cont);
             return;

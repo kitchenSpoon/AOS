@@ -102,6 +102,7 @@ typedef struct {
 } sos_page_map_cont_t;
 
 void sos_page_map_part5(void* token, seL4_Word kvaddr){
+    printf("sos_page_map 5\n");
 
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
@@ -152,6 +153,7 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
 }
 
 void sos_page_map_part4(void* token){
+    printf("sos_page_map 4\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
@@ -175,6 +177,7 @@ void sos_page_map_part4(void* token){
 }
 
 void sos_page_map_part3(void* token, seL4_Word kvaddr){
+    printf("sos_page_map 3\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
@@ -194,6 +197,7 @@ void sos_page_map_part3(void* token, seL4_Word kvaddr){
 
 void
 sos_page_map_part2(void* token, seL4_Word kvaddr){
+    printf("sos_page_map 2\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     if (kvaddr == 0) {
@@ -219,9 +223,11 @@ sos_page_map_part2(void* token, seL4_Word kvaddr){
 
 int
 sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_map_cb_t callback, void* token) {
+    printf("sos_page_map\n");
     if (as == NULL) {
         return EINVAL;
     }
+
 
     if (as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         /* Did you even call as_create? */

@@ -296,12 +296,10 @@ static void print_bootinfo(const seL4_BootInfo* info) {
 
 
 typedef struct{
-    seL4_UserContext* context;
-    size_t context_size;
     char* elf_base;
 } start_first_process_cont_t;
 
-void start_first_process_part2(void* token, addrspace_t *as){ 
+void start_first_process_part2(void* token, addrspace_t *as){
     start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
 
     tty_test_process.as = as;
@@ -328,14 +326,14 @@ void start_first_process_part2(void* token, addrspace_t *as){
     conditional_panic(err, "Unable to initialise filetable for user app");
 
     /* Start the new process */
-    memset(cont->context, 0, cont->context_size);
-    cont->context->pc = elf_getEntryPoint(cont->elf_base);
-    cont->context->sp = PROCESS_STACK_TOP;
-    seL4_TCB_WriteRegisters(tty_test_process.tcb_cap, 1, 0, 2, cont->context);
+    seL4_UserContext context;
+
+    memset(&context, 0, sizeof(context));
+    context.pc = elf_getEntryPoint(cont->elf_base);
+    context.sp = PROCESS_STACK_TOP;
+    seL4_TCB_WriteRegisters(tty_test_process.tcb_cap, 1, 0, 2, &context);
 
     /* Clear */
-    free(cont->context);
-    free(cont->elf_base);
     free(cont);
 }
 
@@ -345,9 +343,6 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     //seL4_Word stack_addr;
     //seL4_CPtr stack_cap;
     seL4_CPtr user_ep_cap;
-
-    /* These required for setting up the TCB */
-    seL4_UserContext context;
 
     /* These required for loading program sections */
     char* elf_base;
@@ -411,13 +406,14 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
-    /* initialise address space */
+    /* Initialise the continuation preparing to call as_create */
     start_first_process_cont_t* cont = malloc(sizeof(start_first_process_cont_t));
-    cont->context = &context;
-    cont->context_size = sizeof(context);
-    cont->elf_base = elf_base;
-    as_create(tty_test_process.vroot, start_first_process_part2, (void*)cont);
+    conditional_panic(cont == NULL, "Unable to allocate memory for first process");
 
+    cont->elf_base = elf_base;
+
+    /* initialise address space */
+    as_create(tty_test_process.vroot, start_first_process_part2, (void*)cont);
 }
 
 static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){

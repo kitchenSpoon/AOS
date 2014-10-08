@@ -294,6 +294,51 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"--------------------------------------------------------\n");
 }
 
+
+typedef struct{
+    seL4_UserContext* context;
+    size_t context_size;
+    char* elf_base;
+} start_first_process_cont_t;
+
+void start_first_process_part2(void* token, addrspace_t *as){ 
+    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
+
+    tty_test_process.as = as;
+    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
+
+    /* load the elf image */
+    int err = elf_load(tty_test_process.as, cont->elf_base);
+    conditional_panic(err, "Failed to load elf image");
+
+    /* set up the stack & the heap */
+    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
+    as_define_heap(tty_test_process.as);
+    conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
+
+    /* Map in the IPC buffer for the thread */
+    err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,
+                   PROCESS_IPC_BUFFER,
+                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    conditional_panic(err, "Unable to map IPC buffer for user app");
+
+    /* Initialise filetable for this process */
+    err = filetable_init(NULL, NULL, NULL);
+    conditional_panic(err, "Unable to initialise filetable for user app");
+
+    /* Start the new process */
+    memset(cont->context, 0, cont->context_size);
+    cont->context->pc = elf_getEntryPoint(cont->elf_base);
+    cont->context->sp = PROCESS_STACK_TOP;
+    seL4_TCB_WriteRegisters(tty_test_process.tcb_cap, 1, 0, 2, cont->context);
+
+    /* Clear */
+    free(cont->context);
+    free(cont->elf_base);
+    free(cont);
+}
+
 void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     int err;
 
@@ -367,34 +412,12 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
     /* initialise address space */
-    tty_test_process.as = as_create(tty_test_process.vroot);
-    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
+    start_first_process_cont_t* cont = malloc(sizeof(start_first_process_cont_t));
+    cont->context = &context;
+    cont->context_size = sizeof(context);
+    cont->elf_base = elf_base;
+    as_create(tty_test_process.vroot, start_first_process_part2, (void*)cont);
 
-    /* load the elf image */
-    err = elf_load(tty_test_process.as, elf_base);
-    conditional_panic(err, "Failed to load elf image");
-
-    /* set up the stack & the heap */
-    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
-    conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
-    as_define_heap(tty_test_process.as);
-    conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
-
-    /* Map in the IPC buffer for the thread */
-    err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,
-                   PROCESS_IPC_BUFFER,
-                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    conditional_panic(err, "Unable to map IPC buffer for user app");
-
-    /* Initialise filetable for this process */
-    err = filetable_init(NULL, NULL, NULL);
-    conditional_panic(err, "Unable to initialise filetable for user app");
-
-    /* Start the new process */
-    memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint(elf_base);
-    context.sp = PROCESS_STACK_TOP;
-    seL4_TCB_WriteRegisters(tty_test_process.tcb_cap, 1, 0, 2, &context);
 }
 
 static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){

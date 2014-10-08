@@ -301,15 +301,9 @@ typedef struct{
     char* elf_base;
 } start_first_process_cont_t;
 
-void start_first_process_part2(void* token, addrspace_t *as){ 
-    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
-
-    tty_test_process.as = as;
-    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
-
-    /* load the elf image */
-    int err = elf_load(tty_test_process.as, cont->elf_base);
+void start_first_process_part3(void* token, int err){ 
     conditional_panic(err, "Failed to load elf image");
+    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
 
     /* set up the stack & the heap */
     as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
@@ -337,6 +331,16 @@ void start_first_process_part2(void* token, addrspace_t *as){
     free(cont->context);
     free(cont->elf_base);
     free(cont);
+}
+
+void start_first_process_part2(void* token, addrspace_t *as){ 
+    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
+
+    tty_test_process.as = as;
+    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
+
+    /* load the elf image */
+    elf_load(tty_test_process.as, cont->elf_base, start_first_process_part3, token);
 }
 
 void start_first_process(char* app_name, seL4_CPtr fault_ep) {

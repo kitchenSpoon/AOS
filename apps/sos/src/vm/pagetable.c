@@ -163,48 +163,66 @@ sos_swap_page_map(addrspace_t *as, seL4_Word vaddr, seL4_Word kvaddr, uint32_t p
     return 0;
 }
 
-int
-sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
-    if (as == NULL) {
-        return EINVAL;
-    }
+typedef struct {
+    addrspace_t* as; 
+    seL4_Word vaddr;
+    uint32_t permissions
+} sos_page_map_cont_t;
 
-    if (as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
-        /* Did you even call as_create? */
-        printf("sos_page_map err einval 0\n");
+int sos_page_map_part5(void* token, seL4_Word kvaddr){
+
+    sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
+
+    seL4_CPtr kframe_cap, frame_cap;
+
+    /* First we create a frame in SOS */
+    if (!kvaddr) {
+        printf("sos_page_map err 3\n");
+        cont->callback((void*)(cont->token), ENOMEM);
+        free(cont);
+        return ENOMEM;
+    }
+    err = frame_get_cap(kvaddr, &kframe_cap);
+    assert(!err); // There should be no error
+
+
+    /* Copy the frame cap as we need to map it into 2 address spaces */
+    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, permissions);
+    if (frame_cap == CSPACE_NULL) {
+        frame_free(kvaddr);
+        cont->callback((void*)(cont->token), EFAULT);
+        free(cont);
         return EFAULT;
     }
 
-    int x, y, err;
-    seL4_Word vpage, kvaddr;
-    seL4_CPtr kframe_cap, frame_cap;
-
-
-    vpage = PAGE_ALIGN(vaddr);
-    x = PT_L1_INDEX(vpage);
-    y = PT_L2_INDEX(vpage);
-
-    if (as->as_pd_regs[x] == NULL) {
-        assert(as->as_pd_caps[x] == NULL);
-
-        /* Create pagetable if needed */
-        as->as_pd_regs[x] = (pagetable_t)frame_alloc();
-        if (as->as_pd_regs[x] == NULL) {
-            printf("sos_page_map err 1\n");
-            return ENOMEM;
-        }
-
-        as->as_pd_caps[x] = (pagetable_t)frame_alloc();
-        if (as->as_pd_caps[x] == 0) {
-            printf("sos_page_map err 2\n");
-            frame_free((seL4_Word)as->as_pd_regs[x]);
-            return ENOMEM;
-        }
+    /* Map the frame into application's address spaces */
+    err = _map_page(as, frame_cap, vpage, permissions,
+                    seL4_ARM_Default_VMAttributes);
+    if (err) {
+        frame_free(kvaddr);
+        cspace_delete_cap(cur_cspace, frame_cap);
+        cont->callback((void*)(cont->token), err);
+        free(cont);
+        return err;
     }
 
-    if (as->as_pd_regs[x][y] & PTE_IN_USE_BIT) {
+    /* Insert PTE into application's pagetable */
+    as->as_pd_regs[x][y] = kvaddr | PTE_IN_USE_BIT;
+    as->as_pd_caps[x][y] = frame_cap;
+
+    /* Calling back up */
+    cont->callback((void*)(cont->token), 0);
+    free(cont);
+    return 0;
+
+}
+
+int sos_page_map_part4(void* token){
+    sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
+
+    if (cont->as->as_pd_regs[x][y] & PTE_IN_USE_BIT) {
         /* page already mapped */
-        printf("sos_page_map err vaddr = %p\n",(void *)vaddr);
+        printf("sos_page_map err vaddr = %p\n",(void *)(cont->vaddr));
         printf("sos_page_map err einval 1\n");
         //currently this error happens because multiple VM fault on the same
         //address is being called. When the first fault successfully map a page
@@ -218,37 +236,77 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions) {
         //return EINVAL;
     }
 
-
     printf("sos_page_map vaddr = %p\n",(void *)vaddr);
-    /* First we create a frame in SOS */
-    kvaddr = frame_alloc();
-    if (!kvaddr) {
-        printf("sos_page_map err 3\n");
+    frame_alloc(sos_page_map_part5 ,token);
+}
+
+int sos_page_map_part3(void* token, seL4_Word kvaddr){
+    sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
+
+    cont->as->as_pd_caps[x] = (pagetable_t)kvaddr;
+    if (cont->as->as_pd_caps[x] == 0) {
+        printf("sos_page_map err 2\n");
+        frame_free((seL4_Word)(cont->as->as_pd_regs[x]));
+        cont->callback((void*)(cont->token), ENOMEM);
+        free(cont);
         return ENOMEM;
     }
-    err = frame_get_cap(kvaddr, &kframe_cap);
-    assert(!err); // There should be no error
 
+    sos_page_map_part4(token);
+}
 
-    /* Copy the frame cap as we need to map it into 2 address spaces */
-    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, permissions);
-    if (frame_cap == CSPACE_NULL) {
-        frame_free(kvaddr);
+int sos_page_map_part2(void* token, seL4_Word kvaddr){
+    sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
+
+    cont->as->as_pd_regs[x] = (pagetable_t)kvaddr;
+    if (cont->as->as_pd_regs[x] == NULL) {
+        printf("sos_page_map err 1\n");
+        cont->callback((void*)(cont->token), ENOMEM);
+        free(cont);
+        return ENOMEM;
+    }
+
+    frame_alloc(sos_page_map_part2, token);
+}
+
+int
+sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_map_cb_t callback, void* token) {
+    if (as == NULL) {
+        return EINVAL;
+    }
+
+    if (as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
+        /* Did you even call as_create? */
+        printf("sos_page_map err einval 0\n");
         return EFAULT;
     }
 
-    /* Map the frame into application's address spaces */
-    err = _map_page(as, frame_cap, vpage, permissions,
-                    seL4_ARM_Default_VMAttributes);
-    if (err) {
-        frame_free(kvaddr);
-        cspace_delete_cap(cur_cspace, frame_cap);
-        return err;
+    sos_page_map_cont_t* cont = malloc(sizeof(sos_page_map_cont_t));
+    if(cont == NULL){
+        return ENOMEM;
+    }
+    cont->as = as;
+    cont->vaddr = vaddr;
+    cont->permissions = permissions;
+    cont->callback = callback;
+    cont->token = token;
+
+    int x, y, err;
+    seL4_Word vpage;
+
+    vpage = PAGE_ALIGN(vaddr);
+    x = PT_L1_INDEX(vpage);
+    y = PT_L2_INDEX(vpage);
+
+    if (as->as_pd_regs[x] == NULL) {
+        assert(as->as_pd_caps[x] == NULL);
+
+        /* Create pagetable if needed */
+        frame_alloc(sos_page_map_part2, (void*)cont);
+        return 0;
     }
 
-    /* Insert PTE into application's pagetable */
-    as->as_pd_regs[x][y] = kvaddr | PTE_IN_USE_BIT;
-    as->as_pd_caps[x][y] = frame_cap;
+    sos_page_map_part4((void*)cont);
     return 0;
 }
 

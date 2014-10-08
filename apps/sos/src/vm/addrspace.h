@@ -105,7 +105,8 @@ int elf_load(addrspace_t *as, char* elf_file);
  *
  * @Returns 0 if succesful
  */
-int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions);
+typedef void (*sos_page_map_cb_t)(void *token, int err);
+int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_map_cb_t callback, void* token);
 
 /*
  * Map a page into the shadow Pagetable with an existing frame in sos

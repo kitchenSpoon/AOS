@@ -20,7 +20,7 @@
 
 #define FRAME_INVALID            (-1)
 
-#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART) 
+#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
 #define VADDR_TO_ID(vaddr)  (((vaddr) - FRAME_VSTART) / PAGE_SIZE)
 
 /* Frame table entry structure */
@@ -55,10 +55,10 @@ _map_to_sel4(const seL4_ARM_PageDirectory pd, const seL4_Word vaddr, seL4_Word *
     }
 
     /* Retype memory */
-    cspace_err_t cspace_err = cspace_ut_retype_addr(*paddr, 
-                                                    seL4_ARM_SmallPageObject, 
+    cspace_err_t cspace_err = cspace_ut_retype_addr(*paddr,
+                                                    seL4_ARM_SmallPageObject,
                                                     seL4_PageBits,
-                                                    cur_cspace, 
+                                                    cur_cspace,
                                                     cap);
     if (cspace_err != CSPACE_NOERROR) {
         ut_free(*paddr, seL4_PageBits);
@@ -127,7 +127,7 @@ bool frame_has_free(void) {
     return (first_free != FRAME_INVALID);
 }
 
-seL4_Word frame_alloc(void){
+int frame_alloc(frame_alloc_cb_t callback, void *token){
 
     if (!frame_initialised) {
         return 0;
@@ -263,7 +263,7 @@ int frame_lock_frame(seL4_Word vaddr){
     } else {
         frametable[id].frame_locked = true;
         return 0;
-    } 
+    }
 }
 
 int frame_unlock_frame(seL4_Word vaddr){
@@ -285,7 +285,7 @@ int frame_unlock_frame(seL4_Word vaddr){
     } else {
         frametable[id].frame_locked = false;
         return 0;
-    } 
+    }
 }
 
 seL4_Word get_free_frame_kvaddr(){

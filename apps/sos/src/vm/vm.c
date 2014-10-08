@@ -56,18 +56,9 @@ rand_chance_swap(){
 static void
 sos_VMFaultHandler_reply(void* token, int err){
     printf("sos_vmf_end\n");
+    (void)err;
 
     VMF_cont_t *state = (VMF_cont_t*)token;
-
-//    if (err) {
-//        /* SOS doesn't handle the fault, the process is doing something
-//         * wrong, kill it! */
-//        // Just not replying to it for now
-//        printf("Process is (pretend to be) killed\n");
-//    } else {
-//        seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-//        seL4_Send(state->reply_cap, reply);
-//    }
 
     /* If there is an err here, it is not the process's fault
      * It is either the kernel running out of memory or swapping doesn't work

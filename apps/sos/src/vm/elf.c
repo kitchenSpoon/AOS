@@ -25,6 +25,8 @@
 #include <sys/debug.h>
 #include <sys/panic.h>
 
+static void load_segment_into_vspace2(void* token, int err);
+
 /*
  * Convert ELF permissions into seL4 permissions.
  */
@@ -56,6 +58,8 @@ typedef struct {
     unsigned long dst;
     unsigned long permissions;
     unsigned long pos;
+    load_segment_cb_t callback;
+    void* token;
 } load_segment_cont_t;
 
 static void
@@ -117,7 +121,7 @@ static void load_segment_into_vspace2(void* token, int err){
         return;
     }
 
-    cont->callback(cont->token);
+    cont->callback(cont->token, 0);
     free(cont);
 }
 
@@ -194,8 +198,8 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
 
 
 typedef struct {
-    int i = 0;
-    addrspace_t* = as;
+    int i;
+    addrspace_t* as;
     char* elf_file;
     int num_headers;
     elf_load_cb_t callback;
@@ -216,8 +220,11 @@ void elf_load_part2(void* token, int err){
         unsigned long flags, file_size, segment_size, vaddr, rights;
 
         /* Skip non-loadable segments (such as debugging data). */
-        if (elf_getProgramHeaderType(cont->elf_file, cont->i) != PT_LOAD)
-            continue;
+        if (elf_getProgramHeaderType(cont->elf_file, cont->i) != PT_LOAD){
+            //this simulates a continue
+            cont->i++;
+            elf_load_part2(token, 0);
+        }
 
         /* Fetch information about this segment. */
         source_addr = cont->elf_file + elf_getProgramHeaderOffset(cont->elf_file, cont->i);
@@ -240,7 +247,7 @@ void elf_load_part2(void* token, int err){
         cont->i++;
 
         /* Copy it across into the vspace. */
-        err = load_segment_into_vspace(as, source_addr, segment_size, file_size,
+        err = load_segment_into_vspace(cont->as, source_addr, segment_size, file_size,
                                        vaddr, rights, elf_load_part2, (void*)cont);
         if (err) {
             cont->callback(cont->token, err);
@@ -251,7 +258,7 @@ void elf_load_part2(void* token, int err){
         return;
     }
 
-    cont->callback(cont->token);
+    cont->callback(cont->token, 0);
     free(cont);
 }
 

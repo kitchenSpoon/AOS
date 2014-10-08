@@ -27,10 +27,10 @@ as_create_end(as_create_cont_t *cont, int err) {
     /* Clean up as needed */
     if (cont->as) {
         if (cont->as->as_pd_caps != NULL) {
-            frame_free(cont->as->as_pd_caps);
+            frame_free((seL4_Word)(cont->as->as_pd_caps));
         }
         if (cont->as->as_pd_regs != NULL) {
-            frame_free(cont->as->as_pd_regs);
+            frame_free((seL4_Word)(cont->as->as_pd_regs));
         }
     }
     cont->callback(cont->token, NULL);
@@ -49,8 +49,8 @@ as_create_pagedir_regs_allocated(void *token, seL4_Word kvaddr) {
         as_create_end(cont, ENOMEM);
         return;
     }
-    as->as_pd_regs = (pagedir_t)kvaddr;
-    bzero((void*)as->as_pd_regs, PAGE_SIZE);
+    cont->as->as_pd_regs = (pagedir_t)kvaddr;
+    bzero((void*)(cont->as->as_pd_regs), PAGE_SIZE);
 
     as_create_end(cont, 0);
     return;
@@ -69,8 +69,8 @@ as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
         as_create_end(cont, ENOMEM);
         return;
     }
-    as->as_pd_caps = (pagedir_t)kvaddr;
-    bzero((void*)as->as_pd_caps, PAGE_SIZE);
+    cont->as->as_pd_caps = (pagedir_t)kvaddr;
+    bzero((void*)(cont->as->as_pd_caps), PAGE_SIZE);
 
     err = frame_alloc(as_create_pagedir_regs_allocated, (void*)cont);
     if (err) {

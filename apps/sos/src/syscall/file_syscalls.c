@@ -287,9 +287,9 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         return;
     }
 
-    err = frame_alloc(serv_sys_write_get_kbuf, (void*)token);
+    err = frame_alloc(serv_sys_write_get_kbuf, (void*)cont);
     if (err) {
-        erv_sys_write_end((void*)cont, EFAULT, 0);
+        serv_sys_write_end((void*)cont, EFAULT, 0);
         return;
     }
 }
@@ -303,7 +303,7 @@ serv_sys_write_get_kbuf(void *token, seL4_Word kvaddr) {
         return;
     }
     cont->kbuf = kbuf;
-    serv_sys_write_send_date(cont);
+    serv_sys_write_send_data(cont);
 }
 
 /* Is inteded to be called repeatedly in this layer if the write data is too large */

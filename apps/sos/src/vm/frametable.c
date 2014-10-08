@@ -10,6 +10,7 @@
 #include "vm/vm.h"
 #include "vm/mapping.h"
 #include "vm/vmem_layout.h"
+#include "vm/swap.h"
 #include "tool/utility.h"
 
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
@@ -150,7 +151,7 @@ frame_alloc_end(void* token, int err){
     }
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
-        cont->callback(cont->token, NULL);
+        cont->callback(cont->token, 0);
         free(cont);
         return;
     }
@@ -159,7 +160,7 @@ frame_alloc_end(void* token, int err){
     if (first_free == FRAME_INVALID) {
         // This should not happen though because of swapping
         printf("warning: frame_alloc_end: failed in getting a free frame\n");
-        cont->callback(cont->token, NULL);
+        cont->callback(cont->token, 0);
         free(cont);
         return;
     }
@@ -185,7 +186,7 @@ frame_alloc_end(void* token, int err){
         err = _map_to_sel4(seL4_CapInitThreadPD, kvaddr,
                            &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
         if (err) {
-            cont->callback(cont->token, NULL);
+            cont->callback(cont->token, 0);
             free(cont);
             return;
         }
@@ -204,7 +205,6 @@ frame_alloc_end(void* token, int err){
 
     cont->callback(cont->token, kvaddr);
     free(cont);
-    return 0;
 }
 
 static void
@@ -212,7 +212,7 @@ frame_alloc_swap_out_cb(void *token, int err) {
     assert(token != NULL); // if this is NULL, memory is corrupted
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
-        cont->callback(cont->token, NULL);
+        cont->callback(cont->token, 0);
         free(cont);
         return;
     }
@@ -227,13 +227,13 @@ frame_alloc_swap_out_cb(void *token, int err) {
 int frame_alloc(frame_alloc_cb_t callback, void* token){
 
     if (!frame_initialised) {
-        callback(token, NULL);
+        callback(token, 0);
         return EFAULT;
     }
 
     frame_alloc_cont_t *cont = malloc(sizeof(frame_alloc_cb_t));
     if(cont == NULL){
-        callback(token, NULL);
+        callback(token, 0);
         return EFAULT;
     }
     cont->callback = callback;
@@ -246,7 +246,7 @@ int frame_alloc(frame_alloc_cb_t callback, void* token){
 
         int ind = (int)KVADDR_TO_ID(kvaddr);
         cont->victim_id = ind;
-        swap_out(kvaddr, frametable[ind].fte_kvaddr, frame_alloc_swap_out_cb, (void*)cont) {
+        swap_out(kvaddr, frame_alloc_swap_out_cb, (void*)cont); 
         return 0;
     }
 

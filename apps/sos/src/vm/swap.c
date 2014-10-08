@@ -14,6 +14,7 @@
 #include "vm/swap.h"
 #include "dev/nfs_dev.h"
 #include "vm/addrspace.h"
+#include "vm/vm.h"
 
 /*
  * Bitmap use to track free slots in our swap file

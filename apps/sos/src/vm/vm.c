@@ -45,6 +45,7 @@ typedef struct {
     seL4_CapRights rights;
     seL4_Word vaddr;
     seL4_Word kvaddr;
+    region_t* reg;
 } VMF_cont_t;
 
 //static seL4_Word
@@ -104,7 +105,9 @@ sos_VMFaultHandler_swap_in_end(void* token, int err){
 
 static void
 sos_VMFaultHandler_swap_in_1(void *token, seL4_Word kvaddr) {
-    int err = swap_in(as, reg->rights, fault_addr, kvaddr,
+    VMF_cont_t *cont = (VMF_cont_t*)token;
+
+    int err = swap_in(cont->as, cont->reg->rights, cont->vaddr, kvaddr,
                       sos_VMFaultHandler_swap_in_end, cont);
     if (err) {
         sos_VMFaultHandler_reply((void*)cont, EFAULT);
@@ -114,6 +117,8 @@ sos_VMFaultHandler_swap_in_1(void *token, seL4_Word kvaddr) {
 
 void
 sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
+    int err = 0;
+
     if (fault_addr == 0) {
         /* Derefenrecing NULL? Segfault */
         cspace_free_slot(cur_cspace, reply_cap);
@@ -168,24 +173,28 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     cont->reply_cap = reply_cap;
     cont->as = as;
     cont->vaddr = fault_addr;
+    cont->reg = reg;
 
     /* Check if this page is an new, unmaped page or is it just swapped out */
     if (sos_page_is_mapped(as, fault_addr)) {
         if (sos_page_is_swapped(as, fault_addr)) {
             /* This page is swapped out, we need to swap it back in */
             //seL4_Word kvaddr = frame_alloc();
-            err = frame_alloc(sos_VMFaultHandler_swap_in_1(), (void*)cont);
+            err = frame_alloc(sos_VMFaultHandler_swap_in_1, (void*)cont);
             if (err) {
                 sos_VMFaultHandler_reply((void*)cont, err);
                 return;
             }
+            //swapin here
             return;
         }
     } else {
         /* This page has never been mapped, so do that and return */
         //TODO: this function will need to be broken down here
-        int err = sos_page_map(as, fault_addr, reg->rights);
-        sos_VMFaultHandler_reply((void*)cont, err);
+        int err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont);
+        if(err){
+            sos_VMFaultHandler_reply((void*)cont, err);
+        }
         return;
     }
     /* Otherwise, this is not handled */

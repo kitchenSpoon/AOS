@@ -52,7 +52,8 @@ copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte) {
         size_t cpy_sz;
         int err;
         if(!sos_page_is_mapped(as, PAGE_ALIGN(buf))) {
-            sos_page_map(as, PAGE_ALIGN(buf), permissions);
+            //TODO make this asynchronous
+            //sos_page_map(as, PAGE_ALIGN(buf), permissions);
         }
 
         /* Get the user buffer's corresponding kernel address */

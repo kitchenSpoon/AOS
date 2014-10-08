@@ -30,6 +30,8 @@ typedef void (*frame_alloc_cb_t)(void *token, seL4_Word kvaddr);
  * This is an asynchronous function, when it finishes,
  * it will call the *callback* function with *token* passed in unchanged
  */
+//TODO: frame_alloc might need to take in another field indicating whether this
+//frame is unswappable
 int frame_alloc(frame_alloc_cb_t callback, void *token);
 //seL4_Word frame_alloc(void);
 
@@ -56,6 +58,7 @@ void sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr);
  */
 int frame_lock_frame(seL4_Word vaddr);
 int frame_unlock_frame(seL4_Word vaddr);
+int frame_is_locked(seL4_Word vaddr, bool *is_locked);
 
 /*
  * Get kvaddr of a avaliable frame

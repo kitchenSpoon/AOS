@@ -20,18 +20,19 @@
 
 #define FRAME_INVALID            (-1)
 
-#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
-#define VADDR_TO_ID(vaddr)  (((vaddr) - FRAME_VSTART) / PAGE_SIZE)
+#define ID_TO_KVADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
+#define KVADDR_TO_ID(kvaddr)  (((kvaddr) - FRAME_VSTART) / PAGE_SIZE)
 
 /* Frame table entry structure */
 typedef struct {
     seL4_CPtr fte_cap;
     seL4_Word fte_paddr;
-    seL4_Word fte_vaddr;
-    seL4_ARM_PageDirectory fte_pd;
+    seL4_Word fte_kvaddr;
+    seL4_ARM_PageDirectory fte_pd; // This represents an ASID
     int fte_status;
     int fte_next_free;
-    bool frame_locked;
+    bool fte_locked;
+    //TODO: add an unswappable field
 } frame_entry_t;
 
 
@@ -41,12 +42,12 @@ static bool frame_initialised;
 size_t frametable_reserved;           // # of frames the frametable consumes
 
 /*
- * This function allocate a frame cap and then map it to the indicated VADDR
+ * This function allocate a frame cap and then map it to the indicated KVADDR
  *
  * Return: 0 iff success
  */
 static int
-_map_to_sel4(const seL4_ARM_PageDirectory pd, const seL4_Word vaddr, seL4_Word *paddr, seL4_CPtr *cap) {
+_map_to_sel4(const seL4_ARM_PageDirectory pd, const seL4_Word kvaddr, seL4_Word *paddr, seL4_CPtr *cap) {
 
     /* Allocate memory */
     *paddr = ut_alloc(seL4_PageBits);
@@ -66,7 +67,7 @@ _map_to_sel4(const seL4_ARM_PageDirectory pd, const seL4_Word vaddr, seL4_Word *
     }
 
     /* Map memory */
-    int err = map_page(*cap, pd, vaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    int err = map_page(*cap, pd, kvaddr, seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if (err) {
         ut_free(*paddr, seL4_PageBits);
         cspace_delete_cap(cur_cspace, *cap);
@@ -81,26 +82,26 @@ frame_init(void){
 
     /* Calculate the amount of memory required for the frame table */
     size_t frametable_sz = NFRAMES * sizeof(frame_entry_t);
-    frametable = (frame_entry_t*)ID_TO_VADDR(0);
+    frametable = (frame_entry_t*)ID_TO_KVADDR(0);
 
     /* Allocate memory for frametable to use */
     size_t i = 0;
     for (; i*PAGE_SIZE < frametable_sz; i++) {
-        seL4_Word vaddr = (seL4_Word)ID_TO_VADDR(i);
+        seL4_Word kvaddr = (seL4_Word)ID_TO_KVADDR(i);
         seL4_Word tmp_paddr;
         seL4_CPtr tmp_cap;
-        int err = _map_to_sel4(seL4_CapInitThreadPD, vaddr, &tmp_paddr, &tmp_cap);
+        int err = _map_to_sel4(seL4_CapInitThreadPD, kvaddr, &tmp_paddr, &tmp_cap);
         if (err) {
             return err;
         }
 
         frametable[i].fte_paddr     = tmp_paddr;
         frametable[i].fte_cap       = tmp_cap;
-        frametable[i].fte_vaddr     = vaddr;
+        frametable[i].fte_kvaddr    = kvaddr;
         frametable[i].fte_status    = FRAME_STATUS_ALLOCATED;
         frametable[i].fte_pd        = seL4_CapInitThreadPD;
         frametable[i].fte_next_free = FRAME_INVALID;
-        frametable[i].frame_locked = false;
+        frametable[i].fte_locked    = false;
     }
 
     /* Mark the number of frames occupied by the frametable */
@@ -127,98 +128,134 @@ bool frame_has_free(void) {
     return (first_free != FRAME_INVALID);
 }
 
+static seL4_Word
+rand_swap_victim(){
+    int id = rand() % NFRAMES;
+    //TODO: check if frame is unswappable and not locked
+    return ID_TO_KVADDR(id);
+}
+
 typedef struct {
    frame_alloc_cb_t callback;
    void* token;
+   int victim_id;
 } frame_alloc_cont_t;
 
-seL4_Word frame_alloc_part2(void* token, int err){
+static void
+frame_alloc_end(void* token, int err){
 
-    assert(token != NULL);
+    if (token == NULL) {
+        printf("error: frame_alloc_end: shit happened\n");
+        return;
+    }
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
-        cont->callback(cont->token, err);
+        cont->callback(cont->token, NULL);
         free(cont);
+        return;
     }
 
-    //swap out should have free the frame that it swaps out so we should have a free frame now
+    /* Make sure that we have free frame */
+    if (first_free == FRAME_INVALID) {
+        // This should not happen though because of swapping
+        printf("warning: frame_alloc_end: failed in getting a free frame\n");
+        cont->callback(cont->token, NULL);
+        free(cont);
+        return;
+    }
+
     int ind = first_free;
 
-    seL4_Word vaddr = (seL4_Word)ID_TO_VADDR(ind);
+    seL4_Word kvaddr = (seL4_Word)ID_TO_KVADDR(ind);
 
     //If this assert fails then our first_free is buggy
     assert(frametable[ind].fte_status != FRAME_STATUS_ALLOCATED);
 
-    /* If the frame has been typed, we simple allocated it */
     if(frametable[ind].fte_status == FRAME_STATUS_FREE){
+        /* If the frame has been typed, we simple allocated it */
+
         frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
-        frametable[ind].fte_vaddr  = vaddr;
-        frametable[ind].frame_locked = false;
+        frametable[ind].fte_kvaddr = kvaddr;
+        frametable[ind].fte_pd     = seL4_CapInitThreadPD;
+        frametable[ind].fte_locked = false;
     } else {
-    /* Else we have to typed it */
+        /* Else we have to typed it */
 
         /* Allocate and map this frame */
-
-        err = _map_to_sel4(seL4_CapInitThreadPD, vaddr,
-                              &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
+        err = _map_to_sel4(seL4_CapInitThreadPD, kvaddr,
+                           &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
         if (err) {
-            cont->callback(cont->token, 0);
+            cont->callback(cont->token, NULL);
             free(cont);
-            return 1;
+            return;
         }
 
         frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
-        frametable[ind].fte_vaddr  = vaddr;
+        frametable[ind].fte_kvaddr = kvaddr;
         frametable[ind].fte_pd     = seL4_CapInitThreadPD;
-        frametable[ind].frame_locked = false;
+        frametable[ind].fte_locked = false;
     }
 
     /* Zero fill memory */
-    bzero((void *)(vaddr), (size_t)PAGE_SIZE);
+    bzero((void *)(kvaddr), (size_t)PAGE_SIZE);
 
     /* Update free frame list */
     first_free = frametable[ind].fte_next_free;
 
-    assert(IS_PAGESIZE_ALIGNED(vaddr));
-
-    cont->callback(cont->token, vaddr);
+    cont->callback(cont->token, kvaddr);
     free(cont);
     return 0;
 }
 
-seL4_Word frame_alloc(frame_alloc_cb_t callback, void* token){
-
-    if (!frame_initialised) {
-        frame_alloc_part2((void*)cont ,1);
-        return 0;
+static void
+frame_alloc_swap_out_cb(void *token, int err) {
+    assert(token != NULL); // if this is NULL, memory is corrupted
+    frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
+    if(err){
+        cont->callback(cont->token, NULL);
+        free(cont);
+        return;
     }
 
-    /* Init continuations */
+    /* Update free frame list */
+    frametable[cont->victim_id].fte_next_free = first_free;
+    first_free = cont->victim_id;
+
+    frame_alloc_end((void*)cont, 0);
+}
+
+int frame_alloc(frame_alloc_cb_t callback, void* token){
+
+    if (!frame_initialised) {
+        callback(token, NULL);
+        return EFAULT;
+    }
+
     frame_alloc_cont_t *cont = malloc(sizeof(frame_alloc_cb_t));
     if(cont == NULL){
-        frame_alloc_part2((void*)cont ,EFAULT);
+        callback(token, NULL);
         return EFAULT;
     }
     cont->callback = callback;
     cont->token = token;
 
-
     /* If we do not have enough memory, start swapping frames out */
     if(first_free == FRAME_INVALID) {
-        seL4_Word kvaddr = rand_chance_swap();
-        int ind = (int)VADDR_TO_ID(kvaddr);
-        //need to check if frame is locked
+        seL4_Word kvaddr = rand_swap_victim();
+        // the frame returned is not locked
 
-        swap_out(seL4_Word kvaddr, frametable[ind].fte_vaddr, frame_alloc_part2, (void*)cont) {
+        int ind = (int)KVADDR_TO_ID(kvaddr);
+        cont->victim_id = ind;
+        swap_out(kvaddr, frametable[ind].fte_kvaddr, frame_alloc_swap_out_cb, (void*)cont) {
         return 0;
     }
 
     /* Else we have free frames to allocate */
-    frame_alloc_part2((void*)cont ,0);
+    frame_alloc_end((void*)cont, 0);
     return 0;
 }
 
-int frame_free(seL4_Word vaddr){
+int frame_free(seL4_Word kvaddr){
     /* May have concurency issues */
 
     if (!frame_initialised) {
@@ -226,7 +263,7 @@ int frame_free(seL4_Word vaddr){
         return EFAULT;
     }
 
-    int id = (int)VADDR_TO_ID(vaddr);
+    int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
         return EINVAL;
     }
@@ -235,32 +272,42 @@ int frame_free(seL4_Word vaddr){
     }
 
     //frame to be freed should not be locked
-    if(frametable[id].frame_locked) {
+    if(frametable[id].fte_locked) {
         //dont crash sos
         return EFAULT;
     }
 
-    seL4_Word paddr = frametable[id].fte_paddr;
-    seL4_CPtr frame_cap = frametable[id].fte_cap;
 
+    /* Optimization: we only actually untype the memory sometimes
+     * Other times, we only reset the status of the frame to FREE */
     //TODO update this condition/heuristic
-    if(1){
+    if (true) {
         /* We dont actually free the frame */
-        frametable[id].fte_status = FRAME_STATUS_FREE;
+        frametable[id].fte_status    = FRAME_STATUS_FREE;
     } else {
+        seL4_Word paddr = frametable[id].fte_paddr;
+        seL4_CPtr frame_cap = frametable[id].fte_cap;
+
         /* "Freeing" the frame */
         int err = seL4_ARM_Page_Unmap(frame_cap);
-        assert(!err);
-        //frametable[id].fte_status = FRAME_STATUS_FREE;
+        if (err) {
+            return EFAULT;
+        }
 
-        /* Untyping the frame */
-        cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, frame_cap);
-        assert(cspace_err == CSPACE_NOERROR);
-        ut_free(paddr, seL4_PageBits);
+        // set here so if fails after, the frame is still usable
         frametable[id].fte_status = FRAME_STATUS_UNTYPED;
 
+        cspace_err_t cspace_err = cspace_delete_cap(cur_cspace, frame_cap);
+        if (cspace_err != CSPACE_NOERROR) {
+            return EFAULT;
+        }
+
+        ut_free(paddr, seL4_PageBits);
     }
 
+    /* Clear other fields */
+    frametable[id].fte_locked = false;
+    frametable[id].fte_pd     = 0;
 
     /* Update free frame list */
     frametable[id].fte_next_free = first_free;
@@ -270,13 +317,13 @@ int frame_free(seL4_Word vaddr){
 }
 
 int
-frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap) {
+frame_get_cap(seL4_Word kvaddr, seL4_CPtr *frame_cap) {
     *frame_cap = -1;
     if (!frame_initialised) {
         return EFAULT;
     }
 
-    int id = (int)VADDR_TO_ID(vaddr);
+    int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
         return EINVAL;
     }
@@ -287,12 +334,30 @@ frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap) {
     return 0;
 }
 
-int frame_lock_frame(seL4_Word vaddr){
+int
+frame_is_locked(seL4_Word kvaddr, bool *is_locked) {
      if (!frame_initialised) {
         return EFAULT;
     }
 
-    int id = (int)VADDR_TO_ID(vaddr);
+    int id = (int)KVADDR_TO_ID(kvaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return EINVAL;
+    }
+    if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
+        return EINVAL;
+    }
+    *is_locked = frametable[id].fte_locked;
+    return 0;
+}
+
+int
+frame_lock_frame(seL4_Word kvaddr){
+     if (!frame_initialised) {
+        return EFAULT;
+    }
+
+    int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
         return EINVAL;
     }
@@ -301,20 +366,21 @@ int frame_lock_frame(seL4_Word vaddr){
     }
 
     //might need to do this atomically?
-    if(frametable[id].frame_locked == true) {
+    if(frametable[id].fte_locked == true) {
         return EINVAL;
     } else {
-        frametable[id].frame_locked = true;
+        frametable[id].fte_locked = true;
         return 0;
     }
 }
 
-int frame_unlock_frame(seL4_Word vaddr){
+int
+frame_unlock_frame(seL4_Word kvaddr){
      if (!frame_initialised) {
         return EFAULT;
     }
 
-    int id = (int)VADDR_TO_ID(vaddr);
+    int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
         return EINVAL;
     }
@@ -323,23 +389,17 @@ int frame_unlock_frame(seL4_Word vaddr){
     }
 
     //might need to do this atomically?
-    if(frametable[id].frame_locked == false) {
+    if(frametable[id].fte_locked == false) {
         return EINVAL;
     } else {
-        frametable[id].frame_locked = false;
+        frametable[id].fte_locked = false;
         return 0;
     }
 }
 
 seL4_Word get_free_frame_kvaddr(){
     if(first_free != FRAME_INVALID){
-        return (seL4_Word)ID_TO_VADDR(first_free);
+        return (seL4_Word)ID_TO_KVADDR(first_free);
     }
     return FRAME_INVALID;
-}
-
-static seL4_Word
-rand_chance_swap(){
-    int id = rand() % NFRAMES;
-    return ID_TO_VADDR(id);
 }

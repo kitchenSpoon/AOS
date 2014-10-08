@@ -254,7 +254,6 @@ typedef struct {
     swap_out_cb_t callback;
     void *token;
     seL4_Word kvaddr;
-    seL4_Word vaddr;
     int free_slot;
     size_t written;
 } swap_out_cont_t;
@@ -346,7 +345,7 @@ swap_out_2_init_callback(void *token, int err) {
 }
 
 void
-swap_out(seL4_Word kvaddr, seL4_Word vaddr, swap_out_cb_t callback, void *token) {
+swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     printf("swap out entered\n");
 
     //TODO lock frame
@@ -360,7 +359,6 @@ swap_out(seL4_Word kvaddr, seL4_Word vaddr, swap_out_cb_t callback, void *token)
     cont->callback  = callback;
     cont->token     = token;
     cont->kvaddr    = kvaddr;
-    cont->vaddr    = vaddr;
     cont->written   = 0;
 
     /* Initialise the swap file if it hasn't been there */

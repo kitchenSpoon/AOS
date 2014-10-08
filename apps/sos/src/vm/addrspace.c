@@ -10,38 +10,106 @@
 #define N_PAGETABLES       (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 
-addrspace_t
-*as_create(seL4_ARM_PageDirectory sel4_pd) {
-    addrspace_t* as = malloc(sizeof(addrspace_t));
-    if (as == NULL)
-        return as;
+typedef struct {
+    addrspace_t *as;
+    as_create_cb_t callback;
+    void *token;
+} as_create_cont_t;
 
-    /* Initialise page directories */
-    seL4_Word vaddr = frame_alloc();
-    if (vaddr == 0) {
-        free(as);
-        return NULL;
+static void
+as_create_end(as_create_cont_t *cont, int err) {
+    if (!err) {
+        cont->callback(cont->token, cont->as);
+        free(cont);
+        return;
     }
-    as->as_pd_caps = (pagedir_t)vaddr;
 
-    vaddr = frame_alloc();
-    if (vaddr == 0) {
-        free(as);
-        return NULL;
+    /* Clean up as needed */
+    if (cont->as) {
+        if (cont->as->as_pd_caps != NULL) {
+            frame_free(cont->as->as_pd_caps);
+        }
+        if (cont->as->as_pd_regs != NULL) {
+            frame_free(cont->as->as_pd_regs);
+        }
     }
-    as->as_pd_regs = (pagedir_t)vaddr;
+    cont->callback(cont->token, NULL);
+    return;
+}
 
-    bzero((void*)as->as_pd_caps, PAGE_SIZE);
+static void
+as_create_pagedir_regs_allocated(void *token, seL4_Word kvaddr) {
+    as_create_cont_t *cont = (as_create_cont_t*)token;
+    if (cont == NULL) {
+        printf("as_create_pagedir_regs_allocated: There is something wrong with the memory\n");
+        return;
+    }
+
+    if (kvaddr == 0) {
+        as_create_end(cont, ENOMEM);
+        return;
+    }
+    as->as_pd_regs = (pagedir_t)kvaddr;
     bzero((void*)as->as_pd_regs, PAGE_SIZE);
 
-    /* Initialise the remaining values */
+    as_create_end(cont, 0);
+    return;
+}
+
+static void
+as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
+    int err;
+    as_create_cont_t *cont = (as_create_cont_t*)token;
+    if (cont == NULL) {
+        printf("as_create_pagedir_caps_allocated: There is something wrong with the memory\n");
+        return;
+    }
+
+    if (kvaddr == 0) {
+        as_create_end(cont, ENOMEM);
+        return;
+    }
+    as->as_pd_caps = (pagedir_t)kvaddr;
+    bzero((void*)as->as_pd_caps, PAGE_SIZE);
+
+    err = frame_alloc(as_create_pagedir_regs_allocated, (void*)cont);
+    if (err) {
+        as_create_end(cont, err);
+        return;
+    }
+}
+
+int
+as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) {
+    int err;
+    addrspace_t* as = malloc(sizeof(addrspace_t));
+    if (as == NULL) {
+        return ENOMEM;
+    }
+    as->as_pd_caps = NULL;
+    as->as_pd_regs = NULL;
     as->as_rhead   = NULL;
     as->as_stack   = NULL;
     as->as_heap    = NULL;
     as->as_sel4_pd = sel4_pd;
     as->as_pt_head = NULL;
 
-    return as;
+    as_create_cont_t *cont = malloc(sizeof(as_create_cont_t));
+    if (cont == NULL) {
+        free(as);
+        return ENOMEM;
+    }
+    cont->callback = callback;
+    cont->token    = token;
+    cont->as       = NULL;
+
+    err = frame_alloc(as_create_pagedir_caps_allocated, (void*)cont);
+    if (err) {
+        free(as);
+        free(cont);
+        return err;
+    }
+    return 0;
 }
 
 void

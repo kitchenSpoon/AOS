@@ -211,8 +211,9 @@ typedef struct {
     size_t start;
 } cont_write_t;
 
+static void serv_sys_write_get_kbuf(void *token, seL4_Word kvaddr);
+static void serv_sys_write_send_data(cont_write_t *cont);
 static void serv_sys_write_end(void *token, int err, size_t size);
-static void serv_sys_write_2(cont_write_t *cont);
 
 static
 void serv_sys_write_end(void *token, int err, size_t size){
@@ -225,7 +226,7 @@ void serv_sys_write_end(void *token, int err, size_t size){
         //printf("cont->start = %u, cont->nbyte = %u\n", cont->start, cont->nbyte);
         if (cont->start < cont->nbyte) {
             /* Continue writing if haven't finished yet */
-            serv_sys_write_2(cont);
+            serv_sys_write_send_data(cont);
             return;
         }
     }
@@ -286,21 +287,29 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         return;
     }
 
-    char *kbuf = (char*)frame_alloc();
+    err = frame_alloc(serv_sys_write_get_kbuf, (void*)token);
+    if (err) {
+        erv_sys_write_end((void*)cont, EFAULT, 0);
+        return;
+    }
+}
+
+static void
+serv_sys_write_get_kbuf(void *token, seL4_Word kvaddr) {
+    cont_write_t *cont = (cont_write_t*)token;
+    char *kbuf = (char*)kvaddr;
     if (kbuf == NULL) {
         serv_sys_write_end((void*)cont, ENOMEM, 0);
         return;
     }
     cont->kbuf = kbuf;
-
-    serv_sys_write_2(cont);
-    //printf("serv_sys_write ended\n");
+    serv_sys_write_send_date(cont);
 }
 
 /* Is inteded to be called repeatedly in this layer if the write data is too large */
 static void
-serv_sys_write_2(cont_write_t *cont) {
-    //printf("serv_sys_write_2 called\n");
+serv_sys_write_send_data(cont_write_t *cont) {
+    //printf("serv_sys_write_send_data called\n");
     assert(cont != NULL);
 
     int err;
@@ -317,7 +326,7 @@ serv_sys_write_2(cont_write_t *cont) {
 
     VOP_WRITE(cont->file->of_vnode, cont->kbuf, wanna_send, cont->file->of_offset,
               serv_sys_write_end, (void*)cont);
-    //printf("serv_sys_write_2 ended\n");
+    //printf("serv_sys_write_send_data ended\n");
 }
 
 typedef struct {

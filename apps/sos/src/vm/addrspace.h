@@ -43,38 +43,48 @@ struct addrspace {
 } addrspace_t;
 
 /*
- * Functions in addrspace.c:
- *
- *    as_create - create a new empty address space. You need to make
- *                sure this gets called in all the right places. You
- *                may find you want to change the argument list. May
- *                return NULL on out-of-memory error.
- *
- *    as_destroy - dispose of an address space. You may need to change
- *                the way this works if implementing user-level threads.
- *
- *    as_define_region - set up a region of memory within the address
- *                space.
- *
- *    as_define_stack - set up the stack region in the address space.
- *                (Normally called *after* as_complete_load().) Hands
- *                back the initial stack pointer for the new process.
- *
- *    as_define_heap - set up the heap region in the address space.
- *
- *    as_valid_memory - check if the given user buffer is a valid memory range
+ * Functions in addrspace.c
  *
  */
-addrspace_t *as_create(seL4_ARM_PageDirectory sel4_pd);
-void         as_destroy(addrspace_t *as);
-int          as_define_region(addrspace_t *as,
-                              seL4_Word vaddr,
-                              size_t sz,
-                              int32_t rights);
-int          as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
-int          as_define_heap(addrspace_t *as);
 
-bool         as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
+/* Callback for as_create function, to be called when as_create finished and
+ * want to reply to the caller */
+typedef void (*as_create_cb_t)(void *token, addrspace_t *as);
+
+/*
+ * Create a new empty address space.
+ * This function is asynchronous.
+ * RETURN: if the immediate return value is 0, new addrspace will be returned via the callback
+ *         if the immediate return is not 0, it fails and callback will not be called
+ */
+int as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token);
+
+/*
+ * Dispose of an address space.
+ */
+void as_destroy(addrspace_t *as);
+
+/*
+ * set up a region of memory within the address space.
+ */
+int as_define_region(addrspace_t *as, seL4_Word vaddr,
+                              size_t sz, int32_t rights);
+
+/*
+ * set up the stack region in the address space.
+ * Hands back the initial stack pointer for the new process.
+ */
+int as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
+
+/*
+ * set up the heap region in the address space.
+ */
+int as_define_heap(addrspace_t *as);
+
+/*
+ * check if the given user buffer is a valid memory range
+ */
+bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
                                 uint32_t* permission);
 
 /*

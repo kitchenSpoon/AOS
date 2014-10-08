@@ -93,7 +93,7 @@ bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
  *               address space. (i.e. the only one address space )
  */
 typedef void (*elf_load_cb_t)(void *token, int err);
-int elf_load(addrspace_t *as, char* elf_file, elf_load_cb_t callback, void* token);
+void elf_load(addrspace_t *as, char* elf_file, elf_load_cb_t callback, void* token);
 
 /*
  * Functions in pagetable.c:
@@ -118,17 +118,6 @@ int elf_load(addrspace_t *as, char* elf_file, elf_load_cb_t callback, void* toke
  */
 typedef void (*sos_page_map_cb_t)(void *token, int err);
 int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_map_cb_t callback, void* token);
-
-/*
- * Map a page into the shadow Pagetable with an existing frame in sos
- * @param as - The addrspace we will perform the mapping
- * @param app_sel4_pd - the sel4 page directory of the user level app
- * @param vaddr - the user level virtual address that need to be mapped
- * @param kvaddr - the kernel level virtual address
- *
- * @Returns 0 if succesful
- */
-int sos_swap_page_map(addrspace_t *as, seL4_Word vaddr, seL4_Word kvaddr, uint32_t permissions);
 
 /*
  * Map a page into the shadow Pagetable with an existing frame in sos

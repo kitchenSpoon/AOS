@@ -58,45 +58,53 @@ typedef struct {
     unsigned long pos;
 } load_segment_cont_t;
 
-static int load_segment_into_vspace3(void* token, int err){
-        if (err) {
-            return err;
-        }
+static void
+load_segment_into_vspace3(void* token, int err){
+    load_segment_cont_t* cont = (load_segment_cont_t*)token;
+    if (err) {
+        cont->callback(cont->token, err);
+        free(cont);
+        return;
+    }
 
-        load_segment_cont_t* cont = (load_segment_cont_t*)token;
+    seL4_Word vpage;
+    vpage = PAGE_ALIGN(cont->dst);
 
-        seL4_Word vpage;
-        vpage = PAGE_ALIGN(cont->dst);
+    seL4_Word kdst;
+    seL4_CPtr sos_cap;
 
-        seL4_Word kdst;
-        seL4_CPtr sos_cap;
+    err = sos_get_kvaddr(cont->as, cont->dst, &kdst);
+    if (err) {
+        cont->callback(cont->token, err);
+        free(cont);
+        return;
+    }
 
-        err = sos_get_kvaddr(cont->as, cont->dst, &kdst);
-        if (err) {
-            return err;
-        }
+    /* Now copy our data into the destination vspace. */
+    int nbytes = PAGESIZE - (cont->dst & PAGEMASK);
+    if (cont->pos < cont->file_size){
+        // This page might be swapped out before we do memcpy
+        memcpy((void*)kdst, (void*)(cont->src), MIN(nbytes, cont->file_size - cont->pos));
+    }
 
-        /* Now copy our data into the destination vspace. */
-        int nbytes = PAGESIZE - (cont->dst & PAGEMASK);
-        if (cont->pos < cont->file_size){
-            memcpy((void*)kdst, (void*)(cont->src), MIN(nbytes, cont->file_size - cont->pos));
-        }
+    err = sos_get_kframe_cap(cont->as, vpage, &sos_cap);
+    if (err) {
+        cont->callback(cont->token, err);
+        free(cont);
+        return;
+    }
 
-        err = sos_get_kframe_cap(cont->as, vpage, &sos_cap);
-        if (err) {
-            return err;
-        }
-        /* Not observable to I-cache yet so flush the frame */
-        seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
+    /* Not observable to I-cache yet so flush the frame */
+    seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
 
-        cont->pos += nbytes;
-        cont->dst += nbytes;
-        cont->src += nbytes;
+    cont->pos += nbytes;
+    cont->dst += nbytes;
+    cont->src += nbytes;
 
-        load_segment_into_vspace2(token, err);
+    load_segment_into_vspace2(token, err);
 }
 
-static int load_segment_into_vspace2(void* token, int err){
+static void load_segment_into_vspace2(void* token, int err){
 
     load_segment_cont_t* cont = (load_segment_cont_t*)token;
 
@@ -106,12 +114,11 @@ static int load_segment_into_vspace2(void* token, int err){
         vpage = PAGE_ALIGN(cont->dst);
 
         sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token);
-        return 0;
+        return;
     }
 
     cont->callback(cont->token);
     free(cont);
-    return 0;
 }
 
 
@@ -123,7 +130,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
 
     load_segment_cont_t* cont = malloc(sizeof(load_segment_cont_t));
     if(cont == NULL){
-        return 1;
+        return ENOMEM;
     }
     cont->as = as;
     cont->src = src;
@@ -136,6 +143,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
     cont->token = token;
 
     load_segment_into_vspace2((void*)token, 0);
+
     return 0;
 }
 //static int load_segment_into_vspace(addrspace_t *as, char *src,
@@ -194,13 +202,13 @@ typedef struct {
     void* token;
 } elf_load_cont_t;
 
-int elf_load_part2(void* token, int err){
+void elf_load_part2(void* token, int err){
 
     elf_load_cont_t* cont = (elf_load_cont_t*)token;
     if (err) {
-        cont->callback((void*)(cont->token), err);
+        cont->callback(cont->token, err);
         free(cont);
-        return err;
+        return;
     }
 
     if(cont->i < cont->num_headers) {
@@ -223,39 +231,50 @@ int elf_load_part2(void* token, int err){
         dprintf(1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
 
         err = as_define_region(cont->as, vaddr, segment_size, rights);
-        conditional_panic(err, "Elf loading failed to define region\n");
+        if (err) {
+            cont->callback(cont->token, err);
+            free(cont);
+            return;
+        }
 
         cont->i++;
 
         /* Copy it across into the vspace. */
         err = load_segment_into_vspace(as, source_addr, segment_size, file_size,
                                        vaddr, rights, elf_load_part2, (void*)cont);
+        if (err) {
+            cont->callback(cont->token, err);
+            free(cont);
+            return;
+        }
 
-        return 0;
+        return;
     }
 
-    cont->callback((void*)(cont->token));
+    cont->callback(cont->token);
     free(cont);
-
-    printf("Finished elf_load\n");
-    return 0;
 }
 
-int elf_load(addrspace_t* as, char *elf_file, elf_load_cb_t callback, void* token) {
+void elf_load(addrspace_t* as, char *elf_file, elf_load_cb_t callback, void* token) {
 
     int num_headers;
-    int err;
-    int i;
 
     /* Ensure that the ELF file looks sane. */
     if (elf_checkFile(elf_file)){
-        return seL4_InvalidArgument;
+        //callback(token, seL4_InvalidArgument);
+        callback(token, EINVAL);
+        return;
     }
 
     printf("Starting elf_load...\n");
     num_headers = elf_getNumProgramHeaders(elf_file);
 
     elf_load_cont_t* cont = malloc(sizeof(elf_load_cont_t));
+    if (cont == NULL) {
+        callback(token, ENOMEM);
+        return;
+    }
+
     cont->i = 0;
     cont->as = as;
     cont->elf_file = elf_file;
@@ -264,6 +283,4 @@ int elf_load(addrspace_t* as, char *elf_file, elf_load_cb_t callback, void* toke
     cont->token = token;
 
     elf_load_part2((void*)cont, 0);
-
-    return 0;
 }

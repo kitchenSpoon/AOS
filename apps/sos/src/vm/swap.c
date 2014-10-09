@@ -317,7 +317,7 @@ swap_out_3(swap_out_cont_t *cont) {
     }
 
     _set_slot(free_slot);
-    printf("free slot = %d, bits = %d\n", free_slot, free_slots[0]);
+    printf("free slot = %d, bits = 0x%08x\n", free_slot, free_slots[0]);
     cont->free_slot = free_slot;
 
     //TODO update the as->as_pd[x][y] so that it reflects free slot,

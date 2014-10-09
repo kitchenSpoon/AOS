@@ -173,7 +173,7 @@ void swap_in_page_map(void* token, int err){
 
     //map application page
     //this automaticallys sets the page as not swapped out
-    sos_page_map(state->as, state->vaddr, state->rights, swap_in_end, token);
+    sos_page_map(state->as, state->vaddr, state->rights, swap_in_end, token, false);
 }
 void swap_in_handler(uintptr_t token, enum nfs_stat status,
                                 fattr_t *fattr, int count, void* data){

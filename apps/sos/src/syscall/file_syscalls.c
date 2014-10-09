@@ -287,7 +287,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         return;
     }
 
-    err = frame_alloc(serv_sys_write_get_kbuf, (void*)cont);
+    err = frame_alloc(serv_sys_write_get_kbuf, (void*)cont, false);
     if (err) {
         serv_sys_write_end((void*)cont, EFAULT, 0);
         return;

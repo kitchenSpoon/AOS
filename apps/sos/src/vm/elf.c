@@ -64,7 +64,7 @@ typedef struct {
 
 static void
 load_segment_into_vspace3(void* token, int err){
-    printf("load segment into vspace3\n");
+    //printf("load segment into vspace3\n");
     load_segment_cont_t* cont = (load_segment_cont_t*)token;
     if (err) {
         cont->callback(cont->token, err);
@@ -110,7 +110,7 @@ load_segment_into_vspace3(void* token, int err){
 }
 
 static void load_segment_into_vspace2(void* token, int err){
-    printf("load segment into vspace2\n");
+    //printf("load segment into vspace2\n");
 
     load_segment_cont_t* cont = (load_segment_cont_t*)token;
 
@@ -119,12 +119,12 @@ static void load_segment_into_vspace2(void* token, int err){
         seL4_Word vpage;
         vpage = PAGE_ALIGN(cont->dst);
 
-        printf("load segment into vspace2 page map\n");
-        sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token);
+        //printf("load segment into vspace2 page map\n");
+        sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token, true);
         return;
     }
 
-    printf("load segment into vspace2 out\n");
+    //printf("load segment into vspace2 out\n");
     cont->callback(cont->token, 0);
     free(cont);
 }
@@ -134,7 +134,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
                                     unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
                                     unsigned long permissions, load_segment_cb_t callback, void* token) {
-    printf("load segment into vspace\n");
+    //printf("load segment into vspace\n");
     assert(file_size <= segment_size);
 
     load_segment_cont_t* cont = malloc(sizeof(load_segment_cont_t));

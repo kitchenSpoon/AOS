@@ -77,7 +77,7 @@ as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
     cont->as->as_pd_caps = (pagedir_t)kvaddr;
     bzero((void*)(cont->as->as_pd_caps), PAGE_SIZE);
 
-    err = frame_alloc(as_create_pagedir_regs_allocated, (void*)cont);
+    err = frame_alloc(as_create_pagedir_regs_allocated, (void*)cont, false);
     if (err) {
         as_create_end(cont, err);
         return;
@@ -86,7 +86,7 @@ as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
 
 int
 as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) {
-    printf("as create\n");
+    printf("as_create called\n");
     int err;
     addrspace_t* as = malloc(sizeof(addrspace_t));
     if (as == NULL) {
@@ -100,7 +100,6 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
     as->as_sel4_pd = sel4_pd;
     as->as_pt_head = NULL;
 
-    printf("as create\n");
     as_create_cont_t *cont = malloc(sizeof(as_create_cont_t));
     if (cont == NULL) {
         free(as);
@@ -110,15 +109,12 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
     cont->token    = token;
     cont->as       = as;
 
-    printf("as create\n");
-    err = frame_alloc(as_create_pagedir_caps_allocated, (void*)cont);
+    err = frame_alloc(as_create_pagedir_caps_allocated, (void*)cont, false);
     if (err) {
-        printf("as create err\n");
         free(as);
         free(cont);
         return err;
     }
-    printf("as create\n");
     return 0;
 }
 

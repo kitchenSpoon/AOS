@@ -184,13 +184,11 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
         if (sos_page_is_swapped(as, fault_addr)) {
             printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
-            //seL4_Word kvaddr = frame_alloc();
-            err = frame_alloc(sos_VMFaultHandler_swap_in_1, (void*)cont);
+            err = frame_alloc(sos_VMFaultHandler_swap_in_1, (void*)cont, false);
             if (err) {
                 sos_VMFaultHandler_reply((void*)cont, err);
                 return;
             }
-            //swapin here
             return;
         } else {
 
@@ -200,7 +198,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
         /* This page has never been mapped, so do that and return */
         //TODO: this function will need to be broken down here
         printf("vmf tries to map a page\n");
-        int err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont);
+        int err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
             sos_VMFaultHandler_reply((void*)cont, err);
         }

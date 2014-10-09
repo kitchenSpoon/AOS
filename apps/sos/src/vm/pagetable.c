@@ -99,6 +99,7 @@ typedef struct {
     addrspace_t* as;
     seL4_Word vaddr;
     uint32_t permissions;
+    bool noswap;
 } sos_page_map_cont_t;
 
 void sos_page_map_part5(void* token, seL4_Word kvaddr){
@@ -168,7 +169,7 @@ void sos_page_map_part4(void* token){
     }
 
     /* Allocate memory for the frame */
-    int err = frame_alloc(cont->vaddr, cont->as, sos_page_map_part5, token);
+    int err = frame_alloc(cont->vaddr, cont->as, cont->noswap, sos_page_map_part5, token);
     if (err) {
         cont->callback(cont->token, EINVAL);
         free(cont);
@@ -212,7 +213,7 @@ sos_page_map_part2(void* token, seL4_Word kvaddr){
     cont->as->as_pd_regs[x] = (pagetable_t)kvaddr;
 
     /* Allocate memory for the 2nd level pagetable for caps */
-    int err = frame_alloc(cont->vaddr, cont->as, sos_page_map_part3, token);
+    int err = frame_alloc(cont->vaddr, cont->as, true, sos_page_map_part3, token);
     if (err) {
         frame_free(kvaddr);
         cont->callback(cont->token, EFAULT);
@@ -222,7 +223,8 @@ sos_page_map_part2(void* token, seL4_Word kvaddr){
 }
 
 int
-sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_map_cb_t callback, void* token) {
+sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
+        sos_page_map_cb_t callback, void* token, bool noswap) {
     printf("sos_page_map\n");
     if (as == NULL) {
         return EINVAL;
@@ -244,6 +246,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_ma
     cont->permissions = permissions;
     cont->callback = callback;
     cont->token = token;
+    cont->noswap = noswap;
 
     int x, err;
 
@@ -256,7 +259,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_ma
         assert(as->as_pd_caps[x] == NULL);
 
         /* Allocate memory for the 2nd level pagetable for regs */
-        err = frame_alloc(vaddr, as, sos_page_map_part2, (void*)cont);
+        err = frame_alloc(vaddr, as, true, sos_page_map_part2, (void*)cont);
         if (err) {
             free(cont);
             return EFAULT;
@@ -270,29 +273,6 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_ma
 
 int
 sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
-    if(as == NULL || as->as_pd_caps == NULL) return -1;
-
-    seL4_Word vpage = PAGE_ALIGN(vaddr);
-    int x           = PT_L1_INDEX(vpage);
-    int y           = PT_L2_INDEX(vpage);
-
-    int err = 0;
-    if(as->as_pd_caps[x] != NULL){
-        err = seL4_ARM_Page_Unmap(as->as_pd_caps[x][y]);
-    } else {
-        err = 1;
-    }
-
-    if(!err){
-        //unset PTE_IN_USE_BIT?
-        //since we are using this to simulate reference bit we dont want to unset that bit
-    }
-
-    return err;
-}
-
-int
-sos_swap_page_unmap(addrspace_t *as, seL4_Word vaddr){
     if(as == NULL || as->as_pd_caps == NULL) return -1;
 
     seL4_Word vpage = PAGE_ALIGN(vaddr);

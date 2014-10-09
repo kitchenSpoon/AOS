@@ -32,7 +32,7 @@ static sos_stat_t sbuf;
 
 static int benchmark();
 static int benchmark2();
-static int thresh();
+static int thrash();
 
 static void prstat(const char *name) {
     /* print out stat buf */
@@ -281,7 +281,7 @@ struct command {
 
 struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2}, {"thresh", thresh} };
+        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2}, {"thrash", thrash} };
 
 static void test_file_syscalls(void) {
     printf("Start file syscalls test...\n");
@@ -506,26 +506,26 @@ int benchmark2() {
 }
 
 static
-int thresh(int argc, char *argv[]) {
-    if (argc != 3 ){//|| !isdigit(argv[1])) {
-        printf("Usage: thresh num_kilobytes test_char\n");
+int thrash(int argc, char *argv[]) {
+    if (argc != 3 ) {
+        printf("Usage: thrash num_kilobytes test_char\n");
         return 1;
     }
-    char *big_buf = malloc(atoi(argv[1])*1024);
+    int nbyte = atoi(argv[1])*1024;
+    char ch = argv[2][0];
+    char *big_buf = malloc(nbyte);
     if(big_buf == NULL) {
-        printf("thresh failed to allocate enough memory\n");
+        printf("thrash failed to allocate enough memory\n");
         return 0;
     }
-    for(int i = 0; i < atoi(argv[1])*1024; i++){
-        big_buf[i] = argv[2][0];
-        printf("%c",big_buf[i]);
+    for(int i = 0; i < nbyte; i++){
+        if (i % 1024 == 0) {
+            printf("filling page #%d with %c\n", i >> 10,ch);
+        }
+        big_buf[i] = ch;
     }
 
-    //read again to try and swap in swaped out pages
-    for(int i = 0; i < atoi(argv[1])*1024; i++){
-        big_buf[i] = argv[2][0];
-        printf("%c2",big_buf[i]);
-    }
+    //free(big_buf);
     return 0;
 }
 
@@ -543,9 +543,9 @@ int main(void) {
     benchmark();
 */
 //    test_file_syscalls();
-  
+
     //test_swapping();
-  
+
     in = open("console", O_RDONLY);
     assert(in >= 0);
 

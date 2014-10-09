@@ -98,14 +98,6 @@ void elf_load(addrspace_t *as, char* elf_file, elf_load_cb_t callback, void* tok
 /*
  * Functions in pagetable.c:
  *
- *    sos_map_page - create and map a page into indicated address for user
- *              level application
- *
- *    sos_unmap_page - unmap a page
- *
- *    sos_get_kframe_cap - get kframe_cap
- *
- *    sos_get_kvaddr - get kvaddr
  */
 
 /*
@@ -117,18 +109,8 @@ void elf_load(addrspace_t *as, char* elf_file, elf_load_cb_t callback, void* tok
  * @Returns 0 if succesful
  */
 typedef void (*sos_page_map_cb_t)(void *token, int err);
-int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_map_cb_t callback, void* token);
-
-/*
- * Map a page into the shadow Pagetable with an existing frame in sos
- * @param as - The addrspace we will perform the mapping
- * @param app_sel4_pd - the sel4 page directory of the user level app
- * @param vaddr - the user level virtual address that need to be mapped
- * @param kvaddr - the kernel level virtual address
- *
- * @Returns 0 if succesful
- */
-int sos_swap_page_unmap(addrspace_t *as, seL4_Word vaddr);
+int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
+        sos_page_map_cb_t callback, void* token, bool noswap);
 
 /*
  * Unmap a page in into the page table

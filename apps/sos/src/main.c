@@ -301,7 +301,7 @@ typedef struct{
 } start_first_process_cont_t;
 
 
-void start_first_process_part3(void* token, int err){ 
+void start_first_process_part3(void* token, int err){
     printf("start first process part3\n");
     conditional_panic(err, "Failed to load elf image");
     start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
@@ -334,16 +334,12 @@ void start_first_process_part3(void* token, int err){
     free(cont);
 }
 
-void start_first_process_part2(void* token, addrspace_t *as){ 
+void start_first_process_part2(void* token, addrspace_t *as){
     printf("start first process part2\n");
-    if(as==NULL){
+    conditional_panic(as==NULL, "start_first_process_part2: as is NULL\n");
+    conditional_panic(as->as_pd_caps == NULL || as->as_pd_regs == NULL,
+                      "start_first_process_part2: as contains invalid fields\n");
 
-        printf("WTF123\n");
-    }
-    if(as->as_pd_caps == NULL || as->as_pd_regs == NULL){
-        printf("WTF\n");
-    }
-    printf("start first process part2\n");
     start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
 
     tty_test_process.as = as;
@@ -422,19 +418,15 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     dprintf(1, "\nStarting \"%s\"...\n", app_name);
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
-    printf("start first process part magic\n");
 
     /* Initialise the continuation preparing to call as_create */
     start_first_process_cont_t* cont = malloc(sizeof(start_first_process_cont_t));
     conditional_panic(cont == NULL, "Unable to allocate memory for first process");
 
-    printf("start first process part magic\n");
     cont->elf_base = elf_base;
 
-    printf("start first process part magic\n");
     /* initialise address space */
     as_create(tty_test_process.vroot, start_first_process_part2, (void*)cont);
-    printf("start first process part magic\n");
 }
 
 static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
@@ -513,6 +505,8 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
 #define TEST_1      1
 #define TEST_2      2
 #define TEST_3      4
+
+#define TEST_N_FRAMES 100
 int ftc1, ftc2, ftc3;
 static void
 ft_test_1(void* token, seL4_Word kvaddr) {
@@ -520,14 +514,15 @@ ft_test_1(void* token, seL4_Word kvaddr) {
     int err;
     assert(kvaddr);
     printf("ft_test_1: kvaddr[%d] = 0x%08x\n", ftc1, kvaddr);
+
     ftc1++;
 
     /* Test you can touch the page */
     *(int*)kvaddr = 0x37;
     assert(*(int*)kvaddr == 0x37);
 
-    if (ftc1 < 10) {
-        err = frame_alloc(0,NULL,ft_test_1, NULL);
+    if (ftc1 < TEST_N_FRAMES) {
+        err = frame_alloc(0, NULL, false, ft_test_1, NULL);
         assert(!err);
     } else {
         printf("ft_test_1: Done!!!\n");
@@ -547,7 +542,7 @@ ft_test_2(void* token, seL4_Word kvaddr) {
     *(int*)kvaddr = val;
     assert(*(int*)kvaddr == val);
 
-    err = frame_alloc(0,NULL,ft_test_2, NULL);
+    err = frame_alloc(0,NULL,false,ft_test_2, NULL);
     assert(!err);
 }
 
@@ -564,36 +559,36 @@ ft_test_3(void* token, seL4_Word kvaddr) {
     assert(*(int*)kvaddr == val);
     frame_free(kvaddr);
 
-    err = frame_alloc(0,NULL,ft_test_3, NULL);
+    err = frame_alloc(0,NULL,false,ft_test_3, NULL);
     assert(!err);
 }
 
 static void
 frametable_test(uint32_t test_mask) {
     int err;
-    //srand(0); this will eventually cause ft_test 2 to try 
+    //srand(0); this will eventually cause ft_test 2 to try
     //and access invalid kvaddr srand(1) will last longer before
     //hitting kvaddr == 0,(which is invalid)
     srand(1);
     if (test_mask & TEST_1) {
         printf("Starting test 1...\n");
-        printf("Allocate 10 frames and touch them\n");
+        printf("Allocate %d frames and touch them\n", TEST_N_FRAMES);
         ftc1 = 0;
-        err = frame_alloc(0,NULL,ft_test_1, NULL);
+        err = frame_alloc(0,NULL,false,ft_test_1, NULL);
         assert(!err);
     }
     if (test_mask & TEST_2) {
         printf("Starting test 2...\n");
         printf("Test that frame_alloc does not run out of memory thanks to swap out\n");
         ftc2 = 0;
-        err = frame_alloc(0,NULL,ft_test_2, NULL);
+        err = frame_alloc(0,NULL,false,ft_test_2, NULL);
         assert(!err);
     }
     if (test_mask & TEST_3) {
         printf("Starting test 3...\n");
         printf("Test that you never run out of memory if you always free frames.\n");
         ftc3 = 0;
-        err = frame_alloc(0,NULL,ft_test_3, NULL);
+        err = frame_alloc(0,NULL,false,ft_test_3, NULL);
         assert(!err);
     }
 }

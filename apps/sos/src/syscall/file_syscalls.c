@@ -287,8 +287,8 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         return;
     }
 
-    //TODO CHECK ME 
-    err = frame_alloc((seL4_Word)buf, NULL, serv_sys_write_get_kbuf, (void*)cont);
+    addrspace_t *as = proc_getas();
+    err = frame_alloc((seL4_Word)buf, as, false, serv_sys_write_get_kbuf, (void*)cont);
     if (err) {
         serv_sys_write_end((void*)cont, EFAULT, 0);
         return;

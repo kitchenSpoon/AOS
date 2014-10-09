@@ -26,15 +26,16 @@
 
 /* Frame table entry structure */
 typedef struct {
+    int fte_status;
     seL4_CPtr fte_cap;
     seL4_Word fte_paddr;
     seL4_Word fte_kvaddr;
     seL4_Word fte_vaddr;
-    addrspace_t *fte_as;                //Addrspace, we may change this to use ASID instead
-    int fte_status;
+    addrspace_t *fte_as;  //Addrspace, we may change this to use ASID instead
+    //TODO: fuse all these fields into 1 var
     int fte_next_free;
     bool fte_locked;
-    //TODO: add an unswappable field
+    bool fte_noswap;
 } frame_entry_t;
 
 
@@ -97,14 +98,15 @@ frame_init(void){
             return err;
         }
 
+        frametable[i].fte_status    = FRAME_STATUS_ALLOCATED;
         frametable[i].fte_paddr     = tmp_paddr;
         frametable[i].fte_cap       = tmp_cap;
         frametable[i].fte_kvaddr    = kvaddr;
         frametable[i].fte_vaddr     = 0;
-        frametable[i].fte_status    = FRAME_STATUS_ALLOCATED;
         frametable[i].fte_as        = NULL;
         frametable[i].fte_next_free = FRAME_INVALID;
         frametable[i].fte_locked    = false;
+        frametable[i].fte_noswap    = true;
     }
 
     /* Mark the number of frames occupied by the frametable */
@@ -137,7 +139,10 @@ bool frame_has_free(void) {
 static seL4_Word
 rand_swap_victim(){
     int id = rand() % NFRAMES;
-    //TODO: check if frame is unswappable and not locked
+    while (frametable[id].fte_noswap) {
+        id = rand() % NFRAMES;
+    }
+
     return ID_TO_KVADDR(id);
 }
 
@@ -147,6 +152,7 @@ typedef struct {
    int victim_id;
    seL4_Word vaddr;
    addrspace_t* as;
+   bool noswap;
 } frame_alloc_cont_t;
 
 static void
@@ -174,14 +180,13 @@ frame_alloc_end(void* token, int err){
     }
 
     int ind = first_free;
-    printf("first free = %d\n",ind);
     seL4_Word kvaddr = (seL4_Word)ID_TO_KVADDR(ind);
 
     //If this assert fails then our first_free is buggy
     assert(frametable[ind].fte_status != FRAME_STATUS_ALLOCATED);
 
     //Temporary fix, TODO change this to get the addrspace for differnt process
-    /*addrspace_t *as = proc_getas(); 
+    /*addrspace_t *as = proc_getas();
     if(as == NULL){
         printf("error, frame_alloc_end: failed to get app addrspace\n");
         cont->callback(cont->token, 0);
@@ -189,17 +194,7 @@ frame_alloc_end(void* token, int err){
         return;
     }*/
 
-    if(frametable[ind].fte_status == FRAME_STATUS_FREE){
-        /* If the frame has been typed, we simple allocated it */
-
-        frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
-        frametable[ind].fte_kvaddr = kvaddr;
-        frametable[ind].fte_kvaddr = cont->vaddr;
-        frametable[ind].fte_as     = cont->as;
-        frametable[ind].fte_locked = false;
-    } else {
-        /* Else we have to typed it */
-
+    if(frametable[ind].fte_status == FRAME_STATUS_UNTYPED){
         /* Allocate and map this frame */
         err = _map_to_sel4(seL4_CapInitThreadPD, kvaddr,
                            &frametable[ind].fte_paddr, &frametable[ind].fte_cap);
@@ -208,21 +203,22 @@ frame_alloc_end(void* token, int err){
             free(cont);
             return;
         }
-
-        frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
-        frametable[ind].fte_kvaddr = kvaddr;
-        frametable[ind].fte_kvaddr = cont->vaddr;
-        frametable[ind].fte_as     = cont->as;
-        frametable[ind].fte_locked = false;
     }
+    frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
+    frametable[ind].fte_kvaddr = kvaddr;
+    frametable[ind].fte_vaddr  = cont->vaddr;
+    frametable[ind].fte_as     = cont->as;
+    frametable[ind].fte_noswap = cont->noswap;
+    frametable[ind].fte_locked = false;
 
     /* Zero fill memory */
     bzero((void *)(kvaddr), (size_t)PAGE_SIZE);
 
+    printf("first_free = %d, new_first_free = %d\n", first_free, frametable[ind].fte_next_free);
+
     /* Update free frame list */
     first_free = frametable[ind].fte_next_free;
 
-    printf("new first free = %d\n",first_free);
     cont->callback(cont->token, kvaddr);
     free(cont);
 }
@@ -240,15 +236,13 @@ frame_alloc_swap_out_cb(void *token, int err) {
     }
 
     /* Update free frame list */
-    //swap out already calls frame free which update the free frame list
     printf("first free after swap out = %d\n",first_free);
-    //frametable[cont->victim_id].fte_next_free = first_free;
-    //first_free = cont->victim_id;
 
     frame_alloc_end((void*)cont, 0);
 }
 
-int frame_alloc(seL4_Word vaddr, addrspace_t* as, frame_alloc_cb_t callback, void* token){
+int frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
+                frame_alloc_cb_t callback, void* token){
     printf("frame alloc\n");
 
     if (!frame_initialised) {
@@ -271,6 +265,7 @@ int frame_alloc(seL4_Word vaddr, addrspace_t* as, frame_alloc_cb_t callback, voi
     cont->token = token;
     cont->vaddr = vaddr;
     cont->as = as;
+    cont->noswap = noswap;
 
     /* If we do not have enough memory, start swapping frames out */
     if(first_free == FRAME_INVALID) {
@@ -280,7 +275,7 @@ int frame_alloc(seL4_Word vaddr, addrspace_t* as, frame_alloc_cb_t callback, voi
 
         int ind = (int)KVADDR_TO_ID(kvaddr);
         cont->victim_id = ind;
-        swap_out(kvaddr, frame_alloc_swap_out_cb, (void*)cont); 
+        swap_out(kvaddr, frame_alloc_swap_out_cb, (void*)cont);
         return 0;
     }
 
@@ -300,17 +295,17 @@ int frame_free(seL4_Word kvaddr){
 
     int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
-    printf("frame free err1\n");
+        printf("frame free err1\n");
         return EINVAL;
     }
     if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
-    printf("frame free err2\n");
+        printf("frame free err2\n");
         return EINVAL;
     }
 
     //frame to be freed should not be locked
     if(frametable[id].fte_locked) {
-    printf("frame free err3\n");
+        printf("frame free err3\n");
         //dont crash sos
         return EFAULT;
     }
@@ -321,7 +316,7 @@ int frame_free(seL4_Word kvaddr){
     //TODO update this condition/heuristic
     if (true) {
         /* We dont actually free the frame */
-        frametable[id].fte_status    = FRAME_STATUS_FREE;
+        frametable[id].fte_status = FRAME_STATUS_FREE;
     } else {
         seL4_Word paddr = frametable[id].fte_paddr;
         seL4_CPtr frame_cap = frametable[id].fte_cap;

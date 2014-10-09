@@ -117,6 +117,9 @@ frame_init(void){
         frametable[i].fte_next_free = (i == NFRAMES-1) ? FRAME_INVALID : i+1;
     }
 
+    //this is for rand chance swap, TODO remove me when we upgrade
+    //to a better page replacement algorithm
+    srand(1);
     frame_initialised = true;
 
     return 0;
@@ -167,7 +170,7 @@ frame_alloc_end(void* token, int err){
     }
 
     int ind = first_free;
-
+    printf("first free = %d\n",ind);
     seL4_Word kvaddr = (seL4_Word)ID_TO_KVADDR(ind);
 
     //If this assert fails then our first_free is buggy
@@ -204,24 +207,28 @@ frame_alloc_end(void* token, int err){
     /* Update free frame list */
     first_free = frametable[ind].fte_next_free;
 
+    printf("new first free = %d\n",first_free);
     cont->callback(cont->token, kvaddr);
     free(cont);
 }
 
 static void
 frame_alloc_swap_out_cb(void *token, int err) {
-    printf("frame alloc cb\n");
+    printf("frame alloc swapout cb\n");
     assert(token != NULL); // if this is NULL, memory is corrupted
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
+        printf("frame alloc cb err\n");
         cont->callback(cont->token, 0);
         free(cont);
         return;
     }
 
     /* Update free frame list */
-    frametable[cont->victim_id].fte_next_free = first_free;
-    first_free = cont->victim_id;
+    //swap out already calls frame free which update the free frame list
+    printf("first free after swap out = %d\n",first_free);
+    //frametable[cont->victim_id].fte_next_free = first_free;
+    //first_free = cont->victim_id;
 
     frame_alloc_end((void*)cont, 0);
 }
@@ -261,6 +268,7 @@ int frame_alloc(frame_alloc_cb_t callback, void* token){
 
 int frame_free(seL4_Word kvaddr){
     /* May have concurency issues */
+    printf("frame free\n");
 
     if (!frame_initialised) {
         /* Why is frame uninitialised? */
@@ -269,14 +277,17 @@ int frame_free(seL4_Word kvaddr){
 
     int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
+    printf("frame free err1\n");
         return EINVAL;
     }
     if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
+    printf("frame free err2\n");
         return EINVAL;
     }
 
     //frame to be freed should not be locked
     if(frametable[id].fte_locked) {
+    printf("frame free err3\n");
         //dont crash sos
         return EFAULT;
     }

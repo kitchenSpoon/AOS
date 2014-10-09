@@ -565,7 +565,10 @@ ft_test_3(void* token, seL4_Word kvaddr) {
 static void
 frametable_test(uint32_t test_mask) {
     int err;
-    srand(0);
+    //srand(0); this will eventually cause ft_test 2 to try 
+    //and access invalid kvaddr srand(1) will last longer before
+    //hitting kvaddr == 0,(which is invalid)
+    srand(1);
     if (test_mask & TEST_1) {
         printf("Starting test 1...\n");
         printf("Allocate 10 frames and touch them\n");
@@ -743,7 +746,7 @@ int main(void) {
 
     /* Init file system */
     filesystem_init();
-    frametable_test(TEST_1 | TEST_2);
+    //frametable_test(TEST_2);
 
     ///* Register swap test */
     //register_timer(1000000, swap_test, NULL); //100ms

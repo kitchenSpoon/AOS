@@ -273,7 +273,6 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
         return;
     }
 
-    printf("swap out 4 basic check\n");
     if (status != NFS_OK || fattr == NULL || count < 0) {
         //TODO unlock frame
         cont->callback(cont->token, EFAULT);
@@ -295,7 +294,10 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     }
     printf("swap out 4 calling back up\n");
     //TODO unlock frame
-    frame_free(cont->kvaddr);
+    int err = frame_free(cont->kvaddr);
+    if(err){
+        printf("frame free error in swap out\n");
+    }
     cont->callback(cont->token, 0);
     free(cont);
 }

@@ -57,7 +57,9 @@ typedef struct {
 static void
 sos_VMFaultHandler_reply(void* token, int err){
     printf("sos_vmf_end\n");
-    (void)err;
+    if(err){
+        printf("sos_vmf received an error\n");
+    }
 
     VMF_cont_t *state = (VMF_cont_t*)token;
 
@@ -121,6 +123,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
 
     if (fault_addr == 0) {
         /* Derefenrecing NULL? Segfault */
+        printf("App tried to derefence NULL, kill it\n");
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
@@ -136,6 +139,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     region_t* reg = _region_probe(as, fault_addr);
     if (reg == NULL) {
         /* Invalid address, segfault */
+        printf("App tried to access a address without a region (invalid address), kill it\n");
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
@@ -178,6 +182,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     /* Check if this page is an new, unmaped page or is it just swapped out */
     if (sos_page_is_mapped(as, fault_addr)) {
         if (sos_page_is_swapped(as, fault_addr)) {
+            printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
             //seL4_Word kvaddr = frame_alloc();
             err = frame_alloc(sos_VMFaultHandler_swap_in_1, (void*)cont);
@@ -187,10 +192,14 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             }
             //swapin here
             return;
+        } else {
+
+            printf("vmf tries to access a mapped (but not swapped out) page again,\nmost likely app does not have certain rights to this address\n");
         }
     } else {
         /* This page has never been mapped, so do that and return */
         //TODO: this function will need to be broken down here
+        printf("vmf tries to map a page\n");
         int err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont);
         if(err){
             sos_VMFaultHandler_reply((void*)cont, err);
@@ -198,6 +207,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
         return;
     }
     /* Otherwise, this is not handled */
+    printf("vmf error at the end\n");
     sos_VMFaultHandler_reply((void*)cont, EFAULT);
     return;
 //    if (sos_page_is_mapped(as, fault_addr)) {

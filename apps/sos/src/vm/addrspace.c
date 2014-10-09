@@ -71,14 +71,16 @@ as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
     }
 
     if (kvaddr == 0) {
+        printf("as create err 1\n");
         as_create_end(cont, ENOMEM);
         return;
     }
     cont->as->as_pd_caps = (pagedir_t)kvaddr;
     bzero((void*)(cont->as->as_pd_caps), PAGE_SIZE);
 
-    err = frame_alloc(as_create_pagedir_regs_allocated, (void*)cont);
+    err = frame_alloc(0,NULL,as_create_pagedir_regs_allocated, (void*)cont);
     if (err) {
+        printf("as create err 2\n");
         as_create_end(cont, err);
         return;
     }
@@ -111,7 +113,7 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
     cont->as       = as;
 
     printf("as create\n");
-    err = frame_alloc(as_create_pagedir_caps_allocated, (void*)cont);
+    err = frame_alloc(0, NULL, as_create_pagedir_caps_allocated, (void*)cont);
     if (err) {
         printf("as create err\n");
         free(as);

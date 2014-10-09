@@ -77,6 +77,7 @@ seL4_CPtr _sos_interrupt_ep_cap;
 extern fhandle_t mnt_point;
 
 void handle_syscall(seL4_Word badge, int num_args) {
+
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
 
@@ -335,9 +336,14 @@ void start_first_process_part3(void* token, int err){
 
 void start_first_process_part2(void* token, addrspace_t *as){ 
     printf("start first process part2\n");
+    if(as==NULL){
+
+        printf("WTF123\n");
+    }
     if(as->as_pd_caps == NULL || as->as_pd_regs == NULL){
         printf("WTF\n");
     }
+    printf("start first process part2\n");
     start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
 
     tty_test_process.as = as;
@@ -521,7 +527,7 @@ ft_test_1(void* token, seL4_Word kvaddr) {
     assert(*(int*)kvaddr == 0x37);
 
     if (ftc1 < 10) {
-        err = frame_alloc(ft_test_1, NULL);
+        err = frame_alloc(0,NULL,ft_test_1, NULL);
         assert(!err);
     } else {
         printf("ft_test_1: Done!!!\n");
@@ -541,7 +547,7 @@ ft_test_2(void* token, seL4_Word kvaddr) {
     *(int*)kvaddr = val;
     assert(*(int*)kvaddr == val);
 
-    err = frame_alloc(ft_test_2, NULL);
+    err = frame_alloc(0,NULL,ft_test_2, NULL);
     assert(!err);
 }
 
@@ -558,7 +564,7 @@ ft_test_3(void* token, seL4_Word kvaddr) {
     assert(*(int*)kvaddr == val);
     frame_free(kvaddr);
 
-    err = frame_alloc(ft_test_3, NULL);
+    err = frame_alloc(0,NULL,ft_test_3, NULL);
     assert(!err);
 }
 
@@ -573,21 +579,21 @@ frametable_test(uint32_t test_mask) {
         printf("Starting test 1...\n");
         printf("Allocate 10 frames and touch them\n");
         ftc1 = 0;
-        err = frame_alloc(ft_test_1, NULL);
+        err = frame_alloc(0,NULL,ft_test_1, NULL);
         assert(!err);
     }
     if (test_mask & TEST_2) {
         printf("Starting test 2...\n");
         printf("Test that frame_alloc does not run out of memory thanks to swap out\n");
         ftc2 = 0;
-        err = frame_alloc(ft_test_2, NULL);
+        err = frame_alloc(0,NULL,ft_test_2, NULL);
         assert(!err);
     }
     if (test_mask & TEST_3) {
         printf("Starting test 3...\n");
         printf("Test that you never run out of memory if you always free frames.\n");
         ftc3 = 0;
-        err = frame_alloc(ft_test_3, NULL);
+        err = frame_alloc(0,NULL,ft_test_3, NULL);
         assert(!err);
     }
 }
@@ -746,13 +752,13 @@ int main(void) {
 
     /* Init file system */
     filesystem_init();
-    //frametable_test(TEST_2);
+    frametable_test(TEST_1);
 
     ///* Register swap test */
     //register_timer(1000000, swap_test, NULL); //100ms
 
     /* Start the user application */
-    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
+    //start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     ///* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

@@ -29,7 +29,8 @@ typedef struct {
     seL4_CPtr fte_cap;
     seL4_Word fte_paddr;
     seL4_Word fte_kvaddr;
-    seL4_ARM_PageDirectory fte_pd; // This represents an ASID
+    seL4_Word fte_vaddr;
+    addrspace_t *fte_as;                //Addrspace, we may change this to use ASID instead
     int fte_status;
     int fte_next_free;
     bool fte_locked;
@@ -99,8 +100,9 @@ frame_init(void){
         frametable[i].fte_paddr     = tmp_paddr;
         frametable[i].fte_cap       = tmp_cap;
         frametable[i].fte_kvaddr    = kvaddr;
+        frametable[i].fte_vaddr     = 0;
         frametable[i].fte_status    = FRAME_STATUS_ALLOCATED;
-        frametable[i].fte_pd        = seL4_CapInitThreadPD;
+        frametable[i].fte_as        = NULL;
         frametable[i].fte_next_free = FRAME_INVALID;
         frametable[i].fte_locked    = false;
     }
@@ -143,6 +145,8 @@ typedef struct {
    frame_alloc_cb_t callback;
    void* token;
    int victim_id;
+   seL4_Word vaddr;
+   addrspace_t* as;
 } frame_alloc_cont_t;
 
 static void
@@ -176,12 +180,22 @@ frame_alloc_end(void* token, int err){
     //If this assert fails then our first_free is buggy
     assert(frametable[ind].fte_status != FRAME_STATUS_ALLOCATED);
 
+    //Temporary fix, TODO change this to get the addrspace for differnt process
+    /*addrspace_t *as = proc_getas(); 
+    if(as == NULL){
+        printf("error, frame_alloc_end: failed to get app addrspace\n");
+        cont->callback(cont->token, 0);
+        free(cont);
+        return;
+    }*/
+
     if(frametable[ind].fte_status == FRAME_STATUS_FREE){
         /* If the frame has been typed, we simple allocated it */
 
         frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
         frametable[ind].fte_kvaddr = kvaddr;
-        frametable[ind].fte_pd     = seL4_CapInitThreadPD;
+        frametable[ind].fte_kvaddr = cont->vaddr;
+        frametable[ind].fte_as     = cont->as;
         frametable[ind].fte_locked = false;
     } else {
         /* Else we have to typed it */
@@ -197,7 +211,8 @@ frame_alloc_end(void* token, int err){
 
         frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
         frametable[ind].fte_kvaddr = kvaddr;
-        frametable[ind].fte_pd     = seL4_CapInitThreadPD;
+        frametable[ind].fte_kvaddr = cont->vaddr;
+        frametable[ind].fte_as     = cont->as;
         frametable[ind].fte_locked = false;
     }
 
@@ -233,7 +248,7 @@ frame_alloc_swap_out_cb(void *token, int err) {
     frame_alloc_end((void*)cont, 0);
 }
 
-int frame_alloc(frame_alloc_cb_t callback, void* token){
+int frame_alloc(seL4_Word vaddr, addrspace_t* as, frame_alloc_cb_t callback, void* token){
     printf("frame alloc\n");
 
     if (!frame_initialised) {
@@ -241,13 +256,21 @@ int frame_alloc(frame_alloc_cb_t callback, void* token){
         return EFAULT;
     }
 
-    frame_alloc_cont_t *cont = malloc(sizeof(frame_alloc_cb_t));
+    //if as == NULL, it means the kernel is calling frame_alloc for itself
+    if(as != NULL && vaddr == 0){
+        callback(token, 0);
+        return EINVAL;
+    }
+
+    frame_alloc_cont_t *cont = malloc(sizeof(frame_alloc_cont_t));
     if(cont == NULL){
         callback(token, 0);
         return EFAULT;
     }
     cont->callback = callback;
     cont->token = token;
+    cont->vaddr = vaddr;
+    cont->as = as;
 
     /* If we do not have enough memory, start swapping frames out */
     if(first_free == FRAME_INVALID) {
@@ -322,7 +345,6 @@ int frame_free(seL4_Word kvaddr){
 
     /* Clear other fields */
     frametable[id].fte_locked = false;
-    frametable[id].fte_pd     = 0;
 
     /* Update free frame list */
     frametable[id].fte_next_free = first_free;
@@ -417,4 +439,21 @@ seL4_Word get_free_frame_kvaddr(){
         return (seL4_Word)ID_TO_KVADDR(first_free);
     }
     return FRAME_INVALID;
+}
+
+addrspace_t* frame_get_as(seL4_Word kvaddr){
+    int id = (int)KVADDR_TO_ID(kvaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return NULL;
+    }
+    return frametable[id].fte_as;
+}
+
+seL4_Word frame_get_vaddr(seL4_Word kvaddr){
+    int id = (int)KVADDR_TO_ID(kvaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return EINVAL;
+    }
+    return frametable[id].fte_vaddr;
+
 }

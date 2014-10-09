@@ -4,6 +4,8 @@
 #include <sel4/sel4.h>
 #include <errno.h>
 
+#include "vm/addrspace.h"
+
 /*
  * Initialise frame table. Reserve memory and initialise values for frame table
  *
@@ -32,7 +34,7 @@ typedef void (*frame_alloc_cb_t)(void *token, seL4_Word kvaddr);
  */
 //TODO: frame_alloc might need to take in another field indicating whether this
 //frame is unswappable
-int frame_alloc(frame_alloc_cb_t callback, void *token);
+int frame_alloc(seL4_Word vaddr, addrspace_t* as, frame_alloc_cb_t callback, void *token);
 //seL4_Word frame_alloc(void);
 
 /*
@@ -65,5 +67,9 @@ int frame_is_locked(seL4_Word vaddr, bool *is_locked);
  * TODO: I don't think this is necessary anymore - Vy
  */
 seL4_Word get_free_frame_kvaddr();
+
+addrspace_t* frame_get_as(seL4_Word kvaddr);
+
+seL4_Word frame_get_vaddr(seL4_Word kvaddr);
 
 #endif /* _LIBOS_VM_H_ */

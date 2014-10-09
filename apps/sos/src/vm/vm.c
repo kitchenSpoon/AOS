@@ -185,7 +185,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
             //seL4_Word kvaddr = frame_alloc();
-            err = frame_alloc(sos_VMFaultHandler_swap_in_1, (void*)cont);
+            err = frame_alloc(fault_addr, NULL, sos_VMFaultHandler_swap_in_1, (void*)cont);
             if (err) {
                 sos_VMFaultHandler_reply((void*)cont, err);
                 return;

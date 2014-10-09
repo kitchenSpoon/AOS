@@ -168,7 +168,7 @@ void sos_page_map_part4(void* token){
     }
 
     /* Allocate memory for the frame */
-    int err = frame_alloc(sos_page_map_part5, token);
+    int err = frame_alloc(cont->vaddr, cont->as, sos_page_map_part5, token);
     if (err) {
         cont->callback(cont->token, EINVAL);
         free(cont);
@@ -212,7 +212,7 @@ sos_page_map_part2(void* token, seL4_Word kvaddr){
     cont->as->as_pd_regs[x] = (pagetable_t)kvaddr;
 
     /* Allocate memory for the 2nd level pagetable for caps */
-    int err = frame_alloc(sos_page_map_part3, token);
+    int err = frame_alloc(cont->vaddr, cont->as, sos_page_map_part3, token);
     if (err) {
         frame_free(kvaddr);
         cont->callback(cont->token, EFAULT);
@@ -256,7 +256,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions, sos_page_ma
         assert(as->as_pd_caps[x] == NULL);
 
         /* Allocate memory for the 2nd level pagetable for regs */
-        err = frame_alloc(sos_page_map_part2, (void*)cont);
+        err = frame_alloc(vaddr, as, sos_page_map_part2, (void*)cont);
         if (err) {
             free(cont);
             return EFAULT;

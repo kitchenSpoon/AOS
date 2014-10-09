@@ -520,6 +520,12 @@ int thresh(int argc, char *argv[]) {
         big_buf[i] = argv[2][0];
         printf("%c",big_buf[i]);
     }
+
+    //read again to try and swap in swaped out pages
+    for(int i = 0; i < atoi(argv[1])*1024; i++){
+        big_buf[i] = argv[2][0];
+        printf("%c2",big_buf[i]);
+    }
     return 0;
 }
 

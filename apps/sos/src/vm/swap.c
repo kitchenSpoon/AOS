@@ -27,6 +27,12 @@
 
 #define NFS_SEND_SIZE   1024 //This needs to be less than UDP package size
 
+
+#define INDEX_1_MASK        (0xffc00000)
+#define INDEX_2_MASK        (0x003ff000)
+#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
+#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
+
 uint32_t free_slots[NUM_FREE_SLOTS];
 
 fhandle_t *swap_fh;
@@ -157,6 +163,20 @@ void swap_in_end(void* token, int err){
     //set that slot in bitmap as free
     int free_slot = state->vaddr & PTE_SWAP_OFFSET;;
     _unset_slot(free_slot);
+
+    //set swap bit false
+    addrspace_t *as = frame_get_as(state->kvaddr);
+    if(as == NULL){
+        //this should not happen
+        printf("Fatal error, swapout4 has encountered an error trying to get as from frame");
+    }
+    seL4_Word vaddr = frame_get_vaddr(state->kvaddr);
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
+
+    as->as_pd_regs[x][y] = as->as_pd_regs[x][y] & ~PTE_SWAPPED; 
+
 
     free(state);
 }
@@ -298,6 +318,20 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     if(err){
         printf("frame free error in swap out\n");
     }
+
+    //set swap out bit true
+    addrspace_t *as = frame_get_as(cont->kvaddr);
+    if(as == NULL){
+        //this should not happen
+        printf("Fatal error, swapout4 has encountered an error trying to get as from frame");
+    }
+    seL4_Word vaddr = frame_get_vaddr(cont->kvaddr);
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
+
+    as->as_pd_regs[x][y] = as->as_pd_regs[x][y] | PTE_SWAPPED; 
+
     cont->callback(cont->token, 0);
     free(cont);
 }

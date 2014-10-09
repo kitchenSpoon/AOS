@@ -175,7 +175,7 @@ void swap_in_end(void* token, int err){
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
-    as->as_pd_regs[x][y] = as->as_pd_regs[x][y] & ~PTE_SWAPPED; 
+    as->as_pd_regs[x][y] = as->as_pd_regs[x][y] & ~PTE_SWAPPED;
 
 
     free(state);
@@ -313,7 +313,9 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
         return;
     }
     printf("swap out 4 calling back up\n");
+
     //TODO unlock frame
+    /* Use frame_free to mark the frame as free */
     int err = frame_free(cont->kvaddr);
     if(err){
         printf("frame free error in swap out\n");
@@ -321,16 +323,14 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
 
     //set swap out bit true
     addrspace_t *as = frame_get_as(cont->kvaddr);
-    if(as == NULL){
-        //this should not happen
-        printf("Fatal error, swapout4 has encountered an error trying to get as from frame");
-    }
+    assert(as != NULL);
+
     seL4_Word vaddr = frame_get_vaddr(cont->kvaddr);
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
-    as->as_pd_regs[x][y] = as->as_pd_regs[x][y] | PTE_SWAPPED; 
+    as->as_pd_regs[x][y] = as->as_pd_regs[x][y] | PTE_SWAPPED;
 
     cont->callback(cont->token, 0);
     free(cont);

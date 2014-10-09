@@ -246,20 +246,17 @@ int frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
     printf("frame alloc\n");
 
     if (!frame_initialised) {
-        callback(token, 0);
         return EFAULT;
     }
 
     //if as == NULL, it means the kernel is calling frame_alloc for itself
     if(as != NULL && vaddr == 0){
-        callback(token, 0);
         return EINVAL;
     }
 
     frame_alloc_cont_t *cont = malloc(sizeof(frame_alloc_cont_t));
     if(cont == NULL){
-        callback(token, 0);
-        return EFAULT;
+        return ENOMEM;
     }
     cont->callback = callback;
     cont->token = token;

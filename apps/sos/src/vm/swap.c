@@ -21,7 +21,7 @@
  * 1 is used
  * 0 is free
  */
-#define NUM_FREE_SLOTS (32)
+#define NUM_CHUNKS (32)
 #define NUM_BITS (32)
 #define SWAP_FILE_NAME  "swap"
 
@@ -33,48 +33,34 @@
 #define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
 #define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
 
-uint32_t free_slots[NUM_FREE_SLOTS];
+uint32_t free_slots[NUM_CHUNKS];
 
 fhandle_t *swap_fh;
 
-/*static void
-_unset_slot(seL4_Word offset){
-    int slot = offset/(NUM_FREE_SLOTS * NUM_BITS);
-    free_slots[slot/NUM_FREE_SLOTS] &= 0<<(slot%NUM_FREE_SLOTS);
-    return;
-}
-
-static void
-_set_slot(seL4_Word offset){
-    int slot = offset/(NUM_FREE_SLOTS * NUM_BITS);
-    free_slots[slot/NUM_FREE_SLOTS] &= 1<<(slot%NUM_FREE_SLOTS);
-    return;
-}*/
-
 static void
 _unset_slot(int slot){
-    free_slots[slot/NUM_FREE_SLOTS] &= ~(1<<(slot%NUM_FREE_SLOTS));
+    free_slots[slot/NUM_CHUNKS] &= ~(1u<<(slot%NUM_CHUNKS));
     return;
 }
 
 static void
 _set_slot(int slot){
-    free_slots[slot/NUM_FREE_SLOTS] |= 1<<(slot%NUM_FREE_SLOTS);
+    free_slots[slot/NUM_CHUNKS] |= 1u<<(slot%NUM_CHUNKS);
     return;
 }
 
-static int
+static bool
 swap_check_valid_offset(seL4_Word offset){
-    return 0;
+    return (offset >= 0 && offset < NUM_CHUNKS * NUM_BITS);
 }
 
 static int
 swap_find_free_slot(void){
-    for(uint32_t i = 0; i < NUM_FREE_SLOTS; i++){
+    for(uint32_t i = 0; i < NUM_CHUNKS; i++){
         for(uint32_t j = 0; j < NUM_BITS; j++){
             //printf("i = %d, j = %d, free_slots[i] in decimal = %u\n", i, j, free_slots[i]);
-            if(!(free_slots[i] & (1<<j))){
-                return i*NUM_FREE_SLOTS + j;
+            if(!(free_slots[i] & (1u<<j))){
+                return i*NUM_CHUNKS + j;
             }
         }
     }
@@ -135,13 +121,14 @@ typedef struct {
     void* token;
     seL4_Word kvaddr;
     seL4_Word vaddr;
-    int free_slot;
+    int swap_slot;
     addrspace_t *as;
     seL4_CapRights rights;
     size_t bytes_read;
 } swap_in_cont_t;
 
-void swap_in_end(void* token, int err){
+static void
+swap_in_end(void* token, int err){
     printf("swap in end entered\n");
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
@@ -151,54 +138,52 @@ void swap_in_end(void* token, int err){
         return;
     }
 
-    //TODO update the as->as_pd[x][y] so that it reflects correct vaddr,
-    //as->as_pd[x][y] = ((state->kvaddr)<<PTE_SWAP_OFFSET) | (as->as_pd[x][y] & 3);
-    //UPDATE_PAGETABLE_REG();
+    _unset_slot(state->swap_slot);
 
     //TODO set frame lock free
 
-    //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
-    state->callback((void*)state->token, err);
+    /* Map the page into user addrspace */
 
-    addrspace_t *as = frame_get_as(state->kvaddr);
-    if(as == NULL){
-        //this should not happen
-        printf("Fatal error, swapout4 has encountered an error trying to get as from frame");
-    }
-    seL4_Word vaddr = frame_get_vaddr(state->kvaddr);
-    seL4_Word vpage = PAGE_ALIGN(vaddr);
-    int x = PT_L1_INDEX(vpage);
-    int y = PT_L2_INDEX(vpage);
+    seL4_CPtr kframe_cap, frame_cap;
 
-    //set that slot in bitmap as free
-    int free_slot = (as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET;
-    //int free_slot = state->vaddr & PTE_SWAP_MASK;
-    _unset_slot(free_slot);
+    err = frame_get_cap(state->kvaddr, &kframe_cap);
+    assert(!err); // This kvaddr is ready to use, there should be no error
 
-    //set swap bit false and update with 
-    as->as_pd_regs[x][y] = (state->kvaddr<<PTE_KVADDR_OFFSET | PTE_IN_USE_BIT) & ~PTE_SWAPPED;
-
-    free(state);
-}
-
-void swap_in_page_map(void* token, int err){
-    printf("swap in page map entered\n");
-    swap_in_cont_t *state = (swap_in_cont_t*)token;
-
-    if(err){
-        state->callback((void *)state->token, 1);
+    /* Copy the frame cap as we need to map it into 2 address spaces */
+    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, state->rights);
+    if (frame_cap == CSPACE_NULL) {
+        state->callback((void*)state->token, EFAULT);
         free(state);
         return;
     }
 
-    //map application page
-    //this automaticallys sets the page as not swapped out
-    sos_page_map(state->as, state->vaddr, state->rights, swap_in_end, token, false);
+    err = seL4_ARM_Page_Map(frame_cap, state->as->as_sel4_pd, state->vaddr,
+                            state->rights, seL4_ARM_Default_VMAttributes);
+    if(err == seL4_FailedLookup){
+        /* Assume the error was because we have no page table
+         * And at this point, page table should already be mapped in.
+         * So this is an error */
+        state->callback((void*)state->token, EFAULT);
+        free(state);
+        return;
+    }
+
+    seL4_Word vpage = PAGE_ALIGN(state->vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
+
+    // Update the pagetable to reflects page is swapped back in
+    state->as->as_pd_regs[x][y] = (state->kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
+    state->as->as_pd_caps[x][y] = frame_cap;
+
+    //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
+    state->callback((void*)state->token, err);
+    free(state);
 }
-void swap_in_handler(uintptr_t token, enum nfs_stat status,
+
+void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
                                 fattr_t *fattr, int count, void* data){
     printf("swap in handler entered\n");
-    int err = 0;
     swap_in_cont_t *state = (swap_in_cont_t*)token;
     if(status != NFS_OK){
         swap_in_end((void*)token, EFAULT);
@@ -210,47 +195,43 @@ void swap_in_handler(uintptr_t token, enum nfs_stat status,
 
     state->bytes_read += count;
     if(state->bytes_read < PAGE_SIZE){
-        //enum rpc_stat status = nfs_read(swap_fh, offset + state->bytes_read, MIN(PAGE_SIZE - state->bytes_read, NFS_SEND_SIZE),
-        //                     swap_in_handler, (uintptr_t)swap_cont);
-        int free_slot = (state->vaddr & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET;
-
-        printf("bytes read = %u, free_slot = 0x%08x\n",state->bytes_read, free_slot);
-        enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE + state->bytes_read, MIN(NFS_SEND_SIZE, PAGE_SIZE - state->bytes_read),
-                               swap_in_handler, (uintptr_t)state);
+        printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
+        enum rpc_stat status = nfs_read(swap_fh, state->swap_slot * PAGE_SIZE + state->bytes_read,
+                                        MIN(NFS_SEND_SIZE, PAGE_SIZE - state->bytes_read),
+                                        swap_in_nfs_read_handler, (uintptr_t)state);
         if (status != RPC_OK) {
             swap_in_end((void*)token, EFAULT);
             return;
         }
     } else {
-        swap_in_page_map((void*)token, err);
+        //sos_page_map(state->as, state->vaddr, state->rights, swap_in_end, token, false);
+        swap_in_end((void*)token, 0);
+        return;
     }
 }
+
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token){
     printf("swap in entered\n");
+    printf("swap in this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n", kvaddr, vaddr);
+
+    // If swap file is not created, how can we swap in? This is a bug
+    assert(swap_fh != NULL);
     int err = 0;
-    //check if swap file handler is initalized
-    if(swap_fh == NULL){
-        return EFAULT;
-    }
-    //TODO get actual rights from region
 
-    printf("swap in kvaddr -> 0x%08x, this vaddr -> 0x%08x\n",kvaddr,vaddr);
-
-    //use vaddr to get as->as_pd[x][y]
-    //and then use it to get the free slot
-    //this is currently a hack
+    kvaddr = PAGE_ALIGN(kvaddr);
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
-    int free_slot = (as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET;
-    //int free_slot = (vaddr & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET;
-    err = swap_check_valid_offset(free_slot);
-    if(err){
-        return err;
-    }
+    // only mapped/inuse application memory are swapped out, so these need not be NULL
+    assert(as != NULL && as->as_pd_regs[x] != NULL && as->as_pd_caps[x] != NULL);
 
-    printf("swap in checked valid\n");
+    assert(as->as_pd_regs[x][y] & PTE_SWAPPED);  // only swap in pages that are swapped out
+
+    int swap_slot = (as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET;
+    if (swap_check_valid_offset(swap_slot)) {
+        return EFAULT;
+    }
 
     /* Set our continuations */
     swap_in_cont_t *swap_cont = malloc(sizeof(swap_in_cont_t));
@@ -261,20 +242,19 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     swap_cont->token      = token;
     swap_cont->kvaddr     = kvaddr;
     swap_cont->vaddr      = vaddr;
+    swap_cont->swap_slot  = swap_slot;
     swap_cont->as         = as;
     swap_cont->rights     = rights;
     swap_cont->bytes_read = 0;
-
-    printf("swap in checked valid\n");
 
     //TODO lock frame
     /*TODO free the slot*/
 
     /* Lock the slot */
-    //_set_slot(free_slot);
 
-    enum rpc_stat status = nfs_read(swap_fh, free_slot * PAGE_SIZE , PAGE_SIZE, swap_in_handler, (uintptr_t)swap_cont);
-    /* if status != RPC_OK this function will return error however the swap_in_handler might still run, bugg?*/
+    printf("swap in start reading\n");
+
+    enum rpc_stat status = nfs_read(swap_fh, swap_slot * PAGE_SIZE , PAGE_SIZE, swap_in_nfs_read_handler, (uintptr_t)swap_cont);
     if(status != RPC_OK){
         err = 1;
         //printf("swap_in rpc error = %d\n", status);

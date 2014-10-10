@@ -129,7 +129,7 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
         return;
     }
 
-    /* Map the frame into application's address spaces */
+    /* Map the frame into application's address space */
     err = _map_page(cont->as, frame_cap, vpage, cont->permissions,
                     seL4_ARM_Default_VMAttributes);
     if (err) {
@@ -143,7 +143,7 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
     /* Insert PTE into application's pagetable */
     int x = PT_L1_INDEX(cont->vaddr);
     int y = PT_L2_INDEX(cont->vaddr);
-    cont->as->as_pd_regs[x][y] = kvaddr | PTE_IN_USE_BIT;
+    cont->as->as_pd_regs[x][y] = (kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
     cont->as->as_pd_caps[x][y] = frame_cap;
 
     /* Calling back up */

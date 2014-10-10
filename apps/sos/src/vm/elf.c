@@ -78,6 +78,8 @@ load_segment_into_vspace3(void* token, int err){
     seL4_Word kdst;
     seL4_CPtr sos_cap;
 
+    //TODO: need to lock the page somehow or the page might be swapped out and
+    //sos_get_kvaddr won't work
     err = sos_get_kvaddr(cont->as, cont->dst, &kdst);
     if (err) {
         cont->callback(cont->token, err);

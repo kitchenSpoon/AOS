@@ -8,7 +8,9 @@
 
 #define PTE_IN_USE_BIT          (1)
 #define PTE_SWAPPED             (1<<1)
-#define PTE_SWAP_OFFSET         (0xfffffffC)
+#define PTE_SWAP_OFFSET         (2)
+#define PTE_KVADDR_OFFSET       (2)
+#define PTE_SWAP_MASK           (0xfffffffc)
 #define PTE_KVADDR_MASK         (0xfffff000)
 
 /* Pagetable related defs */

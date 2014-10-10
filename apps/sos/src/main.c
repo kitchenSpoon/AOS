@@ -183,9 +183,9 @@ void handle_pagefault(void) {
     dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", fault_addr, pc,
             ifault ? "Instruction Fault" : "Data fault");
 
-    if (ifault) {
+    //if (ifault) {
         // we don't handle this
-    } else {
+    //} else {
         seL4_CPtr reply_cap;
 
         /* Save the caller */
@@ -193,7 +193,7 @@ void handle_pagefault(void) {
         assert(reply_cap != CSPACE_NULL);
 
         sos_VMFaultHandler(reply_cap, fault_addr, fsr);
-    }
+    //}
 }
 
 void syscall_loop(seL4_CPtr ep) {

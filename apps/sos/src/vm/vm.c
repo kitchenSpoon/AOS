@@ -8,6 +8,7 @@
 #include <strings.h>
 #include <errno.h>
 
+#include "tool/utility.h"
 #include "vm/vm.h"
 #include "vm/mapping.h"
 #include "vm/vmem_layout.h"
@@ -42,7 +43,6 @@ _region_probe(struct addrspace* as, seL4_Word addr) {
 typedef struct {
     seL4_CPtr reply_cap;
     addrspace_t *as;
-    seL4_CapRights rights;
     seL4_Word vaddr;
     seL4_Word kvaddr;
     region_t* reg;
@@ -57,11 +57,14 @@ typedef struct {
 static void
 sos_VMFaultHandler_reply(void* token, int err){
     printf("sos_vmf_end\n");
-    if(err){
-        printf("sos_vmf received an error\n");
-    }
 
     VMF_cont_t *state = (VMF_cont_t*)token;
+    if(err){
+        printf("sos_vmf received an error\n");
+        if (state->kvaddr != 0) {
+            frame_free(state->kvaddr);
+        }
+    }
 
     /* If there is an err here, it is not the process's fault
      * It is either the kernel running out of memory or swapping doesn't work
@@ -107,8 +110,13 @@ sos_VMFaultHandler_swap_in_end(void* token, int err){
 
 static void
 sos_VMFaultHandler_swap_in_1(void *token, seL4_Word kvaddr) {
-    VMF_cont_t *cont = (VMF_cont_t*)token;
+    if (kvaddr == 0) {
+        sos_VMFaultHandler_reply(token, EFAULT);
+        return;
+    }
 
+    VMF_cont_t *cont = (VMF_cont_t*)token;
+    cont->kvaddr = kvaddr;
     int err = swap_in(cont->as, cont->reg->rights, cont->vaddr, kvaddr,
                       sos_VMFaultHandler_swap_in_end, cont);
     if (err) {
@@ -179,8 +187,10 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
+
     cont->reply_cap = reply_cap;
     cont->as = as;
+    cont->kvaddr = 0;
     cont->vaddr = fault_addr;
     cont->reg = reg;
 
@@ -189,7 +199,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
         if (sos_page_is_swapped(as, fault_addr)) {
             printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
-            err = frame_alloc(fault_addr, as, false, sos_VMFaultHandler_swap_in_1, (void*)cont);
+            err = frame_alloc(PAGE_ALIGN(fault_addr), as, false, sos_VMFaultHandler_swap_in_1, (void*)cont);
             if (err) {
                 sos_VMFaultHandler_reply((void*)cont, err);
                 return;
@@ -197,7 +207,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             return;
         } else {
             printf("vmf: process tries to access an inused, non-swapped page\n");
-            printf("most likely app does not have certain rights to this address\n");
+            printf("most likely this page is not mapped in correctly\n");
         }
     } else {
         /* This page has never been mapped, so do that and return */

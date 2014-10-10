@@ -266,7 +266,7 @@ frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
     }
     cont->callback = callback;
     cont->token = token;
-    cont->vaddr = vaddr;
+    cont->vaddr = PAGE_ALIGN(vaddr);
     cont->as = as;
     cont->noswap = noswap;
 

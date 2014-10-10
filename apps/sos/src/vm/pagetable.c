@@ -97,7 +97,7 @@ typedef struct {
     sos_page_map_cb_t callback;
     void *token;
     addrspace_t* as;
-    seL4_Word vaddr;
+    seL4_Word vpage;
     uint32_t permissions;
     bool noswap;
 } sos_page_map_cont_t;
@@ -108,7 +108,6 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     seL4_CPtr kframe_cap, frame_cap;
-    seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
 
     if (!kvaddr) {
         printf("sos_page_map_part5 failed to allocate memory for frame\n");
@@ -130,7 +129,7 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
     }
 
     /* Map the frame into application's address space */
-    err = _map_page(cont->as, frame_cap, vpage, cont->permissions,
+    err = _map_page(cont->as, frame_cap, cont->vpage, cont->permissions,
                     seL4_ARM_Default_VMAttributes);
     if (err) {
         frame_free(kvaddr);
@@ -141,8 +140,8 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
     }
 
     /* Insert PTE into application's pagetable */
-    int x = PT_L1_INDEX(cont->vaddr);
-    int y = PT_L2_INDEX(cont->vaddr);
+    int x = PT_L1_INDEX(cont->vpage);
+    int y = PT_L2_INDEX(cont->vpage);
     cont->as->as_pd_regs[x][y] = (kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
     cont->as->as_pd_caps[x][y] = frame_cap;
 
@@ -157,9 +156,8 @@ void sos_page_map_part4(void* token){
     printf("sos_page_map 4\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
-    seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
-    int x = PT_L1_INDEX(vpage);
-    int y = PT_L2_INDEX(vpage);
+    int x = PT_L1_INDEX(cont->vpage);
+    int y = PT_L2_INDEX(cont->vpage);
 
     if (cont->as->as_pd_regs[x][y] & PTE_IN_USE_BIT) {
         /* page already mapped */
@@ -169,7 +167,7 @@ void sos_page_map_part4(void* token){
     }
 
     /* Allocate memory for the frame */
-    int err = frame_alloc(cont->vaddr, cont->as, cont->noswap, sos_page_map_part5, token);
+    int err = frame_alloc(cont->vpage, cont->as, cont->noswap, sos_page_map_part5, token);
     if (err) {
         cont->callback(cont->token, EINVAL);
         free(cont);
@@ -181,8 +179,7 @@ void sos_page_map_part3(void* token, seL4_Word kvaddr){
     printf("sos_page_map 3\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
-    seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
-    int x = PT_L1_INDEX(vpage);
+    int x = PT_L1_INDEX(cont->vpage);
     if (kvaddr == 0) {
         printf("warning: sos_page_map_part3 not enough memory for lvl2 pagetable\n");
         frame_free((seL4_Word)(cont->as->as_pd_regs[x]));
@@ -208,12 +205,12 @@ sos_page_map_part2(void* token, seL4_Word kvaddr){
         return;
     }
 
-    seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
+    seL4_Word vpage = PAGE_ALIGN(cont->vpage);
     int x = PT_L1_INDEX(vpage);
     cont->as->as_pd_regs[x] = (pagetable_t)kvaddr;
 
     /* Allocate memory for the 2nd level pagetable for caps */
-    int err = frame_alloc(cont->vaddr, cont->as, true, sos_page_map_part3, token);
+    int err = frame_alloc(0, NULL, true, sos_page_map_part3, token);
     if (err) {
         frame_free(kvaddr);
         cont->callback(cont->token, EFAULT);
@@ -237,12 +234,14 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         return EFAULT;
     }
 
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+
     sos_page_map_cont_t* cont = malloc(sizeof(sos_page_map_cont_t));
     if(cont == NULL){
         return ENOMEM;
     }
     cont->as = as;
-    cont->vaddr = vaddr;
+    cont->vpage = vpage;
     cont->permissions = permissions;
     cont->callback = callback;
     cont->token = token;
@@ -250,7 +249,6 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
 
     int x, err;
 
-    seL4_Word vpage = PAGE_ALIGN(vaddr);
     x = PT_L1_INDEX(vpage);
 
     if (as->as_pd_regs[x] == NULL) {
@@ -259,7 +257,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         assert(as->as_pd_caps[x] == NULL);
 
         /* Allocate memory for the 2nd level pagetable for regs */
-        err = frame_alloc(vaddr, as, true, sos_page_map_part2, (void*)cont);
+        err = frame_alloc(0, NULL, true, sos_page_map_part2, (void*)cont);
         if (err) {
             free(cont);
             return EFAULT;

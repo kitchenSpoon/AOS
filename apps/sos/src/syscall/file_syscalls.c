@@ -22,10 +22,10 @@
  * Check if the user pages from VADDR to VADDR+NBYTE are mapped
  */
 static bool
-is_range_mapped(seL4_Word vaddr, size_t nbyte) {
+is_range_inuse(seL4_Word vaddr, size_t nbyte) {
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     while (vpage < vaddr+nbyte) {
-        bool mapped = sos_page_is_mapped(proc_getas(), vpage);
+        bool mapped = sos_page_is_inuse(proc_getas(), vpage);
         if (!mapped) {
             return false;
         }
@@ -82,7 +82,7 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
     }
     cont->reply_cap = reply_cap;
 
-    if ((nbyte >= MAX_IO_BUF) || (!is_range_mapped(path, nbyte))){
+    if ((nbyte >= MAX_IO_BUF) || (!is_range_inuse(path, nbyte))){
         serv_sys_open_end((void*)cont, EINVAL, -1);
         return;
     }
@@ -266,7 +266,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     cont->start     = 0;
 
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);
-    is_inval = is_inval || (!is_range_mapped(buf, nbyte));
+    is_inval = is_inval || (!is_range_inuse(buf, nbyte));
     if(is_inval){
         serv_sys_write_end((void*)cont, EINVAL, 0);
         return;

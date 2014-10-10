@@ -321,6 +321,7 @@ seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr){
             return 0;
         }
     }
+    printf("sos_sysbrk ended, vaddr = %p\n", (void*)vaddr);
     return vaddr;
 }
 

@@ -302,8 +302,9 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     cont->written += (size_t)count;
     if (cont->written < PAGE_SIZE) {
         printf("swap out 4 reading more\n");
-        enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written, MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->written),
-                            (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
+        enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written,
+                MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->written),
+                (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
         if (status != RPC_OK) {
             //TODO unlock frame
             cont->callback(cont->token, EFAULT);
@@ -331,6 +332,11 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     int y = PT_L2_INDEX(vpage);
 
     as->as_pd_regs[x][y] = as->as_pd_regs[x][y] | PTE_SWAPPED;
+
+    err = sos_page_unmap(as, vaddr);
+    if (err) {
+        printf("warning: swap_out_4: sos_page_unmap failed\n");
+    }
 
     cont->callback(cont->token, 0);
     free(cont);
@@ -388,7 +394,7 @@ swap_out_2_init_callback(void *token, int err) {
 
 void
 swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
-    printf("swap out entered\n");
+    printf("swap_out entered, kvaddr = 0x%08x\n", kvaddr);
 
     //TODO lock frame
 

@@ -180,7 +180,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     cont->reg = reg;
 
     /* Check if this page is an new, unmaped page or is it just swapped out */
-    if (sos_page_is_mapped(as, fault_addr)) {
+    if (sos_page_is_inuse(as, fault_addr)) {
         if (sos_page_is_swapped(as, fault_addr)) {
             printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
@@ -191,14 +191,14 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             }
             return;
         } else {
-
-            printf("vmf tries to access a mapped (but not swapped out) page again,\nmost likely app does not have certain rights to this address\n");
+            printf("vmf: process tries to access an inused, non-swapped page\n\
+                    most likely app does not have certain rights to this address\n");
         }
     } else {
         /* This page has never been mapped, so do that and return */
-        //TODO: this function will need to be broken down here
         printf("vmf tries to map a page\n");
-        int err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont, false);
+        int err;
+        err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
             sos_VMFaultHandler_reply((void*)cont, err);
         }

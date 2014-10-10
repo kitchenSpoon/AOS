@@ -51,7 +51,7 @@ copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte) {
         seL4_Word kdst;
         size_t cpy_sz;
         int err;
-        if(!sos_page_is_mapped(as, PAGE_ALIGN(buf))) {
+        if(!sos_page_is_inuse(as, PAGE_ALIGN(buf))) {
             //TODO make this asynchronous
             //sos_page_map(as, PAGE_ALIGN(buf), permissions);
         }

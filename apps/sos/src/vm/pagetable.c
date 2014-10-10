@@ -306,7 +306,7 @@ sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
 }
 
 bool
-sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr) {
+sos_page_is_inuse(addrspace_t *as, seL4_Word vaddr) {
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         return false;
     }

@@ -136,6 +136,10 @@ bool frame_has_free(void) {
     return (first_free != FRAME_INVALID);
 }
 
+/*
+ * This function only called when there is no memory left
+ * i.e. assuming that all frames are allocated
+ */
 static seL4_Word
 rand_swap_victim(){
     int id = rand() % NFRAMES;
@@ -143,21 +147,21 @@ rand_swap_victim(){
         id = rand() % NFRAMES;
     }
 
+    printf("rand_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(id));
     return ID_TO_KVADDR(id);
 }
 
 typedef struct {
    frame_alloc_cb_t callback;
    void* token;
-   int victim_id;
-   seL4_Word vaddr;
    addrspace_t* as;
+   seL4_Word vaddr;
    bool noswap;
 } frame_alloc_cont_t;
 
 static void
 frame_alloc_end(void* token, int err){
-    printf("frame alloc end\n");
+    printf("frame_alloc end\n");
 
     if (token == NULL) {
         printf("error: frame_alloc_end: shit happened\n");
@@ -181,6 +185,7 @@ frame_alloc_end(void* token, int err){
 
     int ind = first_free;
     seL4_Word kvaddr = (seL4_Word)ID_TO_KVADDR(ind);
+    printf("frame_alloc memory = 0x%08x\n", kvaddr);
 
     //If this assert fails then our first_free is buggy
     assert(frametable[ind].fte_status != FRAME_STATUS_ALLOCATED);
@@ -225,25 +230,26 @@ frame_alloc_end(void* token, int err){
 
 static void
 frame_alloc_swap_out_cb(void *token, int err) {
-    printf("frame alloc swapout cb\n");
+    printf("frame_alloc swapout cb\n");
     assert(token != NULL); // if this is NULL, memory is corrupted
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
-        printf("frame alloc cb err\n");
+        printf("frame_alloc cb err\n");
         cont->callback(cont->token, 0);
         free(cont);
         return;
     }
 
     /* Update free frame list */
-    printf("first free after swap out = %d\n",first_free);
+    printf("first free after swap out = %d\n", first_free);
 
     frame_alloc_end((void*)cont, 0);
 }
 
-int frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
+int
+frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
                 frame_alloc_cb_t callback, void* token){
-    printf("frame alloc\n");
+    printf("frame_alloc called, noswap = %d\n", (int)noswap);
 
     if (!frame_initialised) {
         return EFAULT;
@@ -270,8 +276,6 @@ int frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
         seL4_Word kvaddr = rand_swap_victim();
         // the frame returned is not locked
 
-        int ind = (int)KVADDR_TO_ID(kvaddr);
-        cont->victim_id = ind;
         swap_out(kvaddr, frame_alloc_swap_out_cb, (void*)cont);
         return 0;
     }
@@ -283,7 +287,7 @@ int frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
 
 int frame_free(seL4_Word kvaddr){
     /* May have concurency issues */
-    printf("frame free\n");
+    printf("frame_free\n");
 
     if (!frame_initialised) {
         /* Why is frame uninitialised? */
@@ -292,17 +296,17 @@ int frame_free(seL4_Word kvaddr){
 
     int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
-        printf("frame free err1\n");
+        printf("frame_free err1\n");
         return EINVAL;
     }
     if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
-        printf("frame free err2\n");
+        printf("frame_free err2\n");
         return EINVAL;
     }
 
     //frame to be freed should not be locked
     if(frametable[id].fte_locked) {
-        printf("frame free err3\n");
+        printf("frame_free err3\n");
         //dont crash sos
         return EFAULT;
     }

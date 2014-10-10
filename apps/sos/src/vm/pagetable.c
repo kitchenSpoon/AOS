@@ -297,11 +297,13 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
 bool
 sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
+        printf("sos_page_is_swapped Invalid inputs\n");
         return false;
     }
 
-    int x = PT_L1_INDEX(vaddr);
-    int y = PT_L2_INDEX(vaddr);
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
     return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_SWAPPED));
 }
 
@@ -311,8 +313,9 @@ sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr) {
         return false;
     }
 
-    int x = PT_L1_INDEX(vaddr);
-    int y = PT_L2_INDEX(vaddr);
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
     return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_IN_USE_BIT));
 }
 

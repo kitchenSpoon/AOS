@@ -747,13 +747,13 @@ int main(void) {
 
     /* Init file system */
     filesystem_init();
-    frametable_test(TEST_1 | TEST_2);
+    //frametable_test(TEST_1 | TEST_2);
 
     ///* Register swap test */
     //register_timer(1000000, swap_test, NULL); //100ms
 
     /* Start the user application */
-    //start_first_process(TTY_NAME, _sos_ipc_ep_cap);
+    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     ///* Wait on synchronous endpoint for IPC */
     dprintf(0, "\nSOS entering syscall loop\n");

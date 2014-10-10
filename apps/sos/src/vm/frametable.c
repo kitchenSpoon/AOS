@@ -142,7 +142,6 @@ rand_swap_victim(){
     while (frametable[id].fte_noswap) {
         id = rand() % NFRAMES;
     }
-
     return ID_TO_KVADDR(id);
 }
 

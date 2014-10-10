@@ -121,6 +121,7 @@ void
 sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     int err = 0;
 
+    printf("sos vmfault handler \n");
     if (fault_addr == 0) {
         /* Derefenrecing NULL? Segfault */
         printf("App tried to derefence NULL, kill it\n");
@@ -130,6 +131,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
 
     addrspace_t *as = proc_getas();
     if (as == NULL) {
+        printf("app as is NULL\n");
         /* Kernel is probably failed when bootstraping */
         cspace_free_slot(cur_cspace, reply_cap);
         return;
@@ -149,12 +151,14 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     bool fault_when_read = !fault_when_write;
 
     if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
+        printf("write to read only\n");
         /* Write to a read-only memory, segfault */
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
 
     if (fault_when_read && !(reg->rights & seL4_CanRead)) {
+        printf("read from no-readble mem\n");
         /* Read from a non-readable memory, segfault */
         cspace_free_slot(cur_cspace, reply_cap);
         return;
@@ -167,6 +171,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
 
     VMF_cont_t *cont = malloc(sizeof(VMF_cont_t));
     if (cont == NULL) {
+        printf("vmfault out of mem\n");
         /* We cannot handle the fault but the process still can run
          * There will be more faults coming though */
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);

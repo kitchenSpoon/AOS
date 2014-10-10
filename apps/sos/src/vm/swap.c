@@ -49,11 +49,6 @@ _set_slot(int slot){
     return;
 }
 
-static bool
-swap_check_valid_offset(seL4_Word offset){
-    return (offset >= 0 && offset < NUM_CHUNKS * NUM_BITS);
-}
-
 static int
 swap_find_free_slot(void){
     for(uint32_t i = 0; i < NUM_CHUNKS; i++){
@@ -177,7 +172,7 @@ swap_in_end(void* token, int err){
     state->as->as_pd_caps[x][y] = frame_cap;
 
     //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
-    state->callback((void*)state->token, err);
+    state->callback((void*)state->token, 0);
     free(state);
 }
 
@@ -216,7 +211,6 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
 
     // If swap file is not created, how can we swap in? This is a bug
     assert(swap_fh != NULL);
-    int err = 0;
 
     kvaddr = PAGE_ALIGN(kvaddr);
     seL4_Word vpage = PAGE_ALIGN(vaddr);
@@ -229,14 +223,11 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     assert(as->as_pd_regs[x][y] & PTE_SWAPPED);  // only swap in pages that are swapped out
 
     int swap_slot = (as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET;
-    if (swap_check_valid_offset(swap_slot)) {
-        return EFAULT;
-    }
 
     /* Set our continuations */
     swap_in_cont_t *swap_cont = malloc(sizeof(swap_in_cont_t));
     if(swap_cont == NULL){
-        return EFAULT;
+        return ENOMEM;
     }
     swap_cont->callback   = callback;
     swap_cont->token      = token;
@@ -256,10 +247,11 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
 
     enum rpc_stat status = nfs_read(swap_fh, swap_slot * PAGE_SIZE , PAGE_SIZE, swap_in_nfs_read_handler, (uintptr_t)swap_cont);
     if(status != RPC_OK){
-        err = 1;
         //printf("swap_in rpc error = %d\n", status);
+        free(swap_cont);
+        return EFAULT;
     }
-    return err;
+    return 0;
 }
 
 

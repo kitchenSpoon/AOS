@@ -16,7 +16,7 @@
 #include "proc/proc.h"
 
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
-#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART) 
+#define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
 
 #define RW_BIT    (1<<11)
 static
@@ -196,8 +196,8 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             }
             return;
         } else {
-            printf("vmf: process tries to access an inused, non-swapped page\n\
-                    most likely app does not have certain rights to this address\n");
+            printf("vmf: process tries to access an inused, non-swapped page\n");
+            printf("most likely app does not have certain rights to this address\n");
         }
     } else {
         /* This page has never been mapped, so do that and return */

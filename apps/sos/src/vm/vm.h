@@ -50,7 +50,7 @@ int frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap);
  * Handle VM fault for SOS
  * This will be the one who reply to the client
  */
-void sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr);
+void sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr, bool is_code);
 
 /*
  * Lock/Unlock a frame

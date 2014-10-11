@@ -18,7 +18,8 @@ typedef void (*swap_in_cb_t)(void *token, int err);
  * @param vaddr - The page data that we want to swap in
  * @param free_kvaddr - The memory that we we are copying data to
  */
-int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token);
+int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr,
+        bool is_code, swap_in_cb_t callback, void* token);
 
 /*
  * Perform a swap out for the frame pointed to by kvaddr

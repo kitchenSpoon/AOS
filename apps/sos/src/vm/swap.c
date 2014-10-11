@@ -119,6 +119,7 @@ typedef struct {
     int swap_slot;
     addrspace_t *as;
     seL4_CapRights rights;
+    bool is_code;
     size_t bytes_read;
 } swap_in_cont_t;
 
@@ -176,9 +177,10 @@ swap_in_end(void* token, int err){
     state->as->as_pd_regs[x][y] = (state->kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
     state->as->as_pd_caps[x][y] = frame_cap;
 
-    /* Not observable to I-cache yet so flush the frame */
-    //TODO: only flush on pages in text segment
-    seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+    /* Flush I-cache if we just swapped in an instruction page */
+    if (state->is_code) {
+        seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+    }
 
     printf("swap_in_end: calling back up\n");
 
@@ -216,7 +218,8 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
     }
 }
 
-int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr, swap_in_cb_t callback, void* token){
+int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr,
+        bool is_code, swap_in_cb_t callback, void* token){
     printf("swap in entered\n");
     printf("swap in this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n", kvaddr, vaddr);
 
@@ -245,6 +248,7 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     swap_cont->swap_slot  = swap_slot;
     swap_cont->as         = as;
     swap_cont->rights     = rights;
+    swap_cont->is_code    = is_code;
     swap_cont->bytes_read = 0;
 
     frame_lock_frame(kvaddr);

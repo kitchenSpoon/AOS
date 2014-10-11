@@ -184,18 +184,12 @@ void handle_pagefault(void) {
     dprintf(0, "vm fault at 0x%08x, align = 0x%08x , pc = 0x%08x, %s\n", fault_addr, PAGE_ALIGN(fault_addr), pc,
             ifault ? "Instruction Fault" : "Data fault");
 
-    //TODO check if this is correct
-    //if (ifault) {
-        // we don't handle this
-    //} else {
-        seL4_CPtr reply_cap;
+    seL4_CPtr reply_cap;
 
-        /* Save the caller */
-        reply_cap = cspace_save_reply_cap(cur_cspace);
-        assert(reply_cap != CSPACE_NULL);
-
-        sos_VMFaultHandler(reply_cap, fault_addr, fsr);
-    //}
+    /* Save the caller */
+    reply_cap = cspace_save_reply_cap(cur_cspace);
+    assert(reply_cap != CSPACE_NULL);
+    sos_VMFaultHandler(reply_cap, fault_addr, fsr, ifault);
 }
 
 void syscall_loop(seL4_CPtr ep) {

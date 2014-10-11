@@ -286,7 +286,7 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
         return EINVAL;
     }
 
-    assert(as->as_pd_caps[x][y] != NULL);
+    assert(as->as_pd_caps[x][y] != 0);
     int err;
     err = seL4_ARM_Page_Unmap(as->as_pd_caps[x][y]);
     if (err) {

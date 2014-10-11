@@ -50,14 +50,9 @@ typedef struct {
     addrspace_t *as;
     seL4_Word vaddr;
     seL4_Word kvaddr;
+    bool is_code;
     region_t* reg;
 } VMF_cont_t;
-
-//static seL4_Word
-//rand_chance_swap(){
-//    int id = rand() % NFRAMES;
-//    return ID_TO_VADDR(id);
-//}
 
 static void
 sos_VMFaultHandler_reply(void* token, int err){
@@ -86,33 +81,6 @@ sos_VMFaultHandler_swap_in_end(void* token, int err){
     sos_VMFaultHandler_reply(token, err);
 }
 
-//static void
-//sos_VMFaultHandler_swapout_to_swapin(void* token, int err){
-//    printf("sos_vmf_swapout to swapin\n");
-//    VMF_cont_t *state = (VMF_cont_t*)token;
-//    region_t* reg = _region_probe(state->as, state->vaddr);
-//    err = swap_in(state->as, reg->rights, state->vaddr, state->kvaddr, sos_VMFaultHandler_swap_in_end, token);
-//    if(err) {
-//        //something
-//    }
-//}
-
-//static void
-//sos_VMFaultHandler_swapout_to_pagein(void* token, int err){
-//    printf("sos_vmf_swapout to pagein\n");
-//    VMF_cont_t *state = (VMF_cont_t*)token;
-//    printf("sos_vmf_swapout to pagein1\n");
-//    region_t* reg = _region_probe(state->as, state->vaddr);
-//    printf("sos_vmf_swapout to pagein2\n");
-//    //this is hacky
-//    //frame_free(state->kvaddr);
-//
-//    err = sos_page_map(state->as, state->vaddr, reg->rights);
-//    printf("sos_vmf_swapout to pagein3 err = %d\n", err);
-//
-//    sos_VMFaultHandler_reply(token, 0);
-//}
-
 static void
 sos_VMFaultHandler_swap_in_1(void *token, seL4_Word kvaddr) {
     if (kvaddr == 0) {
@@ -123,7 +91,7 @@ sos_VMFaultHandler_swap_in_1(void *token, seL4_Word kvaddr) {
     VMF_cont_t *cont = (VMF_cont_t*)token;
     cont->kvaddr = kvaddr;
     int err = swap_in(cont->as, cont->reg->rights, cont->vaddr, kvaddr,
-                      sos_VMFaultHandler_swap_in_end, cont);
+                      cont->is_code, sos_VMFaultHandler_swap_in_end, cont);
     if (err) {
         sos_VMFaultHandler_reply((void*)cont, EFAULT);
         return;
@@ -131,7 +99,7 @@ sos_VMFaultHandler_swap_in_1(void *token, seL4_Word kvaddr) {
 }
 
 void
-sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
+sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, bool is_code){
     int err = 0;
 
     printf("sos vmfault handler \n");
@@ -194,10 +162,11 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     }
 
     cont->reply_cap = reply_cap;
-    cont->as = as;
-    cont->kvaddr = 0;
-    cont->vaddr = fault_addr;
-    cont->reg = reg;
+    cont->as        = as;
+    cont->kvaddr    = 0;
+    cont->vaddr     = fault_addr;
+    cont->is_code   = is_code;
+    cont->reg       = reg;
 
     /* Check if this page is an new, unmaped page or is it just swapped out */
     if (sos_page_is_inuse(as, fault_addr)) {

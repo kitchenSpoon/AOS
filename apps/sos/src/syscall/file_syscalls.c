@@ -287,7 +287,6 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
         return;
     }
 
-    addrspace_t *as = proc_getas();
     err = frame_alloc(0, NULL, false, serv_sys_write_get_kbuf, (void*)cont);
     if (err) {
         serv_sys_write_end((void*)cont, EFAULT, 0);

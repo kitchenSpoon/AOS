@@ -315,6 +315,10 @@ frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
         //seL4_Word kvaddr = rand_swap_victim();
         seL4_Word kvaddr = second_chance_swap_victim();
         // the frame returned is not locked
+        if (kvaddr == 0) {
+            free(cont);
+            return ENOMEM;
+        }
 
         swap_out(kvaddr, frame_alloc_swap_out_cb, (void*)cont);
         return 0;

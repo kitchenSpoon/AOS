@@ -336,7 +336,6 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     //update with free slot
     as->as_pd_regs[x][y] = (cont->free_slot)<<PTE_SWAP_OFFSET | PTE_IN_USE_BIT | PTE_SWAPPED;
 
-    //unmap the page, so that vmf will occurr
     err = sos_page_unmap(as, vaddr);
     if (err) {
         printf("warning: swap_out_4: sos_page_unmap failed\n");

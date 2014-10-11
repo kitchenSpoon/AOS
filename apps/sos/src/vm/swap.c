@@ -134,17 +134,16 @@ swap_in_end(void* token, int err){
         return;
     }
 
+    /* Update the free_slots bitmap */
     _unset_slot(state->swap_slot);
 
-
     /* Map the page into user addrspace */
-
     seL4_CPtr kframe_cap, frame_cap;
 
     err = frame_get_cap(state->kvaddr, &kframe_cap);
-    assert(!err); // This kvaddr is ready to use, there should be no error
+    assert(!err); // frame is locked, there should be no error
 
-    /* Copy the frame cap as we need to map it into 2 address spaces */
+    // Copy the frame cap as we need to map it into 2 address spaces
     frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, state->rights);
     if (frame_cap == CSPACE_NULL) {
         printf("swap_in_end: failed copying frame cap\n");
@@ -166,25 +165,23 @@ swap_in_end(void* token, int err){
         return;
     }
 
+    /* Update the frametable entry */
+    set_frame_referenced(state->kvaddr);
+    frame_unlock_frame(state->kvaddr);
+
+    /* Update the pagetable entries */
     int x = PT_L1_INDEX(state->vpage);
     int y = PT_L2_INDEX(state->vpage);
 
-    // Update the pagetable to reflects page is swapped back in
     state->as->as_pd_regs[x][y] = (state->kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
     state->as->as_pd_caps[x][y] = frame_cap;
-
-    //set frame referenced
-    set_frame_referenced(state->kvaddr);
 
     /* Not observable to I-cache yet so flush the frame */
     //TODO: only flush on pages in text segment
     seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
 
-    //TODO set frame lock free
-    frame_unlock_frame(state->kvaddr);
-
     printf("swap_in_end: calling back up\n");
-    //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
+
     state->callback((void*)state->token, 0);
     free(state);
 }
@@ -199,10 +196,12 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
 
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
-    /* Copy page in */
+    /* Copy data in */
     memcpy((void*)(state->kvaddr) + state->bytes_read, data, count);
 
     state->bytes_read += count;
+
+    /* Check if we need to read more */
     if(state->bytes_read < PAGE_SIZE){
         printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
         enum rpc_stat status = nfs_read(swap_fh, state->swap_slot * PAGE_SIZE + state->bytes_read,
@@ -213,9 +212,7 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
             return;
         }
     } else {
-        //sos_page_map(state->as, state->vpage, state->rights, swap_in_end, token, false);
         swap_in_end((void*)token, 0);
-        return;
     }
 }
 
@@ -233,12 +230,10 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
 
     // only mapped/inuse application memory are swapped out, so these need not be NULL
     assert(as != NULL && as->as_pd_regs[x] != NULL && as->as_pd_caps[x] != NULL);
-
     assert(as->as_pd_regs[x][y] & PTE_SWAPPED);  // only swap in pages that are swapped out
 
     int swap_slot = (as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET;
 
-    /* Set our continuations */
     swap_in_cont_t *swap_cont = malloc(sizeof(swap_in_cont_t));
     if(swap_cont == NULL){
         return ENOMEM;
@@ -252,19 +247,14 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     swap_cont->rights     = rights;
     swap_cont->bytes_read = 0;
 
-    //TODO lock frame
     frame_lock_frame(kvaddr);
 
-    /*TODO free the slot*/
-
-    /* Lock the slot */
-
     printf("swap in start reading\n");
-
     enum rpc_stat status = nfs_read(swap_fh, swap_slot * PAGE_SIZE, MIN(PAGE_SIZE, NFS_SEND_SIZE),
             swap_in_nfs_read_handler, (uintptr_t)swap_cont);
     if(status != RPC_OK){
         //printf("swap_in rpc error = %d\n", status);
+        frame_unlock_frame(kvaddr);
         free(swap_cont);
         return EFAULT;
     }
@@ -282,6 +272,37 @@ typedef struct {
 } swap_out_cont_t;
 
 static void
+swap_out_end(swap_out_cont_t *cont, int err) {
+    if (err) {
+        frame_unlock_frame(cont->kvaddr);
+        cont->callback(cont->token, EFAULT);
+        free(cont);
+        return;
+    }
+
+    /* Update frametable data */
+    frame_unlock_frame(cont->kvaddr);
+
+    err = frame_free(cont->kvaddr);
+    if(err){
+        printf("frame free error in swap out\n");
+    }
+
+    /* Update the page table entries */
+    addrspace_t *as = frame_get_as(cont->kvaddr);
+    assert(as != NULL);
+
+    seL4_Word vpage = PAGE_ALIGN(frame_get_vaddr(cont->kvaddr));
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
+
+    as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
+
+    cont->callback(cont->token, 0);
+    free(cont);
+}
+
+static void
 swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
     printf("swap out 4 entered\n");
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
@@ -291,10 +312,7 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     }
 
     if (status != NFS_OK || fattr == NULL || count < 0) {
-        //TODO unlock frame
-        frame_unlock_frame(cont->kvaddr);
-        cont->callback(cont->token, EFAULT);
-        free(cont);
+        swap_out_end(cont, EFAULT);
         return;
     }
 
@@ -306,43 +324,12 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
                 MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->written),
                 (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
         if (status != RPC_OK) {
-            //TODO unlock frame
-            frame_unlock_frame(cont->kvaddr);
-            cont->callback(cont->token, EFAULT);
-            free(cont);
+            swap_out_end(cont, EFAULT);
             return;
         }
-        return;
+    } else {
+        swap_out_end(cont, 0);
     }
-    printf("swap out 4 calling back up\n");
-
-    //TODO unlock frame
-    frame_unlock_frame(cont->kvaddr);
-
-    int err = frame_free(cont->kvaddr);
-    if(err){
-        printf("frame free error in swap out\n");
-    }
-
-    /* Update the page table entries */
-    addrspace_t *as = frame_get_as(cont->kvaddr);
-    assert(as != NULL);
-
-    seL4_Word vaddr = frame_get_vaddr(cont->kvaddr);
-    seL4_Word vpage = PAGE_ALIGN(vaddr);
-    int x = PT_L1_INDEX(vpage);
-    int y = PT_L2_INDEX(vpage);
-
-    //victim should already be unmapped
-    /*err = sos_page_unmap(as, vaddr);
-    if (err) {
-        printf("warning: swap_out_4: sos_page_unmap failed\n");
-    }*/
-
-    as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
-
-    cont->callback(cont->token, 0);
-    free(cont);
 }
 
 static void
@@ -351,28 +338,19 @@ swap_out_3(swap_out_cont_t *cont) {
     assert(cont != NULL); //Kernel code is buggy if this happens
 
     int free_slot = swap_find_free_slot();
-    printf("swapout free slot = %d\n", free_slot);
+    printf("swap_out free slot = %d, bits = 0x%08x\n", free_slot, free_slots[0]);
     if(free_slot < 0){
-        //TODO unlock frame
-        frame_unlock_frame(cont->kvaddr);
-        cont->callback(cont->token, EFAULT);
-        free(cont);
+        swap_out_end(cont, EFAULT);
         return;
     }
-
     _set_slot(free_slot);
-    printf("free slot = %d, bits = 0x%08x\n", free_slot, free_slots[0]);
     cont->free_slot = free_slot;
 
-    //TODO: lock down the frame before writing
     enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE, NFS_SEND_SIZE,
                         (void*)cont->kvaddr, swap_out_4_nfs_write_cb, (uintptr_t)cont);
     if (status != RPC_OK) {
-        //TODO unlock frame
         printf("swapout 3 err\n");
-        frame_unlock_frame(cont->kvaddr);
-        cont->callback(cont->token, EFAULT);
-        free(cont);
+        swap_out_end(cont, EFAULT);
         return;
     }
 }
@@ -383,12 +361,8 @@ swap_out_2_init_callback(void *token, int err) {
     assert(token != NULL); // Should not happen
 
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
-
     if (err) {
-        //TODO unlock frame
-        frame_unlock_frame(cont->kvaddr);
-        cont->callback(cont->token, err);
-        free(cont);
+        swap_out_end(cont, EFAULT);
         return;
     }
 

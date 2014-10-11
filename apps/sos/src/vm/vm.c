@@ -222,7 +222,8 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             seL4_Word vpage = PAGE_ALIGN(fault_addr);
             int x = PT_L1_INDEX(vpage);
             int y = PT_L2_INDEX(vpage);
-            seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK)>>PTE_KVADDR_OFFSET;
+            //TODO: check as->as_pd_regs != NULL first
+            seL4_Word kvaddr = as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
             err = frame_get_cap(kvaddr, &kframe_cap);
             assert(!err); // This kvaddr is ready to use, there should be no error
 

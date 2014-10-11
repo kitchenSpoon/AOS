@@ -137,9 +137,6 @@ swap_in_end(void* token, int err){
 
     //TODO set frame lock free
 
-    //TODO set frame as referenced
-    set_frame_referenced(state->kvaddr);
-
     /* Map the page into user addrspace */
 
     seL4_CPtr kframe_cap, frame_cap;
@@ -328,12 +325,6 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
 
     //update with free slot
     as->as_pd_regs[x][y] = (cont->free_slot)<<PTE_SWAP_OFFSET | PTE_IN_USE_BIT | PTE_SWAPPED;
-
-    //unmap the page, so that vmf will occurr
-    err = sos_page_unmap(as, vaddr);
-    if(err){
-        printf("swapout4, sos_page_unmap error\n");
-    }
 
     err = sos_page_unmap(as, vaddr);
     if (err) {

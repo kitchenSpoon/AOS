@@ -115,10 +115,17 @@ int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         sos_page_map_cb_t callback, void* token, bool noswap);
 
 /*
- * Unmap a page in into the page table
+ * Unmap a page in the pagetable
+ * Note that this does not actually free the page, it only unmap the page from sel4
  * Returns 0 if successful
  */
 int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);
+
+/*
+ * Free a page, this will unmap the page before removing the page so that it
+ * can be reused
+ */
+void sos_page_free(addrsace_t *as, seL4_Word vaddr);
 
 /* Check if page at address VADDR is swapped */
 bool sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr);

@@ -195,7 +195,6 @@ void handle_pagefault(void) {
         assert(reply_cap != CSPACE_NULL);
 
         sos_VMFaultHandler(reply_cap, fault_addr, fsr);
-        printf("exiting handle pagefault\n");
     //}
 }
 

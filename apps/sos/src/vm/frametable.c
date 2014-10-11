@@ -165,10 +165,10 @@ second_chance_swap_victim(){
         } else if(frametable[killer].fte_referenced){
             addrspace_t* as = frame_get_as(frametable[killer].fte_kvaddr);
             seL4_Word vaddr = frame_get_vaddr(frametable[killer].fte_kvaddr);
-            //int err = sos_page_unmap(as, vaddr);
-            //if(err){
-            //    printf("second chance unmap err\n");
-            //}
+            int err = sos_page_unmap(as, vaddr);
+            if(err){
+                printf("second chance unmap err\n");
+            }
             frametable[killer].fte_referenced = false; 
             printf("second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n", frametable[killer].fte_kvaddr, vaddr);
             killer++;

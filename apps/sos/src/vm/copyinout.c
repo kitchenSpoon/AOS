@@ -141,41 +141,161 @@ copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, void *
 //    return 0;
 //}
 
+typedef struct {
+    seL4_Word buf;
+    seL4_Word kbuf;
+    size_t nbyte;
+    unsigned long pos;
+    addrspace_t* as;
+    region_t *reg;
+    copyout_cb_t callback;
+    void* token;
+
+} copyout_cont_t;
+
+void copyout_end(void* token, int err){
+    copyout_cont_t* cont = (copyout_cont_t*)token;
+
+    if(err){
+        cont->callback(cont->token, err);
+        free(cont);
+        return;
+    }
+
+    cont->callback(cont->token, 0);
+    free(cont);
+    return;
+}
+
+void copyout_do_copy(void* token, int err){
+    printf("copyout_do_copy\n");
+    if (err) {
+        copyout_end(token, err);
+        return;
+    }
+
+    copyin_cont_t* cont = (copyin_cont_t*)token;
+
+    //might need to lock the frame when we have multiple process
+
+    /* Check if we need to either map the page or swap in */
+    seL4_Word vaddr = cont->buf;
+    if (!sos_page_is_inuse(cont->as, vaddr)) {
+        err = sos_page_map(cont->as, vaddr, cont->reg->rights, copyout_do_copy, (void*)cont, false);
+        if (err) {
+            copyout_end(token, err);
+            return;
+        }
+        return;
+    } else if (sos_page_is_swapped(cont->as, vaddr)) {
+        err = swap_in(cont->as, cont->reg->rights, vaddr,
+                false, copyout_do_copy, cont);
+        if (err) {
+            copyout_end(token, err);
+            return;
+        }
+        return;
+    }
+
+    /* Now it's guarantee that the page is in memory */
+
+    /* Copy 1 page at a time */
+    if(cont->pos < cont->nbyte) {
+        seL4_Word kdst;
+        size_t cpy_sz;
+
+        /* Get the user buffer's corresponding kernel address */
+        err = sos_get_kvaddr(cont->as, PAGE_ALIGN(cont->buf), &kdst);
+        if (err) {
+            copyout_end(token, err);
+            return;
+        }
+
+        kdst = kdst + (cont->buf - PAGE_ALIGN(cont->buf));
+
+        /* Copy the data over */
+        cpy_sz = PAGE_SIZE - (kdst & PAGE_OFFSET_MASK);
+        cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
+        memcpy((void*)kdst, (void*)cont->kbuf, cpy_sz);
+
+        cont->pos  += cpy_sz;
+        cont->buf  += cpy_sz;
+        cont->kbuf += cpy_sz;
+
+        copyout_do_copy(token, 0);
+        return;
+    } else {
+        copyout_end(token, 0);
+        return;
+    }
+}
+
 int
-copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte) {
-    unsigned long pos = 0;
-    addrspace_t* as = proc_getas();
+copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte, copyout_cb_t callback, void* token) {
     uint32_t permissions = 0;
+
+    addrspace_t* as = proc_getas();
+    assert(as != NULL);
 
     /* Ensure that the user buffer range is valid */
     if (!as_is_valid_memory(as, buf, nbyte, &permissions)) {
         return EINVAL;
     }
 
-    while (pos < nbyte) {
-        seL4_Word kdst;
-        size_t cpy_sz;
-        int err;
-        if(!sos_page_is_inuse(as, PAGE_ALIGN(buf))) {
-            //TODO make this asynchronous
-            //sos_page_map(as, PAGE_ALIGN(buf), permissions);
-        }
-
-        /* Get the user buffer's corresponding kernel address */
-        err = sos_get_kvaddr(as, buf, &kdst);
-        if (err) {
-            return err;
-        }
-
-        /* Copy the data over */
-        cpy_sz = PAGE_SIZE - (kdst & PAGE_OFFSET_MASK);
-        cpy_sz = MIN(cpy_sz, nbyte - pos);
-        memcpy((void*)kdst, (void*)kbuf, cpy_sz);
-
-        pos  += cpy_sz;
-        buf  += cpy_sz;
-        kbuf += cpy_sz;
+    copyout_cont_t* cont = malloc(sizeof(copyout_cont_t));
+    if(cont == NULL){
+        return ENOMEM;
     }
+
+    cont->buf       = buf;
+    cont->kbuf      = kbuf;
+    cont->nbyte     = nbyte;
+    cont->pos       = 0;
+    cont->as        = as;
+    cont->reg       = region_probe(as, buf);
+    cont->callback  = callback;
+    cont->token     = token;
+
+    copyout_do_copy((void*)cont, 0);
 
     return 0;
 }
+
+//int
+//copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte) {
+//    unsigned long pos = 0;
+//    addrspace_t* as = proc_getas();
+//    uint32_t permissions = 0;
+//
+//    /* Ensure that the user buffer range is valid */
+//    if (!as_is_valid_memory(as, buf, nbyte, &permissions)) {
+//        return EINVAL;
+//    }
+//
+//    while (pos < nbyte) {
+//        seL4_Word kdst;
+//        size_t cpy_sz;
+//        int err;
+//        if(!sos_page_is_inuse(as, PAGE_ALIGN(buf))) {
+//            //TODO make this asynchronous
+//            //sos_page_map(as, PAGE_ALIGN(buf), permissions);
+//        }
+//
+//        /* Get the user buffer's corresponding kernel address */
+//        err = sos_get_kvaddr(as, buf, &kdst);
+//        if (err) {
+//            return err;
+//        }
+//
+//        /* Copy the data over */
+//        cpy_sz = PAGE_SIZE - (kdst & PAGE_OFFSET_MASK);
+//        cpy_sz = MIN(cpy_sz, nbyte - pos);
+//        memcpy((void*)kdst, (void*)kbuf, cpy_sz);
+//
+//        pos  += cpy_sz;
+//        buf  += cpy_sz;
+//        kbuf += cpy_sz;
+//    }
+//
+//    return 0;
+//}

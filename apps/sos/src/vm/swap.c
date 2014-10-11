@@ -137,6 +137,9 @@ swap_in_end(void* token, int err){
 
     //TODO set frame lock free
 
+    //TODO set frame as referenced
+    set_frame_referenced(state->kvaddr);
+
     /* Map the page into user addrspace */
 
     seL4_CPtr kframe_cap, frame_cap;
@@ -171,6 +174,9 @@ swap_in_end(void* token, int err){
     // Update the pagetable to reflects page is swapped back in
     state->as->as_pd_regs[x][y] = (state->kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
     state->as->as_pd_caps[x][y] = frame_cap;
+
+    //set frame referenced
+    set_frame_referenced(state->kvaddr);
 
     /* Not observable to I-cache yet so flush the frame */
     //TODO: only flush on pages in text segment

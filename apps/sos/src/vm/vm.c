@@ -19,6 +19,11 @@
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
 #define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
 
+#define INDEX_1_MASK        (0xffc00000)
+#define INDEX_2_MASK        (0x003ff000)
+#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
+#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
+
 #define RW_BIT    (1<<11)
 static
 region_t*
@@ -206,8 +211,41 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             }
             return;
         } else {
-            printf("vmf: process tries to access an inused, non-swapped page\n");
-            printf("most likely this page is not mapped in correctly\n");
+            //printf("vmf: process tries to access an inused, non-swapped page\n");
+            //printf("most likely this page is not mapped in correctly\n");
+
+            printf("vmf second chance mapping page back in\n");
+            //our second chance swap this page out
+            //simply map this page in
+            //assert(); 
+            seL4_CPtr kframe_cap, frame_cap;
+            seL4_Word vpage = PAGE_ALIGN(fault_addr);
+            int x = PT_L1_INDEX(vpage);
+            int y = PT_L2_INDEX(vpage);
+            seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK)>>PTE_KVADDR_OFFSET;
+            err = frame_get_cap(kvaddr, &kframe_cap);
+            assert(!err); // This kvaddr is ready to use, there should be no error
+
+            /* Copy the frame cap as we need to map it into 2 address spaces */
+            //TODO check if I got reg->rights correctly
+            frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, reg->rights);
+            if (frame_cap == CSPACE_NULL) {
+                printf("vmf: failed copying frame cap\n");
+                return;
+            }
+
+            //TODO check if I got reg->rights correctly
+            err = seL4_ARM_Page_Map(frame_cap, as->as_sel4_pd, PAGE_ALIGN(vpage),
+                                    reg->rights, seL4_ARM_Default_VMAttributes);
+            if(err == seL4_FailedLookup){
+                /* Assume the error was because we have no page table
+                 * And at this point, page table should already be mapped in.
+                 * So this is an error */
+                printf("vmf: failed mapping application frame to sel4\n");
+                return;
+            }
+
+            set_frame_referenced(kvaddr);
         }
     } else {
         /* This page has never been mapped, so do that and return */

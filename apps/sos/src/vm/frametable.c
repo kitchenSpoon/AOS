@@ -36,6 +36,7 @@ typedef struct {
     int fte_next_free;
     bool fte_locked;
     bool fte_noswap;
+    bool fte_referenced;
 } frame_entry_t;
 
 
@@ -98,15 +99,16 @@ frame_init(void){
             return err;
         }
 
-        frametable[i].fte_status    = FRAME_STATUS_ALLOCATED;
-        frametable[i].fte_paddr     = tmp_paddr;
-        frametable[i].fte_cap       = tmp_cap;
-        frametable[i].fte_kvaddr    = kvaddr;
-        frametable[i].fte_vaddr     = 0;
-        frametable[i].fte_as        = NULL;
-        frametable[i].fte_next_free = FRAME_INVALID;
-        frametable[i].fte_locked    = false;
-        frametable[i].fte_noswap    = true;
+        frametable[i].fte_status        = FRAME_STATUS_ALLOCATED;
+        frametable[i].fte_paddr         = tmp_paddr;
+        frametable[i].fte_cap           = tmp_cap;
+        frametable[i].fte_kvaddr        = kvaddr;
+        frametable[i].fte_vaddr         = 0;
+        frametable[i].fte_as            = NULL;
+        frametable[i].fte_next_free     = FRAME_INVALID;
+        frametable[i].fte_locked        = false;
+        frametable[i].fte_noswap        = true;
+        frametable[i].fte_referenced    = true;
     }
 
     /* Mark the number of frames occupied by the frametable */
@@ -149,6 +151,38 @@ rand_swap_victim(){
 
     printf("rand_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(id));
     return ID_TO_KVADDR(id);
+}
+
+int killer = 0;
+
+static seL4_Word
+second_chance_swap_victim(){
+    bool found = false;
+    while(!found){
+        if(frametable[killer].fte_referenced){
+            addrspace_t* as = frame_get_as(frametable[killer].fte_kvaddr);
+            seL4_Word vaddr = frame_get_vaddr(frametable[killer].fte_kvaddr);
+            sos_page_unmap(as, vaddr);
+            frametable[killer].fte_referenced = false; 
+            killer++;
+            killer = killer % NFRAMES;
+            continue;
+        } else if(frametable[killer].fte_noswap){
+            killer++;
+            killer = killer % NFRAMES;
+        } else {
+            //you are killed
+            //I may need to increase killer here after returning
+            //int id = killer;
+            //killer++;
+            //killer = killer % NFRAMES;
+            printf("second_chance_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(killer));
+            return ID_TO_KVADDR(killer);
+        }
+    }
+
+    //should not be called
+    return 0;
 }
 
 typedef struct {
@@ -209,12 +243,13 @@ frame_alloc_end(void* token, int err){
             return;
         }
     }
-    frametable[ind].fte_status = FRAME_STATUS_ALLOCATED;
-    frametable[ind].fte_kvaddr = kvaddr;
-    frametable[ind].fte_vaddr  = cont->vaddr;
-    frametable[ind].fte_as     = cont->as;
-    frametable[ind].fte_noswap = cont->noswap;
-    frametable[ind].fte_locked = false;
+    frametable[ind].fte_status     = FRAME_STATUS_ALLOCATED;
+    frametable[ind].fte_kvaddr     = kvaddr;
+    frametable[ind].fte_vaddr      = cont->vaddr;
+    frametable[ind].fte_as         = cont->as;
+    frametable[ind].fte_noswap     = cont->noswap;
+    frametable[ind].fte_referenced = true;
+    frametable[ind].fte_locked     = false;
 
     /* Zero fill memory */
     bzero((void *)(kvaddr), (size_t)PAGE_SIZE);
@@ -273,7 +308,8 @@ frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
     /* If we do not have enough memory, start swapping frames out */
     if(first_free == FRAME_INVALID) {
         printf("frame alloc no memory\n");
-        seL4_Word kvaddr = rand_swap_victim();
+        //seL4_Word kvaddr = rand_swap_victim();
+        seL4_Word kvaddr = second_chance_swap_victim();
         // the frame returned is not locked
 
         swap_out(kvaddr, frame_alloc_swap_out_cb, (void*)cont);
@@ -353,14 +389,17 @@ int
 frame_get_cap(seL4_Word kvaddr, seL4_CPtr *frame_cap) {
     *frame_cap = -1;
     if (!frame_initialised) {
+        printf("frame get cap 1\n");
         return EFAULT;
     }
 
     int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < frametable_reserved || id >= NFRAMES) {
+        printf("frame get cap 2\n");
         return EINVAL;
     }
     if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
+        printf("frame get cap 3\n");
         return EINVAL;
     }
     *frame_cap = frametable[id].fte_cap;
@@ -452,4 +491,14 @@ seL4_Word frame_get_vaddr(seL4_Word kvaddr){
     }
     return frametable[id].fte_vaddr;
 
+}
+
+int set_frame_referenced(seL4_Word kvaddr){
+    int id = (int)KVADDR_TO_ID(kvaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return EINVAL;
+    }
+
+    frametable[id].fte_referenced = true;
+    return 0;
 }

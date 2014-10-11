@@ -139,6 +139,9 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
         return;
     }
 
+    //set frame referenced
+    set_frame_referenced(kvaddr);
+
     /* Insert PTE into application's pagetable */
     int x = PT_L1_INDEX(cont->vpage);
     int y = PT_L2_INDEX(cont->vpage);

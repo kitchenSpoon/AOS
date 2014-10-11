@@ -183,6 +183,7 @@ void handle_pagefault(void) {
     dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", fault_addr, pc,
             ifault ? "Instruction Fault" : "Data fault");
 
+    //TODO check if this is correct
     //if (ifault) {
         // we don't handle this
     //} else {

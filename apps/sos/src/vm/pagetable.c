@@ -138,6 +138,7 @@ sos_page_map_part5(void* token, seL4_Word kvaddr){
     cont->as->as_pd_regs[x][y] = (kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
     cont->as->as_pd_caps[x][y] = frame_cap;
 
+    printf("sos_page_map_part5 called back up\n");
     /* Calling back up */
     cont->callback((void*)(cont->token), 0);
     free(cont);

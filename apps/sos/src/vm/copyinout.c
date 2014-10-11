@@ -27,11 +27,13 @@ void copyin_end(copyin_cont_t *cont, int err) {
         free(cont);
         return;
     }
+    printf("copyin call back up\n");
     cont->callback(cont->token, 0);
     free(cont);
 }
 
 void copyin_do_copy(void* token, int err){
+    printf("copyin_do_copy\n");
     copyin_cont_t* cont = (copyin_cont_t*)token;
 
     if (err) {
@@ -81,13 +83,16 @@ void copyin_do_copy(void* token, int err){
         cont->buf  += cpy_sz;
         cont->kbuf += cpy_sz;
         copyin_do_copy((void*)cont, 0);
+        return;
     } else {
         copyin_end(cont, 0);
+        return;
     }
 }
 
 int
 copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, void *token) {
+    printf("copyin called, kbuf=0x%08x, buf=0x%08x, nbyte=%u\n", kbuf, buf, nbyte);
     copyin_cont_t *cont = malloc(sizeof(copyin_cont_t));
     if (cont == NULL) {
         return ENOMEM;

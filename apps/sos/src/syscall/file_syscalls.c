@@ -56,7 +56,7 @@ serv_sys_open_end(void *token, int err, int fd) {
     seL4_SetMR(0, (seL4_Word)fd);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
-    //printf("--serv_cont_end = %p\n", cont);
+    printf("--serv_cont_end = %p\n", cont);
 
     free(cont);
 }
@@ -216,7 +216,7 @@ typedef struct {
     char *buf;
     char *kbuf;
     size_t nbyte;
-    size_t byte_read;
+    size_t byte_written;
     size_t wanna_send;
 } cont_write_t;
 
@@ -227,7 +227,7 @@ static void serv_sys_write_end(cont_write_t* cont, int err);
 
 void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
 
-    //printf("serv_sys_write called\n");
+    printf("serv_sys_write called\n");
     int err;
 
     cont_write_t *cont = malloc(sizeof(cont_write_t));
@@ -243,7 +243,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     cont->buf        = (char*)buf;
     cont->kbuf       = NULL;
     cont->nbyte      = nbyte;
-    cont->byte_read  = 0;
+    cont->byte_written  = 0;
     cont->wanna_send = 0;
 
     addrspace_t *as = proc_getas();
@@ -292,7 +292,7 @@ serv_sys_write_get_kbuf(void *token, seL4_Word kvaddr) {
 /* Is inteded to be called repeatedly in this layer if the write data is too large */
 static void
 serv_sys_write_copyin(void *token, int err, size_t size) {
-    //printf("serv_sys_write_copyin called\n");
+    printf("serv_sys_write_copyin called\n");
     cont_write_t *cont = (cont_write_t*)token;
     assert(cont != NULL);
 
@@ -302,14 +302,16 @@ serv_sys_write_copyin(void *token, int err, size_t size) {
     }
 
     cont->file->of_offset += size;
-    cont->byte_read       += size;
-    if (cont->byte_read < cont->nbyte) {
+    cont->byte_written       += size;
+    printf("of_offset = %u, byte_written = %u\n", cont->file->of_offset, cont->byte_written);
+    if (cont->byte_written < cont->nbyte) {
         seL4_Word vaddr;
-        vaddr = (seL4_Word)cont->buf + cont->byte_read;
+        vaddr = (seL4_Word)cont->buf + cont->byte_written;
         cont->wanna_send = PAGE_SIZE - (vaddr - PAGE_ALIGN(vaddr));
-        cont->wanna_send = MIN(cont->wanna_send, cont->nbyte - cont->byte_read);
+        cont->wanna_send = MIN(cont->wanna_send, cont->nbyte - cont->byte_written);
+        printf("wanna_send = %u\n", cont->wanna_send);
 
-        err = copyin((seL4_Word)cont->kbuf, (seL4_Word)(cont->buf + cont->byte_read), cont->wanna_send,
+        err = copyin((seL4_Word)cont->kbuf, (seL4_Word)vaddr, cont->wanna_send,
                 serv_sys_write_do_write, (void*)cont);
         if (err) {
             printf("serv_sys_write_copyin: fail when copyin\n");
@@ -320,11 +322,12 @@ serv_sys_write_copyin(void *token, int err, size_t size) {
         serv_sys_write_end(cont, 0);
         return;
     }
-    //printf("serv_sys_write_copyin ended\n");
+    printf("serv_sys_write_copyin ended\n");
 }
 
 static void
 serv_sys_write_do_write(void *token, int err) {
+    printf("serv_sys_do_write called\n");
     cont_write_t *cont = (cont_write_t*)token;
     assert(cont != NULL);
 
@@ -332,17 +335,18 @@ serv_sys_write_do_write(void *token, int err) {
         serv_sys_write_end(cont, err);
         return;
     }
+    printf("serv_sys_do_write prepare to write\n");
     VOP_WRITE(cont->file->of_vnode, cont->kbuf, cont->wanna_send, cont->file->of_offset,
             serv_sys_write_copyin, (void*)cont);
 }
 
 static
 void serv_sys_write_end(cont_write_t* cont, int err) {
-    //printf("serv_write_end\n");
+    printf("serv_write_end\n");
 
     /* Reply app*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)cont->byte_read);
+    seL4_SetMR(0, (seL4_Word)cont->byte_written);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
 

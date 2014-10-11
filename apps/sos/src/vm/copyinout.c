@@ -49,6 +49,7 @@ void copyin_do_copy(void* token, int err){
             copyin_end(cont, err);
             return;
         }
+        return;
     } else if (sos_page_is_swapped(cont->as, vaddr)) {
         err = swap_in(cont->as, cont->reg->rights, vaddr,
                 false, copyin_do_copy, cont);
@@ -56,6 +57,7 @@ void copyin_do_copy(void* token, int err){
             copyin_end(cont, err);
             return;
         }
+        return;
     }
 
     /* Now it's guarantee that the page is in memory */

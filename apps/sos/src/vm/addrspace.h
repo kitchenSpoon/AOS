@@ -93,6 +93,7 @@ int as_define_heap(addrspace_t *as);
 
 /*
  * check if the given user buffer is a valid memory range
+ * @param permission can be NULL
  */
 bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
                                 uint32_t* permission);

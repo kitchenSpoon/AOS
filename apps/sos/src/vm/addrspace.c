@@ -346,23 +346,12 @@ seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr){
 
 bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
                         uint32_t* permission) {
-    seL4_Word range_start = vaddr;
-    seL4_Word range_end   = vaddr + (seL4_Word)size;
-    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
-        if (r->vbase <= range_start && range_end <= r->vtop) {
-            *permission = r->rights;
-            return true;
+    region_t *reg = region_probe(as, vaddr);
+    if (reg != NULL) {
+        if (permission != NULL) {
+            *permission = reg->rights;
         }
+        return vaddr + size < reg->vtop;
     }
-
-    if (as->as_stack->vbase <= range_start && range_end <= as->as_stack->vtop) {
-        *permission = as->as_stack->rights;
-        return true;
-    }
-    if (as->as_heap->vbase <= range_start && range_end <= as->as_heap->vtop) {
-        *permission = as->as_heap->rights;
-        return true;
-    }
-
     return false;
 }

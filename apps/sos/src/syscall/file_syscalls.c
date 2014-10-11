@@ -22,16 +22,9 @@
  * Check if the user pages from VADDR to VADDR+NBYTE are mapped
  */
 static bool
-is_range_inuse(seL4_Word vaddr, size_t nbyte) {
-    seL4_Word vpage = PAGE_ALIGN(vaddr);
-    while (vpage < vaddr+nbyte) {
-        bool mapped = sos_page_is_inuse(proc_getas(), vpage);
-        if (!mapped) {
-            return false;
-        }
-        vpage += PAGE_SIZE;
-    }
-    return true;
+is_range_valid(addrspace_t *as, seL4_Word vaddr, size_t nbyte) {
+    region_t *reg = region_probe(as, vaddr);
+    return (reg != NULL && (vaddr + nbyte < reg->vtop));
 }
 
 void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
@@ -82,7 +75,8 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
     }
     cont->reply_cap = reply_cap;
 
-    if ((nbyte >= MAX_IO_BUF) || (!is_range_inuse(path, nbyte))){
+    addrspace_t *as = proc_getas();
+    if ((nbyte >= MAX_IO_BUF) || (!is_range_valid(as, path, nbyte))){
         serv_sys_open_end((void*)cont, EINVAL, -1);
         return;
     }
@@ -150,7 +144,9 @@ void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
         free(cont);
     } else {
         /* Theres more stuff to read */
-        VOP_READ(cont->file->of_vnode, cont->buf + cont->bytes_read, MIN(cont->bytes_wanted - cont->bytes_read, MAX_IO_BUF), cont->file->of_offset, serv_sys_read_end, (void*)cont);
+        VOP_READ(cont->file->of_vnode, cont->buf + cont->bytes_read,
+                 MIN(cont->bytes_wanted - cont->bytes_read, MAX_IO_BUF),
+                 cont->file->of_offset, serv_sys_read_end, (void*)cont);
     }
     //printf("serv_read_end out\n");
 }
@@ -172,7 +168,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     cont->bytes_read = 0;
     cont->bytes_wanted = nbyte;
 
-    //have to read multiple times if nbyte >= MAX_IO_BUFF
+    //have to read multiple times if nbyte >= MAX_IO_BUF
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);// || (nbyte >= MAX_IO_BUF);
 
     uint32_t permissions = 0;
@@ -265,8 +261,9 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     cont->nbyte     = nbyte;
     cont->start     = 0;
 
+    addrspace_t *as = proc_getas();
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);
-    is_inval = is_inval || (!is_range_inuse(buf, nbyte));
+    is_inval = is_inval || (!is_range_valid(as, buf, nbyte));
     if(is_inval){
         serv_sys_write_end((void*)cont, EINVAL, 0);
         return;

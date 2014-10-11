@@ -27,12 +27,6 @@
 
 #define NFS_SEND_SIZE   1024 //This needs to be less than UDP package size
 
-
-#define INDEX_1_MASK        (0xffc00000)
-#define INDEX_2_MASK        (0x003ff000)
-#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
-#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
-
 uint32_t free_slots[NUM_CHUNKS];
 
 fhandle_t *swap_fh;

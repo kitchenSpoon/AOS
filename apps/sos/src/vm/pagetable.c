@@ -18,11 +18,6 @@
 #define PAGETABLE_BITS      (12)
 #define PAGETABLE_PAGES     (PAGE_SIZE >> 2)
 
-#define INDEX_1_MASK        (0xffc00000)
-#define INDEX_2_MASK        (0x003ff000)
-#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
-#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
-
 static void
 _insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap) {
     sel4_pt_node_t* node = malloc(sizeof(sel4_pt_node_t));

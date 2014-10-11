@@ -88,7 +88,7 @@ load_segment_into_vspace3(void* token, int err){
     }
 
     /* Now copy our data into the destination vspace. */
-    int nbytes = PAGESIZE - (cont->dst & PAGEMASK);
+    int nbytes = PAGESIZE - (cont->dst & PAGE_OFFSET_MASK);
     if (cont->pos < cont->file_size){
         // This page might be swapped out before we do memcpy
         memcpy((void*)kdst, (void*)(cont->src), MIN(nbytes, cont->file_size - cont->pos));
@@ -184,7 +184,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
 //        }
 //
 //        /* Now copy our data into the destination vspace. */
-//        nbytes = PAGESIZE - (dst & PAGEMASK);
+//        nbytes = PAGESIZE - (dst & PAGE_OFFSET_MASK);
 //        if (pos < file_size){
 //            memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - pos));
 //        }

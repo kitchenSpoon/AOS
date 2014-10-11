@@ -19,31 +19,7 @@
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
 #define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
 
-#define INDEX_1_MASK        (0xffc00000)
-#define INDEX_2_MASK        (0x003ff000)
-#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
-#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
-
 #define RW_BIT    (1<<11)
-static
-region_t*
-_region_probe(struct addrspace* as, seL4_Word addr) {
-    assert(as != NULL);
-    assert(addr != 0);
-
-    if(as->as_stack != NULL && as->as_stack->vbase <= addr && addr < as->as_stack->vtop)
-        return as->as_stack;
-
-    if(as->as_heap != NULL && as->as_heap->vbase <= addr && addr < as->as_heap->vtop)
-        return as->as_heap;
-
-    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
-        if (r->vbase <= addr && addr < r->vtop) {
-            return r;
-        }
-    }
-    return NULL;
-}
 
 typedef struct {
     seL4_CPtr reply_cap;
@@ -86,7 +62,7 @@ _check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t *
     }
 
     /* Check if this is a valid address */
-    region_t* reg = _region_probe(as, fault_addr);
+    region_t* reg = region_probe(as, fault_addr);
     if (reg == NULL) {
         /* Invalid address, segfault */
         printf("App tried to access a address without a region (invalid address), kill it\n");

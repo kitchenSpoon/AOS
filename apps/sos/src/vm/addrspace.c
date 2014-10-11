@@ -10,6 +10,25 @@
 #define N_PAGETABLES       (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 
+region_t*
+region_probe(struct addrspace* as, seL4_Word addr) {
+    assert(as != NULL);
+    assert(addr != 0);
+
+    if(as->as_stack != NULL && as->as_stack->vbase <= addr && addr < as->as_stack->vtop)
+        return as->as_stack;
+
+    if(as->as_heap != NULL && as->as_heap->vbase <= addr && addr < as->as_heap->vtop)
+        return as->as_heap;
+
+    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
+        if (r->vbase <= addr && addr < r->vtop) {
+            return r;
+        }
+    }
+    return NULL;
+}
+
 typedef struct {
     addrspace_t *as;
     as_create_cb_t callback;

@@ -232,6 +232,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, reg->rights);
             if (frame_cap == CSPACE_NULL) {
                 printf("vmf: failed copying frame cap\n");
+                sos_VMFaultHandler_reply((void*)cont, EFAULT);
                 return;
             }
 
@@ -242,13 +243,16 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
                  * And at this point, page table should already be mapped in.
                  * So this is an error */
                 printf("vmf: failed mapping application frame to sel4\n");
+                sos_VMFaultHandler_reply((void*)cont, EFAULT);
                 return;
             }
 
             err = set_frame_referenced(kvaddr);
             if(err){
                 printf("vmf: setting frame referenced error\n");
+                sos_VMFaultHandler_reply((void*)cont, err);
             }
+
             sos_VMFaultHandler_reply((void*)cont, 0);
             return;
         }

@@ -77,17 +77,91 @@ sos_VMFaultHandler_swap_in_end(void* token, int err){
     sos_VMFaultHandler_reply(token, err);
 }
 
-void
-sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, bool is_code){
-    int err = 0;
-
-    printf("sos vmfault handler \n");
+static bool
+_check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t **reg_ret) {
     if (fault_addr == 0) {
         /* Derefenrecing NULL? Segfault */
         printf("App tried to derefence NULL, kill it\n");
-        cspace_free_slot(cur_cspace, reply_cap);
-        return;
+        return true;
     }
+
+    /* Check if this is a valid address */
+    region_t* reg = _region_probe(as, fault_addr);
+    if (reg == NULL) {
+        /* Invalid address, segfault */
+        printf("App tried to access a address without a region (invalid address), kill it\n");
+        return true;
+    }
+
+    /* Check for the permission */
+    bool fault_when_write = (bool)(fsr & RW_BIT);
+    bool fault_when_read = !fault_when_write;
+
+    if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
+        printf("write to read only\n");
+        return true;
+    }
+
+    if (fault_when_read && !(reg->rights & seL4_CanRead)) {
+        printf("read from no-readble mem\n");
+        return true;
+    }
+
+    *reg_ret = reg;
+    return false;
+}
+
+static int
+_set_page_reference(VMF_cont_t *cont) {
+
+    int err;
+
+    seL4_CPtr kframe_cap, frame_cap;
+
+    seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
+
+    if (cont->as->as_pd_regs[x] == NULL) {
+        return EINVAL;
+    }
+
+    seL4_Word kvaddr = (cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+    printf("mapping back into kvaddr -> 0x%08x\n", kvaddr);
+
+    err = frame_get_cap(kvaddr, &kframe_cap);
+    assert(!err); // This kvaddr is ready to use, there should be no error
+
+    /* Copy the frame cap as we need to map it into 2 address spaces */
+    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, cont->reg->rights);
+    if (frame_cap == CSPACE_NULL) {
+        printf("vmf: failed copying frame cap\n");
+        return EFAULT;
+    }
+
+    err = seL4_ARM_Page_Map(frame_cap, cont->as->as_sel4_pd, vpage,
+            cont->reg->rights, seL4_ARM_Default_VMAttributes);
+    if(err == seL4_FailedLookup){
+        printf("vmf: failed mapping application frame to sel4\n");
+        return EFAULT;
+    }
+
+    cont->as->as_pd_caps[x][y] = frame_cap;
+
+    err = set_frame_referenced(kvaddr);
+    if(err){
+        printf("vmf: setting frame referenced error\n");
+        return err;
+    }
+
+    return 0;
+}
+
+void
+sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, bool is_code){
+    printf("sos vmfault handler \n");
+
+    int err;
 
     addrspace_t *as = proc_getas();
     if (as == NULL) {
@@ -97,29 +171,10 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
         return;
     }
 
-    /* Check if this is a valid address */
-    region_t* reg = _region_probe(as, fault_addr);
-    if (reg == NULL) {
-        /* Invalid address, segfault */
-        printf("App tried to access a address without a region (invalid address), kill it\n");
-        cspace_free_slot(cur_cspace, reply_cap);
-        return;
-    }
+    region_t *reg;
 
-    /* Check for the permission */
-    bool fault_when_write = (bool)(fsr & RW_BIT);
-    bool fault_when_read = !fault_when_write;
-
-    if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
-        printf("write to read only\n");
-        /* Write to a read-only memory, segfault */
-        cspace_free_slot(cur_cspace, reply_cap);
-        return;
-    }
-
-    if (fault_when_read && !(reg->rights & seL4_CanRead)) {
-        printf("read from no-readble mem\n");
-        /* Read from a non-readable memory, segfault */
+    /* Is this a segfault? */
+    if (_check_segfault(as, fault_addr, fsr, &reg)) {
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
@@ -151,7 +206,6 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
         if (sos_page_is_swapped(as, fault_addr)) {
             printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
-            //err = frame_alloc(PAGE_ALIGN(fault_addr), as, false, sos_VMFaultHandler_swap_in_1, (void*)cont);
             err = swap_in(cont->as, cont->reg->rights, cont->vaddr,
                       cont->is_code, sos_VMFaultHandler_swap_in_end, cont);
             if (err) {
@@ -160,57 +214,14 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
             }
             return;
         } else {
-            //printf("vmf: process tries to access an inused, non-swapped page\n");
-            //printf("most likely this page is not mapped in correctly\n");
-
             printf("vmf second chance mapping page back in\n");
-            //our second chance swap this page out
-            //simply map this page in
-            //assert();
-            seL4_CPtr kframe_cap, frame_cap;
-            seL4_Word vpage = PAGE_ALIGN(fault_addr);
-            int x = PT_L1_INDEX(vpage);
-            int y = PT_L2_INDEX(vpage);
-            //TODO: check as->as_pd_regs != NULL first
-            seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
-            printf("mapping back into kvaddr -> 0x%08x\n",kvaddr);
-            err = frame_get_cap(kvaddr, &kframe_cap);
-            assert(!err); // This kvaddr is ready to use, there should be no error
-
-            /* Copy the frame cap as we need to map it into 2 address spaces */
-            frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, reg->rights);
-            if (frame_cap == CSPACE_NULL) {
-                printf("vmf: failed copying frame cap\n");
-                sos_VMFaultHandler_reply((void*)cont, EFAULT);
-                return;
-            }
-
-            err = seL4_ARM_Page_Map(frame_cap, as->as_sel4_pd, PAGE_ALIGN(vpage),
-                                    reg->rights, seL4_ARM_Default_VMAttributes);
-            if(err == seL4_FailedLookup){
-                /* Assume the error was because we have no page table
-                 * And at this point, page table should already be mapped in.
-                 * So this is an error */
-                printf("vmf: failed mapping application frame to sel4\n");
-                sos_VMFaultHandler_reply((void*)cont, EFAULT);
-                return;
-            }
-
-            as->as_pd_caps[x][y] = frame_cap;
-
-            err = set_frame_referenced(kvaddr);
-            if(err){
-                printf("vmf: setting frame referenced error\n");
-                sos_VMFaultHandler_reply((void*)cont, err);
-            }
-
-            sos_VMFaultHandler_reply((void*)cont, 0);
+            err = _set_page_reference(cont);
+            sos_VMFaultHandler_reply((void*)cont, err);
             return;
         }
     } else {
         /* This page has never been mapped, so do that and return */
         printf("vmf tries to map a page\n");
-        int err;
         err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
             sos_VMFaultHandler_reply((void*)cont, err);

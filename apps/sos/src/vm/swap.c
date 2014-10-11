@@ -333,10 +333,11 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
-    err = sos_page_unmap(as, vaddr);
+    //victim should already be unmapped
+    /*err = sos_page_unmap(as, vaddr);
     if (err) {
         printf("warning: swap_out_4: sos_page_unmap failed\n");
-    }
+    }*/
 
     as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
 

@@ -247,6 +247,8 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
                 return;
             }
 
+            as->as_pd_caps[x][y] = frame_cap;
+
             err = set_frame_referenced(kvaddr);
             if(err){
                 printf("vmf: setting frame referenced error\n");

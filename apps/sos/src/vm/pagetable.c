@@ -274,6 +274,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
 
 int
 sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
+    printf("sos_page_unmap entered\n");
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
@@ -281,12 +282,15 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
     if(as == NULL ||
             (as->as_pd_caps == NULL || as->as_pd_caps[x] == NULL) ||
             (as->as_pd_regs == NULL || as->as_pd_regs[x] == NULL)) {
+        printf("sos_page_unmap err 1\n");
         return EINVAL;
     }
 
+    assert(as->as_pd_caps[x][y] != NULL);
     int err;
     err = seL4_ARM_Page_Unmap(as->as_pd_caps[x][y]);
     if (err) {
+        printf("sos_page_unmap err 2\n");
         return EFAULT;
     }
     cspace_delete_cap(cur_cspace, as->as_pd_caps[x][y]);

@@ -311,9 +311,13 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
         return;
     }
 
-    as->as_pd_regs[x][y] = 0;
-
-    cspace_delete_cap(cur_cspace, as->as_pd_caps[x][y]);
+    if (as->as_pd_regs[x][y] & PTE_SWAPPED) {
+        //TODO: free the slot in the swap file
+    } else {
+        frame_free(as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+        as->as_pd_regs[x][y] = 0;
+        cspace_delete_cap(cur_cspace, as->as_pd_caps[x][y]);
+    }
 }
 
 

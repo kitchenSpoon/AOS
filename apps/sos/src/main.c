@@ -33,6 +33,7 @@
 #include "vm/addrspace.h"
 #include "syscall/syscall.h"
 #include "vm/swap.h"
+#include "tool/utility.h"
 #include <limits.h>
 
 #include <autoconf.h>
@@ -180,7 +181,7 @@ void handle_pagefault(void) {
     seL4_Word fault_addr = seL4_GetMR(1);
     bool ifault = (bool)seL4_GetMR(2);
     seL4_Word fsr = seL4_GetMR(3);
-    dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", fault_addr, pc,
+    dprintf(0, "vm fault at 0x%08x, align = 0x%08x , pc = 0x%08x, %s\n", fault_addr, PAGE_ALIGN(fault_addr), pc,
             ifault ? "Instruction Fault" : "Data fault");
 
     //TODO check if this is correct
@@ -194,6 +195,7 @@ void handle_pagefault(void) {
         assert(reply_cap != CSPACE_NULL);
 
         sos_VMFaultHandler(reply_cap, fault_addr, fsr);
+        printf("exiting handle pagefault\n");
     //}
 }
 

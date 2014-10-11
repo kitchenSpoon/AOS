@@ -128,6 +128,7 @@ swap_in_end(void* token, int err){
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
     if(err){
+        frame_unlock_frame(state->kvaddr);
         state->callback((void*)state->token, err);
         free(state);
         return;
@@ -135,10 +136,6 @@ swap_in_end(void* token, int err){
 
     _unset_slot(state->swap_slot);
 
-    //TODO set frame lock free
-
-    //TODO set frame as referenced
-    set_frame_referenced(state->kvaddr);
 
     /* Map the page into user addrspace */
 
@@ -151,6 +148,7 @@ swap_in_end(void* token, int err){
     frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, state->rights);
     if (frame_cap == CSPACE_NULL) {
         printf("swap_in_end: failed copying frame cap\n");
+        frame_unlock_frame(state->kvaddr);
         state->callback((void*)state->token, EFAULT);
         free(state);
         return;
@@ -181,6 +179,9 @@ swap_in_end(void* token, int err){
     /* Not observable to I-cache yet so flush the frame */
     //TODO: only flush on pages in text segment
     seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+
+    //TODO set frame lock free
+    frame_unlock_frame(state->kvaddr);
 
     printf("swap_in_end: calling back up\n");
     //we call our continuation on the second part of vmfault that will unblock the process looking to read a page
@@ -252,6 +253,8 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     swap_cont->bytes_read = 0;
 
     //TODO lock frame
+    frame_lock_frame(kvaddr);
+
     /*TODO free the slot*/
 
     /* Lock the slot */
@@ -289,6 +292,7 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
 
     if (status != NFS_OK || fattr == NULL || count < 0) {
         //TODO unlock frame
+        frame_unlock_frame(cont->kvaddr);
         cont->callback(cont->token, EFAULT);
         free(cont);
         return;
@@ -301,6 +305,7 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
                 (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
         if (status != RPC_OK) {
             //TODO unlock frame
+            frame_unlock_frame(cont->kvaddr);
             cont->callback(cont->token, EFAULT);
             free(cont);
             return;
@@ -310,6 +315,8 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     printf("swap out 4 calling back up\n");
 
     //TODO unlock frame
+    frame_unlock_frame(cont->kvaddr);
+
     /* Use frame_free to mark the frame as free */
     int err = frame_free(cont->kvaddr);
     if(err){
@@ -331,11 +338,6 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
 
     //unmap the page, so that vmf will occurr
     err = sos_page_unmap(as, vaddr);
-    if(err){
-        printf("swapout4, sos_page_unmap error\n");
-    }
-
-    err = sos_page_unmap(as, vaddr);
     if (err) {
         printf("warning: swap_out_4: sos_page_unmap failed\n");
     }
@@ -354,6 +356,7 @@ swap_out_3(swap_out_cont_t *cont) {
     printf("swapout free slot = %d\n", free_slot);
     if(free_slot < 0){
         //TODO unlock frame
+        frame_unlock_frame(cont->kvaddr);
         cont->callback(cont->token, EFAULT);
         free(cont);
         return;
@@ -372,6 +375,7 @@ swap_out_3(swap_out_cont_t *cont) {
     if (status != RPC_OK) {
         //TODO unlock frame
         printf("swapout 3 err\n");
+        frame_unlock_frame(cont->kvaddr);
         cont->callback(cont->token, EFAULT);
         free(cont);
         return;
@@ -387,6 +391,7 @@ swap_out_2_init_callback(void *token, int err) {
 
     if (err) {
         //TODO unlock frame
+        frame_unlock_frame(cont->kvaddr);
         cont->callback(cont->token, err);
         free(cont);
         return;
@@ -401,7 +406,9 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
 
     seL4_Word vaddr = frame_get_vaddr(kvaddr);
     printf("swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n",kvaddr,vaddr);
+
     //TODO lock frame
+    frame_lock_frame(kvaddr);
 
     /* Create the continuation here to be used in subsequent functions */
     swap_out_cont_t *cont = malloc(sizeof(swap_out_cont_t));

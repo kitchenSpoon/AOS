@@ -159,17 +159,21 @@ static seL4_Word
 second_chance_swap_victim(){
     bool found = false;
     while(!found){
-        if(frametable[killer].fte_referenced){
+        if(frametable[killer].fte_noswap || frametable[killer].fte_locked){
+            killer++;
+            killer = killer % NFRAMES;
+        } else if(frametable[killer].fte_referenced){
             addrspace_t* as = frame_get_as(frametable[killer].fte_kvaddr);
             seL4_Word vaddr = frame_get_vaddr(frametable[killer].fte_kvaddr);
-            sos_page_unmap(as, vaddr);
+            //int err = sos_page_unmap(as, vaddr);
+            //if(err){
+            //    printf("second chance unmap err\n");
+            //}
             frametable[killer].fte_referenced = false; 
+            printf("second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n", frametable[killer].fte_kvaddr, vaddr);
             killer++;
             killer = killer % NFRAMES;
             continue;
-        } else if(frametable[killer].fte_noswap){
-            killer++;
-            killer = killer % NFRAMES;
         } else {
             //you are killed
             //I may need to increase killer here after returning

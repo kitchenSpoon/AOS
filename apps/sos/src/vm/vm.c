@@ -222,7 +222,8 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             seL4_Word vpage = PAGE_ALIGN(fault_addr);
             int x = PT_L1_INDEX(vpage);
             int y = PT_L2_INDEX(vpage);
-            seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK)>>PTE_KVADDR_OFFSET;
+            seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+            printf("mapping back into kvaddr -> 0x%08x\n",kvaddr);
             err = frame_get_cap(kvaddr, &kframe_cap);
             assert(!err); // This kvaddr is ready to use, there should be no error
 
@@ -245,7 +246,11 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
                 return;
             }
 
-            set_frame_referenced(kvaddr);
+            err = set_frame_referenced(kvaddr);
+            if(err){
+                printf("vmf: setting frame referenced error\n");
+            }
+            return;
         }
     } else {
         /* This page has never been mapped, so do that and return */

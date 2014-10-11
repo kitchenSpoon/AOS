@@ -222,6 +222,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             seL4_Word vpage = PAGE_ALIGN(fault_addr);
             int x = PT_L1_INDEX(vpage);
             int y = PT_L2_INDEX(vpage);
+            //TODO: check as->as_pd_regs != NULL first
             seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
             printf("mapping back into kvaddr -> 0x%08x\n",kvaddr);
             err = frame_get_cap(kvaddr, &kframe_cap);
@@ -266,112 +267,4 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
     printf("vmf error at the end\n");
     sos_VMFaultHandler_reply((void*)cont, EFAULT);
     return;
-//    if (sos_page_is_mapped(as, fault_addr)) {
-//        if(sos_page_is_swapped(as, fault_addr)){
-//            /* Swapped it back in */
-//            seL4_Word kvaddr = get_free_frame_kvaddr();
-//            if(kvaddr == -1){//not enough_memory){
-//                kvaddr = rand_chance_swap();
-//                token->kvaddr = kvaddr;
-//                swap_out(kvaddr, fault_addr, sos_VMFaultHandler_swapout_to_swapin, (void*)token);
-//                return 0;
-//            } else {
-//              region_t* reg = _region_probe(as, fault_addr);
-//              token = malloc(sizeof(token));
-//              //kvaddr is 1 because of some random reason, fix this when this code is actually called
-//              seL4_Word kvaddr = 1;//find_free_frame();
-//              int err = swap_in(as, reg->rights, fault_addr,kvaddr,sos_VMFaultHandler_swap_in_end,token);
-//              if(err){
-//                //something
-//                return err;
-//              }
-//              return 0;
-//            }
-//        } else {
-//            /* This must be a readonly fault */
-//            printf("vmf err1\n");
-//            return EACCES;
-//        }
-//    } else {
-//        int err = 0;
-//
-//        /* Check if the fault address is in a valid region */
-//        region_t* reg = _region_probe(as, fault_addr);
-//        if(reg != NULL){
-//            if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
-//            printf("vmf err2\n");
-//                return EACCES;
-//            }
-//            if (fault_when_read && !(reg->rights & seL4_CanRead)) {
-//            printf("vmf err3\n");
-//                return EACCES;
-//            }
-//            //TODO check if we have enough memory here
-//            seL4_Word kvaddr = get_free_frame_kvaddr();
-//            if(kvaddr == -1){//not enough_memory){
-//                for(int i = 0; i < 1; i++){
-//                    kvaddr = rand_chance_swap();
-//
-//                    token->kvaddr = kvaddr;
-//                    printf("vm fault not enough memory, performing swapout now\n");
-//                    swap_out(kvaddr , fault_addr, sos_VMFaultHandler_swapout_to_pagein, (void*)token);
-//                    printf("vm fault swapout done\n");
-//
-//                }
-//            } else {
-//                err = sos_page_map(as, fault_addr, reg->rights);
-//                if (err) {
-//                    return err;
-//                }
-//                sos_VMFaultHandler_reply(token, 0);
-//            }
-//            return 0;
-//        }
-//        printf("vmf region is NULL\n");
-//        sos_VMFaultHandler_reply(token, EFAULT);
-//        return EFAULT;
-//    }
-//    return EFAULT;
 }
-
-//int
-//sos_VMFaultHandler(seL4_Word fault_addr, seL4_Word fsr){
-//    if (fault_addr == 0) {
-//        /* Derefenrecing NULL? */
-//        return EINVAL;
-//    }
-//
-//    addrspace_t *as = proc_getas();
-//    if (as == NULL) {
-//        /* Kernel is probably failed when bootstraping */
-//        return EFAULT;
-//    }
-//
-//    if (sos_page_is_mapped(as, fault_addr)) {
-//        /* This must be a readonly fault */
-//        return EACCES;
-//    }
-//
-//    int err;
-//    bool fault_when_write = (bool)(fsr & RW_BIT);
-//    bool fault_when_read = !fault_when_write;
-//
-//    /* Check if the fault address is in a valid region */
-//    region_t* reg = _region_probe(as, fault_addr);
-//    if(reg != NULL){
-//        if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
-//            return EACCES;
-//        }
-//        if (fault_when_read && !(reg->rights & seL4_CanRead)) {
-//            return EACCES;
-//        }
-//        err = sos_page_map(as, fault_addr, reg->rights);
-//        if (err) {
-//            return err;
-//        }
-//
-//        return 0;
-//    }
-//
-//    return EFAULT;
-//}

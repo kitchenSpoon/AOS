@@ -274,26 +274,52 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
 
 int
 sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
-    if(as == NULL || as->as_pd_caps == NULL) return -1;
-
     seL4_Word vpage = PAGE_ALIGN(vaddr);
-    int x           = PT_L1_INDEX(vpage);
-    int y           = PT_L2_INDEX(vpage);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
 
-    int err = 0;
-    if(as->as_pd_caps[x] != NULL){
-        err = seL4_ARM_Page_Unmap(as->as_pd_caps[x][y]);
-    } else {
-        err = 1;
+    if(as == NULL ||
+            (as->as_pd_caps == NULL || as->as_pd_caps[x] == NULL) ||
+            (as->as_pd_regs == NULL || as->as_pd_regs[x] == NULL)) {
+        return EINVAL;
     }
 
-    if(!err){
-        //unset PTE_IN_USE_BIT?
-        //since we are using this to simulate reference bit we dont want to unset that bit
+    int err;
+    err = seL4_ARM_Page_Unmap(as->as_pd_caps[x][y]);
+    if (err) {
+        return EFAULT;
     }
 
-    return err;
+    return 0;
 }
+
+void
+sos_page_free(addrspace_t *as, seL4_Word vaddr) {
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
+
+    if(as == NULL ||
+            (as->as_pd_caps == NULL || as->as_pd_caps[x] == NULL) ||
+            (as->as_pd_regs == NULL || as->as_pd_regs[x] == NULL)) {
+        return;
+    }
+
+    int err;
+    err = sos_page_unmap(as, vaddr);
+    if (err) {
+        return;
+    }
+
+    if (as->as_pd_regs[x][y] & PTE_SWAPPED) {
+        //TODO: free the slot in the swap file
+    } else {
+        frame_free(as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+        as->as_pd_regs[x][y] = 0;
+        cspace_delete_cap(cur_cspace, as->as_pd_caps[x][y]);
+    }
+}
+
 
 bool
 sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {

@@ -129,58 +129,26 @@ swap_in_end(void* token, int err){
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
     if(err){
+        if (state->kvaddr) {
+            sos_page_free(state->as, state->vpage);
+        }
         frame_unlock_frame(state->kvaddr);
         state->callback((void*)state->token, err);
         free(state);
         return;
     }
 
-    /* Update the free_slots bitmap */
-    _unset_slot(state->swap_slot);
-
-    /* Map the page into user addrspace */
-    seL4_CPtr kframe_cap, frame_cap;
-
+    /* Flush I-cache if we just swapped in an instruction page */
+    seL4_CPtr kframe_cap;
     err = frame_get_cap(state->kvaddr, &kframe_cap);
     assert(!err); // frame is locked, there should be no error
 
-    // Copy the frame cap as we need to map it into 2 address spaces
-    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, state->rights);
-    if (frame_cap == CSPACE_NULL) {
-        printf("swap_in_end: failed copying frame cap\n");
-        frame_unlock_frame(state->kvaddr);
-        state->callback((void*)state->token, EFAULT);
-        free(state);
-        return;
-    }
-
-    err = seL4_ARM_Page_Map(frame_cap, state->as->as_sel4_pd, PAGE_ALIGN(state->vpage),
-                            state->rights, seL4_ARM_Default_VMAttributes);
-    if(err == seL4_FailedLookup){
-        /* Assume the error was because we have no page table
-         * And at this point, page table should already be mapped in.
-         * So this is an error */
-        printf("swap_in_end: failed mapping application frame to sel4\n");
-        state->callback((void*)state->token, EFAULT);
-        free(state);
-        return;
-    }
-
-    /* Update the frametable entry */
-    set_frame_referenced(state->kvaddr);
-    frame_unlock_frame(state->kvaddr);
-
-    /* Update the pagetable entries */
-    int x = PT_L1_INDEX(state->vpage);
-    int y = PT_L2_INDEX(state->vpage);
-
-    state->as->as_pd_regs[x][y] = (state->kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
-    state->as->as_pd_caps[x][y] = frame_cap;
-
-    /* Flush I-cache if we just swapped in an instruction page */
     if (state->is_code) {
         seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
     }
+
+    frame_unlock_frame(state->kvaddr);
+    _unset_slot(state->swap_slot);
 
     printf("swap_in_end: calling back up\n");
 
@@ -218,15 +186,44 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
     }
 }
 
-int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr,
+static void
+swap_in_page_map_cb(void *token, int err) {
+    swap_in_cont_t *cont = (swap_in_cont_t*)token;
+
+    printf("swap_in_page_map_cb called\n");
+    if (err) {
+        swap_in_end(cont, err);
+        return;
+    }
+
+    int x = PT_L1_INDEX(cont->vpage);
+    int y = PT_L2_INDEX(cont->vpage);
+    cont->kvaddr = cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
+
+    printf("swap_in_page_map_cb lockframe\n");
+    err = frame_lock_frame(cont->kvaddr);
+    if (err) {
+        printf("swap_in failed to lock frame\n");
+        swap_in_end(cont, err);
+        return;
+    }
+
+    printf("swap in start reading\n");
+    enum rpc_stat status = nfs_read(swap_fh, cont->swap_slot * PAGE_SIZE, MIN(PAGE_SIZE, NFS_SEND_SIZE),
+            swap_in_nfs_read_handler, (uintptr_t)cont);
+    if(status != RPC_OK){
+        swap_in_end(cont, EFAULT);
+        return;
+    }
+}
+
+int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
         bool is_code, swap_in_cb_t callback, void* token){
     printf("swap in entered\n");
-    printf("swap in this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n", kvaddr, vaddr);
 
     // If swap file is not created, how can we swap in? This is a bug
     assert(swap_fh != NULL);
 
-    kvaddr = PAGE_ALIGN(kvaddr);
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
@@ -243,7 +240,7 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     }
     swap_cont->callback   = callback;
     swap_cont->token      = token;
-    swap_cont->kvaddr     = kvaddr;
+    swap_cont->kvaddr     = 0;
     swap_cont->vpage      = vpage;
     swap_cont->swap_slot  = swap_slot;
     swap_cont->as         = as;
@@ -251,16 +248,11 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word k
     swap_cont->is_code    = is_code;
     swap_cont->bytes_read = 0;
 
-    frame_lock_frame(kvaddr);
-
-    printf("swap in start reading\n");
-    enum rpc_stat status = nfs_read(swap_fh, swap_slot * PAGE_SIZE, MIN(PAGE_SIZE, NFS_SEND_SIZE),
-            swap_in_nfs_read_handler, (uintptr_t)swap_cont);
-    if(status != RPC_OK){
-        //printf("swap_in rpc error = %d\n", status);
-        frame_unlock_frame(kvaddr);
+    int err;
+    err = sos_page_map(as, vpage, rights, swap_in_page_map_cb, (void*)swap_cont, false);
+    if (err) {
         free(swap_cont);
-        return EFAULT;
+        return err;
     }
     return 0;
 }

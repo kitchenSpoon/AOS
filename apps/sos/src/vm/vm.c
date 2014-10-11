@@ -49,7 +49,6 @@ typedef struct {
     seL4_CPtr reply_cap;
     addrspace_t *as;
     seL4_Word vaddr;
-    seL4_Word kvaddr;
     bool is_code;
     region_t* reg;
 } VMF_cont_t;
@@ -61,9 +60,6 @@ sos_VMFaultHandler_reply(void* token, int err){
     VMF_cont_t *state = (VMF_cont_t*)token;
     if(err){
         printf("sos_vmf received an error\n");
-        if (state->kvaddr != 0) {
-            frame_free(state->kvaddr);
-        }
     }
 
     /* If there is an err here, it is not the process's fault
@@ -77,25 +73,8 @@ sos_VMFaultHandler_reply(void* token, int err){
 
 static void
 sos_VMFaultHandler_swap_in_end(void* token, int err){
-    printf("sos_vmf_swapout to swapin, swap in ends\n");
+    printf("sos_vmf_swap_in_end\n");
     sos_VMFaultHandler_reply(token, err);
-}
-
-static void
-sos_VMFaultHandler_swap_in_1(void *token, seL4_Word kvaddr) {
-    if (kvaddr == 0) {
-        sos_VMFaultHandler_reply(token, EFAULT);
-        return;
-    }
-
-    VMF_cont_t *cont = (VMF_cont_t*)token;
-    cont->kvaddr = kvaddr;
-    int err = swap_in(cont->as, cont->reg->rights, cont->vaddr, kvaddr,
-                      cont->is_code, sos_VMFaultHandler_swap_in_end, cont);
-    if (err) {
-        sos_VMFaultHandler_reply((void*)cont, EFAULT);
-        return;
-    }
 }
 
 void
@@ -163,7 +142,6 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
 
     cont->reply_cap = reply_cap;
     cont->as        = as;
-    cont->kvaddr    = 0;
     cont->vaddr     = fault_addr;
     cont->is_code   = is_code;
     cont->reg       = reg;
@@ -173,7 +151,9 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
         if (sos_page_is_swapped(as, fault_addr)) {
             printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
-            err = frame_alloc(PAGE_ALIGN(fault_addr), as, false, sos_VMFaultHandler_swap_in_1, (void*)cont);
+            //err = frame_alloc(PAGE_ALIGN(fault_addr), as, false, sos_VMFaultHandler_swap_in_1, (void*)cont);
+            err = swap_in(cont->as, cont->reg->rights, cont->vaddr,
+                      cont->is_code, sos_VMFaultHandler_swap_in_end, cont);
             if (err) {
                 sos_VMFaultHandler_reply((void*)cont, err);
                 return;

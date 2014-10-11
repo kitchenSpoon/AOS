@@ -16,9 +16,8 @@ typedef void (*swap_in_cb_t)(void *token, int err);
  * This is an asynchronous syscall
  * @param as - The address space of the memory that we want to swap in
  * @param vaddr - The page data that we want to swap in
- * @param free_kvaddr - The memory that we we are copying data to
  */
-int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr, seL4_Word kvaddr,
+int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
         bool is_code, swap_in_cb_t callback, void* token);
 
 /*

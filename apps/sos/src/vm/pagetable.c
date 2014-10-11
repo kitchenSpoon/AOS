@@ -37,7 +37,7 @@ _insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap) {
  * @return 0 on success
  */
 static int
-_map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
+_map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vpage){
     seL4_Word pt_addr;
     seL4_ARM_PageTable pt_cap;
     int err;
@@ -48,20 +48,14 @@ _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
         return ENOMEM;
     }
     /* Create the frame cap */
-    err =  cspace_ut_retype_addr(pt_addr,
-                                 seL4_ARM_PageTableObject,
-                                 seL4_PageTableBits,
-                                 cur_cspace,
-                                 &pt_cap);
+    err =  cspace_ut_retype_addr(pt_addr, seL4_ARM_PageTableObject, seL4_PageTableBits,
+                                 cur_cspace, &pt_cap);
     if(err){
         ut_free(pt_addr, seL4_PageTableBits);
         return EFAULT;
     }
     /* Tell seL4 to map the PT in for us */
-    err = seL4_ARM_PageTable_Map(pt_cap,
-                                 pd,
-                                 vaddr,
-                                 seL4_ARM_Default_VMAttributes);
+    err = seL4_ARM_PageTable_Map(pt_cap, pd, vpage, seL4_ARM_Default_VMAttributes);
     if (err) {
         ut_free(pt_addr, seL4_PageTableBits);
         cspace_delete_cap(cur_cspace, pt_cap);
@@ -73,20 +67,20 @@ _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vaddr){
 }
 
 static int
-_map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_Word vaddr,
+_map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_Word vpage,
           seL4_CapRights rights, seL4_ARM_VMAttributes attr) {
 
     seL4_ARM_PageDirectory pd = as->as_sel4_pd;
     int err;
 
     /* Attempt the mapping */
-    err = seL4_ARM_Page_Map(frame_cap, pd, vaddr, rights, attr);
+    err = seL4_ARM_Page_Map(frame_cap, pd, vpage, rights, attr);
     if(err == seL4_FailedLookup){
         /* Assume the error was because we have no page table */
-        err = _map_page_table(as, pd, vaddr);
+        err = _map_page_table(as, pd, vpage);
         if(!err){
             /* Try the mapping again */
-            err = seL4_ARM_Page_Map(frame_cap, pd, vaddr, rights, attr);
+            err = seL4_ARM_Page_Map(frame_cap, pd, vpage, rights, attr);
         }
     }
 
@@ -102,7 +96,8 @@ typedef struct {
     bool noswap;
 } sos_page_map_cont_t;
 
-void sos_page_map_part5(void* token, seL4_Word kvaddr){
+static void
+sos_page_map_part5(void* token, seL4_Word kvaddr){
     printf("sos_page_map 5\n");
 
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
@@ -155,14 +150,16 @@ void sos_page_map_part5(void* token, seL4_Word kvaddr){
 
 }
 
-void sos_page_map_part4(void* token){
+static void
+sos_page_map_part4(void* token){
     printf("sos_page_map 4\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     int x = PT_L1_INDEX(cont->vpage);
     int y = PT_L2_INDEX(cont->vpage);
 
-    if (cont->as->as_pd_regs[x][y] & PTE_IN_USE_BIT) {
+    if ((cont->as->as_pd_regs[x][y] & PTE_IN_USE_BIT) &&
+            !(cont->as->as_pd_regs[x][y] & PTE_SWAPPED)) {
         /* page already mapped */
         cont->callback(cont->token, EINVAL);
         free(cont);
@@ -172,13 +169,15 @@ void sos_page_map_part4(void* token){
     /* Allocate memory for the frame */
     int err = frame_alloc(cont->vpage, cont->as, cont->noswap, sos_page_map_part5, token);
     if (err) {
+        printf("sos_page_map_part4: failed to allocate frame\n");
         cont->callback(cont->token, EINVAL);
         free(cont);
         return;
     }
 }
 
-void sos_page_map_part3(void* token, seL4_Word kvaddr){
+static void
+sos_page_map_part3(void* token, seL4_Word kvaddr){
     printf("sos_page_map 3\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
@@ -196,7 +195,7 @@ void sos_page_map_part3(void* token, seL4_Word kvaddr){
     sos_page_map_part4(token);
 }
 
-void
+static void
 sos_page_map_part2(void* token, seL4_Word kvaddr){
     printf("sos_page_map 2\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
@@ -241,6 +240,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
 
     sos_page_map_cont_t* cont = malloc(sizeof(sos_page_map_cont_t));
     if(cont == NULL){
+        printf("sos_page_map err nomem\n");
         return ENOMEM;
     }
     cont->as = as;

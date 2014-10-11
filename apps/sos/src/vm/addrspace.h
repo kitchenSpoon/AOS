@@ -115,8 +115,9 @@ int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         sos_page_map_cb_t callback, void* token, bool noswap);
 
 /*
- * Unmap a page in the pagetable
- * Note that this does not actually free the page, it only unmap the page from sel4
+ * Unmap a page in the pagetable.
+ * Note that this does not actually free the page, it only
+ * unmap the page from sel4 and free the frame_cap
  * Returns 0 if successful
  */
 int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);

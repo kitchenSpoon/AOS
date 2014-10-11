@@ -297,9 +297,11 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
         free(cont);
         return;
     }
+
     cont->written += (size_t)count;
+    /* Check if we have written the whole page */
     if (cont->written < PAGE_SIZE) {
-        printf("swap out 4 reading more\n");
+        printf("swap out 4 writing more\n");
         enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written,
                 MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->written),
                 (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
@@ -317,14 +319,12 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     //TODO unlock frame
     frame_unlock_frame(cont->kvaddr);
 
-    /* Use frame_free to mark the frame as free */
     int err = frame_free(cont->kvaddr);
     if(err){
         printf("frame free error in swap out\n");
     }
 
-
-    //set swap out bit true
+    /* Update the page table entries */
     addrspace_t *as = frame_get_as(cont->kvaddr);
     assert(as != NULL);
 
@@ -333,16 +333,14 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
-    //update with free slot
-    as->as_pd_regs[x][y] = (cont->free_slot)<<PTE_SWAP_OFFSET | PTE_IN_USE_BIT | PTE_SWAPPED;
-
     err = sos_page_unmap(as, vaddr);
     if (err) {
         printf("warning: swap_out_4: sos_page_unmap failed\n");
     }
 
-    cont->callback(cont->token, 0);
+    as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
 
+    cont->callback(cont->token, 0);
     free(cont);
 }
 
@@ -364,9 +362,6 @@ swap_out_3(swap_out_cont_t *cont) {
     _set_slot(free_slot);
     printf("free slot = %d, bits = 0x%08x\n", free_slot, free_slots[0]);
     cont->free_slot = free_slot;
-
-    //TODO update the as->as_pd[x][y] so that it reflects free slot,
-    //as->as_pd[x][y] = (free_slot<<PTE_SWAP_OFFSET) | (as_pd[x][y] & 3);
 
     //TODO: lock down the frame before writing
     enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE, NFS_SEND_SIZE,
@@ -406,9 +401,6 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     seL4_Word vaddr = frame_get_vaddr(kvaddr);
     printf("swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n",kvaddr,vaddr);
 
-    //TODO lock frame
-    frame_lock_frame(kvaddr);
-
     /* Create the continuation here to be used in subsequent functions */
     swap_out_cont_t *cont = malloc(sizeof(swap_out_cont_t));
     if (cont == NULL) {
@@ -419,6 +411,8 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     cont->token     = token;
     cont->kvaddr    = kvaddr;
     cont->written   = 0;
+
+    frame_lock_frame(kvaddr);
 
     /* Initialise the swap file if it hasn't been there */
     if (swap_fh == NULL) {

@@ -289,6 +289,7 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
     if (err) {
         return EFAULT;
     }
+    cspace_delete_cap(cur_cspace, as->as_pd_caps[x][y]);
 
     return 0;
 }
@@ -316,7 +317,6 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
     } else {
         frame_free(as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
         as->as_pd_regs[x][y] = 0;
-        cspace_delete_cap(cur_cspace, as->as_pd_caps[x][y]);
     }
 }
 

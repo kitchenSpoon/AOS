@@ -163,10 +163,11 @@ second_chance_swap_victim(){
             killer++;
             killer = killer % NFRAMES;
         } else if(frametable[killer].fte_referenced){
-            addrspace_t* as = frame_get_as(frametable[killer].fte_kvaddr);
-            seL4_Word vaddr = frame_get_vaddr(frametable[killer].fte_kvaddr);
+            addrspace_t* as = frametable[killer].fte_as;
+            seL4_Word vaddr = frametable[killer].fte_vaddr;
             int err = sos_page_unmap(as, vaddr);
             if (err) {
+                printf("second_chance_swap failed to unmap page\n");
             }
             frametable[killer].fte_referenced = false;
             printf("second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n", frametable[killer].fte_kvaddr, vaddr);

@@ -217,7 +217,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             printf("vmf second chance mapping page back in\n");
             //our second chance swap this page out
             //simply map this page in
-            //assert(); 
+            //assert();
             seL4_CPtr kframe_cap, frame_cap;
             seL4_Word vpage = PAGE_ALIGN(fault_addr);
             int x = PT_L1_INDEX(vpage);
@@ -229,14 +229,12 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             assert(!err); // This kvaddr is ready to use, there should be no error
 
             /* Copy the frame cap as we need to map it into 2 address spaces */
-            //TODO check if I got reg->rights correctly
             frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, reg->rights);
             if (frame_cap == CSPACE_NULL) {
                 printf("vmf: failed copying frame cap\n");
                 return;
             }
 
-            //TODO check if I got reg->rights correctly
             err = seL4_ARM_Page_Map(frame_cap, as->as_sel4_pd, PAGE_ALIGN(vpage),
                                     reg->rights, seL4_ARM_Default_VMAttributes);
             if(err == seL4_FailedLookup){
@@ -251,6 +249,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr){
             if(err){
                 printf("vmf: setting frame referenced error\n");
             }
+            sos_VMFaultHandler_reply((void*)cont, 0);
             return;
         }
     } else {

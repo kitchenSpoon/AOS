@@ -239,10 +239,13 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
     (void)offset;
     int err;
     (void)err;
+    printf("nbytes = %u, %d\n",nbytes,  nbytes);
 
     if(console.buf_size > 0){
         size_t len = 0;
+        printf("console start = %d, nbytes = %u, console.buf_size = %u \n",console.start, nbytes, console.buf_size);
         for(size_t cur = console.start; len < nbytes && len < console.buf_size; cur++, cur%=MAX_IO_BUF){
+            printf("\n%c\n",console.buf[cur]);
             len++;
             if(console.buf[cur] == '\n') {
                 break;
@@ -261,6 +264,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         cont->len = len;
         cont->first_half_size = MIN(MAX_IO_BUF, console.start + len) - console.start;
         cont->buf = buf;
+        printf("con_read buf = 0x%08x\n",buf);
         //save the original start value, so that we can restore this when theres an error
         //cont->console_start_ori = console.start;
         cont->callback = callback;
@@ -276,6 +280,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         con_read_state.callback   = callback;
         con_read_state.token      = token;
         con_read_state.offset     = offset;
+        con_read_state.nbytes     = nbytes;
     }
 
     //printf("con_read out\n");

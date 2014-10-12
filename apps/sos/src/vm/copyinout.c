@@ -174,17 +174,13 @@ void copyout_do_copy(void* token, int err){
         return;
     }
 
-    printf("copyout_do_copy\n");
-    copyin_cont_t* cont = (copyin_cont_t*)token;
+    copyout_cont_t* cont = (copyout_cont_t*)token;
 
     //might need to lock the frame when we have multiple process
 
     /* Check if we need to either map the page or swap in */
-    printf("copyout_do_copy\n");
     seL4_Word vaddr = cont->buf;
-    printf("copyout_do_copy\n");
     if (!sos_page_is_inuse(cont->as, vaddr)) {
-    printf("copyout_do_copy1\n");
         err = sos_page_map(cont->as, vaddr, cont->reg->rights, copyout_do_copy, (void*)cont, false);
         if (err) {
             copyout_end(token, err);
@@ -192,7 +188,6 @@ void copyout_do_copy(void* token, int err){
         }
         return;
     } else if (sos_page_is_swapped(cont->as, vaddr)) {
-    printf("copyout_do_copy1\n");
         err = swap_in(cont->as, cont->reg->rights, vaddr,
                 false, copyout_do_copy, cont);
         if (err) {
@@ -202,7 +197,6 @@ void copyout_do_copy(void* token, int err){
         return;
     }
 
-    printf("copyout_do_copy2\n");
     /* Now it's guarantee that the page is in memory */
 
     /* Copy 1 page at a time */
@@ -210,7 +204,6 @@ void copyout_do_copy(void* token, int err){
         seL4_Word kdst;
         size_t cpy_sz;
 
-    printf("copyout_do_copy\n");
         /* Get the user buffer's corresponding kernel address */
         err = sos_get_kvaddr(cont->as, PAGE_ALIGN(cont->buf), &kdst);
         if (err) {
@@ -218,10 +211,8 @@ void copyout_do_copy(void* token, int err){
             return;
         }
 
-    printf("copyout_do_copy\n");
         kdst = kdst + (cont->buf - PAGE_ALIGN(cont->buf));
 
-    printf("copyout_do_copy\n");
         /* Copy the data over */
         cpy_sz = PAGE_SIZE - (kdst & PAGE_OFFSET_MASK);
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
@@ -231,7 +222,6 @@ void copyout_do_copy(void* token, int err){
         cont->buf  += cpy_sz;
         cont->kbuf += cpy_sz;
 
-    printf("copyout_do_copy\n");
         copyout_do_copy(token, 0);
         return;
     } else {
@@ -243,6 +233,9 @@ void copyout_do_copy(void* token, int err){
 int
 copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte, copyout_cb_t callback, void* token) {
     uint32_t permissions = 0;
+    printf("copyout\n");
+
+    //printf("copyout buf = 0x%08x\n", buf);
 
     addrspace_t* as = proc_getas();
     assert(as != NULL);

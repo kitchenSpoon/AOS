@@ -54,6 +54,7 @@ typedef struct nfs_write_state{
 typedef struct nfs_read_state{
     struct vnode *file;
     char* app_buf;
+    size_t count;
     vop_read_cb_t callback;
     void* token;
 } nfs_read_state;
@@ -67,6 +68,8 @@ typedef struct nfs_stat_state{
 typedef struct nfs_getdirent_state{
     int pos;
     size_t nbyte;
+    size_t size;
+    char* name;
     char* app_buf;
     nfscookie_t cookie;
     vop_getdirent_cb_t callback;
@@ -283,6 +286,11 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
     }
 }
 
+static void nfs_dev_read_end(void* token, int err){
+    nfs_read_state *state = (nfs_read_state*)token;
+    state->callback(state->token, 0, state->count, state->count != 0);
+    free(state);
+}
 
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
     //printf("nfs_dev_read_handler called\n");
@@ -296,14 +304,18 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
     *(nfs_data->fattr) = *fattr;
     //printf("nfs read status = %d\n", status);
     if(status == NFS_OK){
-        err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count);
+        state->count = count;
+        err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count, nfs_dev_read_end, (void*)state);
+        if(err){
+            nfs_dev_read_end((void*)token, 1);
+        }
+        return;
     } else {
         //error
-        err = 1;
+        nfs_dev_read_end((void*)token, 1);
+        return;
     }
 
-    state->callback(state->token, err, (size_t)count, count != 0);
-    free(state);
 }
 
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
@@ -316,6 +328,7 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
         return;
     }
     state->app_buf   = buf;
+    state->count     = 0;
     state->callback  = callback;
     state->token     = token;
     state->file      = file;
@@ -329,6 +342,19 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     }
 
     //printf("nfs_dev_read finish\n");
+}
+
+static void nfs_dev_getdirent_done_copyout(void* token, int err){
+    nfs_getdirent_state *state = (nfs_getdirent_state*) token;
+    free(state->name);
+    if(err){
+        state->callback(state->token, err, state->size);
+        free(state);
+        return;
+    }
+
+    state->callback(state->token, 0, state->size);
+    free(state);
 }
 
 static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
@@ -351,8 +377,10 @@ static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int
             } else {
                 strncpy(name, file_names[state->pos], size);
                 name[size++] = '\0';
-                err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size);
-                free(name);
+                state->size = size;
+                state->name = name;
+                err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size, nfs_dev_getdirent_done_copyout, (void*)state);
+                return;
             }
             finish = true;
         } else {
@@ -413,11 +441,17 @@ static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
     stat.st_mtime.useconds = fattr->mtime.useconds;
 
     /* Needs to copy the data to sosh space */
-    int err = copyout((seL4_Word)buf, (seL4_Word)&stat, sizeof(sos_stat_t));
+    //int err = copyout((seL4_Word)buf, (seL4_Word)&stat, sizeof(sos_stat_t));
 
-    return err;
+    //return err;
+    return 0;
 }
 
+void nfs_dev_getstat_lookup_end(void* token, int err){
+    nfs_stat_state_t *state = (nfs_stat_state_t*)token;
+    state->callback(state->token, err);
+    free(state);
+}
 
 void nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
                                 fhandle_t* fh, fattr_t* fattr) {
@@ -425,8 +459,7 @@ void nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
     nfs_stat_state_t *state = (nfs_stat_state_t*)token;
 
     if(status != NFS_OK){
-        state->callback(state->token, EFAULT);
-        free(state);
+        nfs_dev_getstat_lookup_end((void*)state, EFAULT);
         return;
     }
 
@@ -439,10 +472,8 @@ void nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
     stat.st_mtime.useconds = fattr->mtime.useconds;
 
     /* Needs to copy the data to sosh space */
-    int err = copyout((seL4_Word)state->stat_buf, (seL4_Word)&stat, sizeof(sos_stat_t));
-
-    state->callback(state->token, err);
-    free(state);
+    copyout((seL4_Word)state->stat_buf, (seL4_Word)&stat, sizeof(sos_stat_t), nfs_dev_getstat_lookup_end, (void*)state);
+    return;
 }
 
 void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf, nfs_dev_stat_cb_t callback, void *token) {

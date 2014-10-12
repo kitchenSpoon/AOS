@@ -323,6 +323,7 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
 
 bool
 sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
+    printf("sos_page_is_swapped\n");
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         printf("sos_page_is_swapped Invalid inputs\n");
         return false;
@@ -331,18 +332,41 @@ sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
+    if(as->as_pd_regs[x] == NULL){
+    printf("1sos_page_is_swapped\n");
+
+    }
+    if(as->as_pd_regs[x][y] == NULL){
+    printf("2sos_page_is_swapped\n");
+
+    }
     return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_SWAPPED));
 }
 
 bool
 sos_page_is_inuse(addrspace_t *as, seL4_Word vaddr) {
+    printf("sos_page_is_inuse\n");
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         return false;
     }
-
+    printf("sos is inuse vaddr - 0x%08x\n",vaddr);
+    printf("sos_page_is_inuse 1\n");
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
+    printf("sos_page_is_inuse 2\n");
+    if(as->as_pd_regs[x] == NULL){
+    printf("1sos_page_is_is_inuse\n");
+
+    }
+    if(as->as_pd_regs[x] != NULL){
+    printf("1sos_page_is_is_inuse\n");
+        if(as->as_pd_regs[x][y] & PTE_IN_USE_BIT){
+        printf("2sos_page_is_inuse\n");
+
+        }
+
+    }
     return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_IN_USE_BIT));
 }
 

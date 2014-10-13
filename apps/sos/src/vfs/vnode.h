@@ -16,9 +16,10 @@ struct vnode {
     struct vnode_ops *vn_ops; /* Functions on this vnode */
 };
 
-typedef void (*vop_read_cb_t)(void *token, int err, size_t size, bool more_to_read) ;
-typedef void (*vop_write_cb_t)(void *token, int err, size_t size) ;
-typedef void (*vop_getdirent_cb_t)(void *token, int err, size_t size) ;
+typedef void (*vop_read_cb_t)(void *token, int err, size_t size, bool more_to_read);
+typedef void (*vop_write_cb_t)(void *token, int err, size_t size);
+typedef void (*vop_getdirent_cb_t)(void *token, int err, size_t size);
+typedef void (*vop_stat_cb_t)(void *token, int err);
 
 struct vnode_ops {
     int (*vop_eachopen)(struct vnode *file, int flags);
@@ -30,7 +31,7 @@ struct vnode_ops {
                             vop_write_cb_t callback, void *token);
     void (*vop_getdirent)(struct vnode *dir, char *buf, size_t nbyte,
                           int pos, vop_getdirent_cb_t callback, void *token);
-    int (*vop_stat)(struct vnode *file, sos_stat_t *buf);
+    int (*vop_stat)(struct vnode *file, sos_stat_t *buf, vop_stat_cb_t callback, void *token);
 };
 #define __VOP(vn, sym) ((vn)->vn_ops->vop_##sym)
 
@@ -41,7 +42,7 @@ struct vnode_ops {
 #define VOP_READ(vn, buf, nbytes, offset, callback, token)      (__VOP(vn, read)(vn, buf, nbytes, offset, callback, token))
 #define VOP_WRITE(vn, buf, nbyte, offset, callback, token)      (__VOP(vn, write)(vn, buf, nbyte, offset, callback, token))
 #define VOP_GETDIRENT(vn, buf, nbyte, pos, callback, token)     (__VOP(vn, getdirent)(vn, buf, nbyte, pos, callback, token))
-#define VOP_STAT(vn, buf)                                       (__VOP(vn, stat)(vn, buf))
+#define VOP_STAT(vn, buf, callback, token)                      (__VOP(vn, stat)(vn, buf, callback, token))
 
 /*
  * Reference count manipulation

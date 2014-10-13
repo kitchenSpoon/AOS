@@ -175,6 +175,7 @@ void copyout_do_copy(void* token, int err){
     }
 
     copyout_cont_t* cont = (copyout_cont_t*)token;
+    assert(cont != NULL);
 
     //might need to lock the frame when we have multiple process
 

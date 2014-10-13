@@ -21,7 +21,7 @@
  * 1 is used
  * 0 is free
  */
-#define NUM_CHUNKS (32)
+#define NUM_CHUNKS (1<<10)
 #define NUM_BITS (32)
 #define SWAP_FILE_NAME  "swap"
 
@@ -53,7 +53,6 @@ swap_find_free_slot(void){
             }
         }
     }
-
     return -1;
 }
 

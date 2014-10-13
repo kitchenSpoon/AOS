@@ -26,7 +26,7 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
                               vop_write_cb_t callback, void *token);
 static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte,
                       int pos, vop_getdirent_cb_t callback, void *token);
-static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf);
+static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf, vop_stat_cb_t callback, void *token);
 
 #define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
@@ -288,6 +288,14 @@ static void nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, si
 
 static void nfs_dev_read_end(void* token, int err){
     nfs_read_state *state = (nfs_read_state*)token;
+    assert(state != NULL);
+
+    if (err) {
+        state->callback(state->token, err, 0, false);
+        free(state);
+        return;
+    }
+
     state->callback(state->token, 0, state->count, state->count != 0);
     free(state);
 }
@@ -295,27 +303,26 @@ static void nfs_dev_read_end(void* token, int err){
 static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
     //printf("nfs_dev_read_handler called\n");
     //printf("count = %d\n", count);
-    int err = 0;
+    int err;
     nfs_read_state *state = (nfs_read_state*)token;
     assert(state != NULL);
 
-    struct nfs_data *nfs_data = (struct nfs_data*)state->file->vn_data;
-    assert(nfs_data != NULL);
-    *(nfs_data->fattr) = *fattr;
     //printf("nfs read status = %d\n", status);
     if(status == NFS_OK){
+        struct nfs_data *nfs_data = (struct nfs_data*)state->file->vn_data;
+        assert(nfs_data != NULL);
+        *(nfs_data->fattr) = *fattr;
+
         state->count = count;
         err = copyout((seL4_Word)state->app_buf, (seL4_Word)data, count, nfs_dev_read_end, (void*)state);
         if(err){
-            nfs_dev_read_end((void*)token, 1);
+            nfs_dev_read_end((void*)token, err);
         }
         return;
     } else {
-        //error
-        nfs_dev_read_end((void*)token, 1);
+        nfs_dev_read_end((void*)token, EFAULT);
         return;
     }
-
 }
 
 static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
@@ -346,9 +353,10 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
 
 static void nfs_dev_getdirent_done_copyout(void* token, int err){
     nfs_getdirent_state *state = (nfs_getdirent_state*) token;
+    assert(state != NULL);
     free(state->name);
     if(err){
-        state->callback(state->token, err, state->size);
+        state->callback(state->token, err, 0);
         free(state);
         return;
     }
@@ -357,7 +365,9 @@ static void nfs_dev_getdirent_done_copyout(void* token, int err){
     free(state);
 }
 
-static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files, char* file_names[], nfscookie_t nfscookie){
+static void
+nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files,
+        char* file_names[], nfscookie_t nfscookie){
     int err = 0;
     size_t size = 0;
     bool finish = false;
@@ -367,41 +377,49 @@ static void nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int
 
         /* We have the file we want */
         if(num_files > state->pos){
-            //pos is valid entry
+            /* pos is valid entry */
+
             while(file_names[state->pos][size] != '\0' && size < state->nbyte-1){
                 size++;
             }
             char* name = malloc(size+1);
             if (name == NULL) {
                 err = ENOMEM;
+                finish = true;
             } else {
                 strncpy(name, file_names[state->pos], size);
                 name[size++] = '\0';
                 state->size = size;
                 state->name = name;
-                err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size, nfs_dev_getdirent_done_copyout, (void*)state);
-                return;
+                err = copyout((seL4_Word)state->app_buf, (seL4_Word)name, size,
+                        nfs_dev_getdirent_done_copyout, (void*)state);
+
+                //set callback when there is an error, otherwise wait till copyout returns
+                finish = (bool)err;
             }
-            finish = true;
         } else {
             if(nfscookie == 0){  /* No more entry*/
-                finish = true;
                 //pos is next free entry
                 if(state->pos == num_files + 1){
                     size = 0;
                 } else {
                     err = EINVAL;
                 }
+                finish = true;
             } else {             /* Read more */
                 state->pos -= num_files;
                 assert(state->pos >= 0);
-                nfs_readdir(&mnt_point, nfscookie, nfs_dev_getdirent_handler, (uintptr_t)state);
+                enum rpc_stat rpc_status = nfs_readdir(&mnt_point, nfscookie,
+                        nfs_dev_getdirent_handler, (uintptr_t)state);
+                if (rpc_status != RPC_OK) {
+                    finish = true;
+                }
             }
         }
 
     } else {
         finish = true;
-        err = 1;
+        err = EFAULT;
     }
 
     if(finish){
@@ -425,7 +443,22 @@ static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int po
     nfs_readdir(&mnt_point, 0, nfs_dev_getdirent_handler, (uintptr_t)state);
 }
 
-static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
+typedef struct {
+    vop_stat_cb_t callback;
+    void *token;
+    sos_stat_t *stat;
+} nfs_dev_stat_state;
+
+static void nfs_dev_stat_copyout_cb(void *token, int err) {
+    nfs_dev_stat_state *state = (nfs_dev_stat_state*)token;
+    assert(state != NULL);
+
+    free(state->stat);
+    state->callback(state->token, err);
+    free(state);
+}
+
+static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf, vop_stat_cb_t callback, void *token){
     if(file == NULL) return EFAULT;
     if(file->vn_data == NULL) return EFAULT;
 
@@ -433,17 +466,33 @@ static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf){
     fattr_t *fattr = (data->fattr);
 
     /* Turn fattr to sos_stat_t */
-    sos_stat_t stat;
-    stat.st_type = ST_FILE;
-    stat.st_mode = fattr->mode;
-    stat.st_size = fattr->size;
-    stat.st_mtime.seconds = fattr->mtime.seconds;
-    stat.st_mtime.useconds = fattr->mtime.useconds;
+    sos_stat_t *stat = malloc(sizeof(sos_stat_t));
+    if (stat == NULL) {
+        return ENOMEM;
+    }
+    stat->st_type = ST_FILE;
+    stat->st_mode = fattr->mode;
+    stat->st_size = fattr->size;
+    stat->st_mtime.seconds = fattr->mtime.seconds;
+    stat->st_mtime.useconds = fattr->mtime.useconds;
+
+    nfs_dev_stat_state *state = malloc(sizeof(nfs_dev_stat_state));
+    if (state == NULL) {
+        free(stat);
+        return ENOMEM;
+    }
+    state->callback = callback;
+    state->token    = token;
+    state->stat     = stat;
 
     /* Needs to copy the data to sosh space */
-    //int err = copyout((seL4_Word)buf, (seL4_Word)&stat, sizeof(sos_stat_t));
-
-    //return err;
+    int err = copyout((seL4_Word)buf, (seL4_Word)&stat, sizeof(sos_stat_t),
+            nfs_dev_stat_copyout_cb, (void*)state);
+    if (err) {
+        free(stat);
+        free(state);
+        return err;
+    }
     return 0;
 }
 
@@ -472,11 +521,13 @@ void nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
     stat.st_mtime.useconds = fattr->mtime.useconds;
 
     /* Needs to copy the data to sosh space */
-    copyout((seL4_Word)state->stat_buf, (seL4_Word)&stat, sizeof(sos_stat_t), nfs_dev_getstat_lookup_end, (void*)state);
+    copyout((seL4_Word)state->stat_buf, (seL4_Word)&stat, sizeof(sos_stat_t),
+            nfs_dev_getstat_lookup_end, (void*)state);
     return;
 }
 
-void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf, nfs_dev_stat_cb_t callback, void *token) {
+void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf,
+        nfs_dev_stat_cb_t callback, void *token) {
     //printf("nfs_dev_getstat called\n");
     assert(path != NULL);
     assert(buf != NULL);

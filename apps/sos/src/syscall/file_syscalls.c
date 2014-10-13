@@ -206,7 +206,8 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
         return;
     }
 
-    VOP_READ(file->of_vnode, (char*)buf, MIN(nbyte, MAX_IO_BUF), file->of_offset, serv_sys_read_end, (void*)cont);
+    VOP_READ(file->of_vnode, (char*)buf, MIN(nbyte, MAX_IO_BUF),
+            file->of_offset, serv_sys_read_end, (void*)cont);
     //printf("serv read finish\n");
 }
 
@@ -303,7 +304,7 @@ serv_sys_write_copyin(void *token, int err, size_t size) {
 
     cont->file->of_offset += size;
     cont->byte_written       += size;
-    printf("of_offset = %u, byte_written = %u\n", cont->file->of_offset, cont->byte_written);
+    printf("of_offset = %u, byte_written = %u\n", (unsigned int)cont->file->of_offset, cont->byte_written);
     if (cont->byte_written < cont->nbyte) {
         seL4_Word vaddr;
         vaddr = (seL4_Word)cont->buf + cont->byte_written;

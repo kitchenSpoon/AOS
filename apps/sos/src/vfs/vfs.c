@@ -136,6 +136,7 @@ typedef struct {
 static void vfs_stat_end(void *token, int err) {
     //printf("vfs_stat_end called\n");
     cont_vfs_stat_t *cont = (cont_vfs_stat_t*)token;
+    assert(cont != NULL);
 
     cont->callback(cont->token, err);
     free(cont);
@@ -143,12 +144,7 @@ static void vfs_stat_end(void *token, int err) {
 
 void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callback, void *token){
     //printf("vfs_stat called\n");
-    struct vnode *vn = vfs_vnt_lookup(path);
-    if (vn != NULL) {
-        VOP_STAT(vn, buf);
-        callback(token, 0);
-        return;
-    }
+    int err;
 
     cont_vfs_stat_t *cont = malloc(sizeof(cont_vfs_stat_t));
     if (cont == NULL) {
@@ -157,6 +153,13 @@ void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callba
     }
     cont->callback = callback;
     cont->token = token;
+
+    struct vnode *vn = vfs_vnt_lookup(path);
+    if (vn != NULL) {
+        err = VOP_STAT(vn, buf, vfs_stat_end, (void*)cont);
+        vfs_stat_end((void*)cont, err);
+        return;
+    }
     nfs_dev_getstat(path, path_len, buf, vfs_stat_end, (void*)cont);
 }
 
@@ -164,6 +167,7 @@ struct vnode* vfs_vnt_lookup(const char *path) {
     if (path == NULL) {
         return NULL;
     }
+    //printf("vfs_vnt_lookup path = %s\n", path);
     //printf("vnode_table_head = %p\n", vnode_table_head);
     struct vnode_table_entry *vte = vnode_table_head;
     while (vte != NULL) {
@@ -173,6 +177,7 @@ struct vnode* vfs_vnt_lookup(const char *path) {
         }
         vte = vte->next;
     }
+    //printf("vfs_vnt_lookup %s\n", vte == NULL ? "failed" : "succeed");
     return (vte == NULL) ? NULL : vte->vte_vn;
 }
 

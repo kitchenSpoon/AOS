@@ -216,6 +216,7 @@ static void con_read_part2(void* token, int err){
             con_read_state.is_blocked = 0;
             printf("console err \n");
             cont->callback(cont->token, EFAULT, 0, false);
+            free(cont);
             return;
         }
 
@@ -226,9 +227,13 @@ static void con_read_part2(void* token, int err){
         //console.start %= MAX_IO_BUF;
         //copy second half of circular buffer
         cont->second_half_size = cont->len - cont->first_half_size > 0 ? cont->len - cont->first_half_size : 0;
-        int err2 = copyout((seL4_Word)cont->buf + cont->first_half_size, (seL4_Word)console.buf + console_start,
-                            cont->second_half_size, con_read_end,token);
-        (void)err2;
+        err = copyout((seL4_Word)cont->buf + cont->first_half_size,
+                (seL4_Word)console.buf + console_start, cont->second_half_size,
+                con_read_end, token);
+        if (err) {
+            con_read_end((void*)cont, err);
+            return;
+        }
 }
 
 static void
@@ -261,17 +266,25 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         //know that we are using a circular buffer.
 
         con_read_cont_t* cont = malloc(sizeof(con_read_cont_t));
+        if (cont == NULL) {
+            con_read_state.is_blocked = 0;
+            callback(token, ENOMEM, 0, false);
+            return;
+        }
         cont->len = len;
         cont->first_half_size = MIN(MAX_IO_BUF, console.start + len) - console.start;
         cont->buf = buf;
-        printf("con_read buf = 0x%08x\n",buf);
-        //save the original start value, so that we can restore this when theres an error
-        //cont->console_start_ori = console.start;
         cont->callback = callback;
         cont->token = token;
 
+        printf("con_read buf = %p\n",buf);
         //copy first half of circular buffer
-        err = copyout((seL4_Word)buf, (seL4_Word)console.buf + console.start, cont->first_half_size, con_read_part2, (void*)cont);
+        err = copyout((seL4_Word)buf, (seL4_Word)console.buf + console.start,
+                cont->first_half_size, con_read_part2, (void*)cont);
+        if (err) {
+            con_read_end((void*)cont, err);
+        }
+        return;
     } else {
         //printf("con_read: blocked\n");
         con_read_state.file       = file;
@@ -281,6 +294,7 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         con_read_state.token      = token;
         con_read_state.offset     = offset;
         con_read_state.nbytes     = nbytes;
+        return;
     }
 
     //printf("con_read out\n");

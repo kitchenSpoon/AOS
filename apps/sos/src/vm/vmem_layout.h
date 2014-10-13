@@ -22,7 +22,7 @@
 #define FRAME_VSTART        (0x20000000)
 //#define FRAME_MEMORY        (1ull << 30)            // 1GB
 #define FRAME_MEMORY        (1ull << 17)            // 128kb
-#define FRAME_VEND          (FRAME_VSTART + FRAME_MEMORY)
+#define FRAME_VEND          ((FRAME_VSTART) + (FRAME_MEMORY))
 
 /* From this address onwards is where any devices will get mapped in
  * by the map_device function. You should not use any addresses beyond

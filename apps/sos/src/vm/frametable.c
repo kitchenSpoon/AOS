@@ -13,11 +13,11 @@
 #include "vm/swap.h"
 #include "tool/utility.h"
 
-#define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
+#define NFRAMES                  ((FRAME_MEMORY) / (PAGE_SIZE))
 
-#define FRAME_STATUS_UNTYPED     0
-#define FRAME_STATUS_FREE        1
-#define FRAME_STATUS_ALLOCATED   2
+#define FRAME_STATUS_UNTYPED     (0)
+#define FRAME_STATUS_FREE        (1)
+#define FRAME_STATUS_ALLOCATED   (2)
 
 #define FRAME_INVALID            (-1)
 
@@ -123,8 +123,7 @@ frame_init(void){
         frametable[i].fte_next_free = (i == NFRAMES-1) ? FRAME_INVALID : i+1;
     }
 
-    //this is for rand chance swap, TODO remove me when we upgrade
-    //to a better page replacement algorithm
+    //this is for rand chance swap
     srand(1);
     frame_initialised = true;
 
@@ -153,39 +152,43 @@ rand_swap_victim(){
     return ID_TO_KVADDR(id);
 }
 
-int killer = 0;
+int victim = 0;
 
 static seL4_Word
 second_chance_swap_victim(){
     bool found = false;
-    while(!found){
-        if(frametable[killer].fte_noswap || frametable[killer].fte_locked){
-            killer++;
-            killer = killer % NFRAMES;
-        } else if(frametable[killer].fte_referenced){
-            addrspace_t* as = frametable[killer].fte_as;
-            seL4_Word vaddr = frametable[killer].fte_vaddr;
+    int cnt = 0;
+    while(!found && cnt < 3*NFRAMES){
+    //while(!found){
+        cnt++;
+        if(frametable[victim].fte_noswap || frametable[victim].fte_locked){
+            victim++;
+            victim = victim % NFRAMES;
+        } else if(frametable[victim].fte_referenced){
+            addrspace_t* as = frametable[victim].fte_as;
+            seL4_Word vaddr = frametable[victim].fte_vaddr;
             int err = sos_page_unmap(as, vaddr);
             if (err) {
                 printf("second_chance_swap failed to unmap page\n");
-			}
-            frametable[killer].fte_referenced = false; 
-            printf("second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n", frametable[killer].fte_kvaddr, vaddr);
-            killer++;
-            killer = killer % NFRAMES;
+            }
+            frametable[victim].fte_referenced = false;
+            printf("second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n",
+                    frametable[victim].fte_kvaddr, vaddr);
+            victim++;
+            victim = victim % NFRAMES;
             continue;
         } else {
             //you are killed
-            //I may need to increase killer here after returning
-            //int id = killer;
-            //killer++;
-            //killer = killer % NFRAMES;
-            printf("second_chance_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(killer));
-            return ID_TO_KVADDR(killer);
+            //I may need to increase victim here after returning
+            int id = victim;
+            victim++;
+            victim = victim % NFRAMES;
+            printf("second_chance_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(id));
+            return ID_TO_KVADDR(id);
         }
     }
 
-    //should not be called
+    printf("second_chance_swap cannot find a victim to swap out\n");
     return 0;
 }
 
@@ -200,11 +203,7 @@ typedef struct {
 static void
 frame_alloc_end(void* token, int err){
     printf("frame_alloc end\n");
-
-    if (token == NULL) {
-        printf("error: frame_alloc_end: shit happened\n");
-        return;
-    }
+    assert(token != NULL);
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
         cont->callback(cont->token, 0);
@@ -227,15 +226,6 @@ frame_alloc_end(void* token, int err){
 
     //If this assert fails then our first_free is buggy
     assert(frametable[ind].fte_status != FRAME_STATUS_ALLOCATED);
-
-    //Temporary fix, TODO change this to get the addrspace for differnt process
-    /*addrspace_t *as = proc_getas();
-    if(as == NULL){
-        printf("error, frame_alloc_end: failed to get app addrspace\n");
-        cont->callback(cont->token, 0);
-        free(cont);
-        return;
-    }*/
 
     if(frametable[ind].fte_status == FRAME_STATUS_UNTYPED){
         /* Allocate and map this frame */
@@ -265,24 +255,6 @@ frame_alloc_end(void* token, int err){
 
     cont->callback(cont->token, kvaddr);
     free(cont);
-}
-
-static void
-frame_alloc_swap_out_cb(void *token, int err) {
-    printf("frame_alloc swapout cb\n");
-    assert(token != NULL); // if this is NULL, memory is corrupted
-    frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
-    if(err){
-        printf("frame_alloc cb err\n");
-        cont->callback(cont->token, 0);
-        free(cont);
-        return;
-    }
-
-    /* Update free frame list */
-    printf("first free after swap out = %d\n", first_free);
-
-    frame_alloc_end((void*)cont, 0);
 }
 
 int
@@ -320,7 +292,7 @@ frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
             return ENOMEM;
         }
 
-        swap_out(kvaddr, frame_alloc_swap_out_cb, (void*)cont);
+        swap_out(kvaddr, frame_alloc_end, (void*)cont);
         return 0;
     }
 

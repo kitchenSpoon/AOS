@@ -308,6 +308,10 @@ void start_first_process_part3(void* token, int err){
     as_define_heap(tty_test_process.as);
     conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
 
+    //TODO: this might cause this page to be overwrite? Currently it won't
+    //because process doesn't have mmap The fix is simply creating a region for
+    //it and map the page in using sos_page_map and create a callback for it
+    //as_define_region();
     /* Map in the IPC buffer for the thread */
     err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,
                    PROCESS_IPC_BUFFER,

@@ -38,6 +38,19 @@ sos_VMFaultHandler_reply(void* token, int err){
         printf("sos_vmf received an error\n");
     }
 
+    /* Flush the i-cache if this is an instruction fault */
+    if (state->is_code) {
+        seL4_Word vpage = PAGE_ALIGN(state->vaddr);
+        int x = PT_L1_INDEX(vpage);
+        int y = PT_L2_INDEX(vpage);
+
+        seL4_Word kvaddr = (state->as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+        seL4_CPtr kframe_cap;
+
+        err = frame_get_cap(kvaddr, &kframe_cap);
+        assert(!err); // This kvaddr is ready to use, there should be no error
+        seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+    }
     /* If there is an err here, it is not the process's fault
      * It is either the kernel running out of memory or swapping doesn't work
      */

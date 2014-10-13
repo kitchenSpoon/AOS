@@ -441,12 +441,15 @@ benchmark(){
     char buf800000[800000];
     char buf1600000[1600000];
     char buf3200000[3200000];
-    //bm_read("read_test_1000", (char*)buf1000,1000);
-    //bm_write("write_test_1000", (char*)buf1000,1000);
+    char buf100000_2[100000];
+    char buf200000_2[200000];
+    char buf400000_2[400000];
+    bm_read("read_test_1000", (char*)buf1000,1000);
+    bm_write("write_test_1000", (char*)buf1000,1000);
 
     bm_read("read_test_5000", (char*)buf5000,5000);
-    buf5000[5000] = '\0';
-    printf("read: %s\n", buf5000);
+    //buf5000[5000] = '\0';
+    //printf("read: %s\n", buf5000);
     bm_write("write_test_5000", (char*)buf5000,5000);
 
     bm_read("read_test_10000", (char*)buf10000,10000);
@@ -472,6 +475,16 @@ benchmark(){
 
     bm_read("read_test_3200000", (char*)buf3200000,3200000);
     bm_write("write_test_3200000", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_100000", (char*)buf100000_2,100000);
+    bm_write("write_test_100000_2", (char*)buf100000_2,100000);
+
+    bm_read("read_test_200000", (char*)buf200000_2,200000);
+    bm_write("write_test_200000_2", (char*)buf200000_2,200000);
+
+    bm_read("read_test_400000", (char*)buf400000_2,400000);
+    bm_write("write_test_400000_2", (char*)buf400000_2,400000);
+
     /* Reading with packet changing */
 
     /* Writes */

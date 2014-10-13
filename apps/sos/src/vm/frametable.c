@@ -158,6 +158,9 @@ static seL4_Word
 second_chance_swap_victim(){
     bool found = false;
     int cnt = 0;
+    printf("swappppp\n");
+    printf("swappppp2\n");
+    printf("swappppp3\n");
     while(!found && cnt < 3*NFRAMES){
     //while(!found){
         cnt++;

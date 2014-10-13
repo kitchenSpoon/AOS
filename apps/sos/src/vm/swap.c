@@ -265,6 +265,8 @@ typedef struct {
 static void
 swap_out_end(swap_out_cont_t *cont, int err) {
     if (err) {
+        printf("swap_out_end err\n");
+        _unset_slot(cont->free_slot);
         frame_unlock_frame(cont->kvaddr);
         cont->callback(cont->token, EFAULT);
         free(cont);

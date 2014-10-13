@@ -46,7 +46,8 @@ _set_slot(int slot){
 static int
 swap_find_free_slot(void){
     for(uint32_t i = 0; i < NUM_CHUNKS; i++){
-        for(uint32_t j = 0; j < NUM_BITS; j++){
+        if (free_slots[i] == (uint32_t)(-1)) continue;
+        for(uint32_t j = 0; j < NUM_BITS; j++) {
             //printf("i = %d, j = %d, free_slots[i] in decimal = %u\n", i, j, free_slots[i]);
             if(!(free_slots[i] & (1u<<j))){
                 return i*NUM_CHUNKS + j;

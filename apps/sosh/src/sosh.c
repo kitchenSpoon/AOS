@@ -510,21 +510,38 @@ int benchmark2() {
 static
 int thrash(int argc, char *argv[]) {
     if (argc != 3 ) {
-        printf("Usage: thrash num_kilobytes test_char\n");
+        printf("Usage: thrash num_kilobytes start_char[a-z]\n");
         return 1;
     }
     int nbyte = atoi(argv[1])*1024;
     char ch = argv[2][0];
+    if (ch < 'a' || ch > 'z') {
+        return 1;
+    }
+
     char *big_buf = malloc(nbyte);
     if(big_buf == NULL) {
         printf("thrash failed to allocate enough memory\n");
-        return 0;
+        return 1;
     }
+
+    int mod = 'z' - 'a';
+
     for(int i = 0; i < nbyte; i++){
         if (i % 1024 == 0) {
-            printf("filling page #%d with %c\n", i >> 10,ch);
+            printf("filling kbyte #%d\n", i >> 10);
         }
         big_buf[i] = ch;
+        ch = (ch + 1) % mod + 'a';
+    }
+
+    ch = argv[2][0];
+    for (int i=0; i<nbyte; i++) {
+        if (i % 1024 == 0) {
+            printf("testing kbyte #%d\n", i >> 10);
+        }
+        assert(big_buf[i] == ch);
+        ch = (ch + 1) % mod + 'a';
     }
 
     //free(big_buf);

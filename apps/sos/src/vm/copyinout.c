@@ -44,6 +44,7 @@ void copyin_do_copy(void* token, int err){
     /* Check if we need to either map the page or swap in */
     seL4_Word vaddr = cont->buf;
     if (!sos_page_is_inuse(cont->as, vaddr)) {
+        printf("copyin_do_copy: mapping page in\n");
         err = sos_page_map(cont->as, vaddr, cont->reg->rights, copyin_do_copy, (void*)cont, false);
         if (err) {
             copyin_end(cont, err);
@@ -51,6 +52,7 @@ void copyin_do_copy(void* token, int err){
         }
         return;
     } else if (sos_page_is_swapped(cont->as, vaddr)) {
+        printf("copyin_do_copy: swapping page in\n");
         err = swap_in(cont->as, cont->reg->rights, vaddr,
                 false, copyin_do_copy, cont);
         if (err) {
@@ -68,16 +70,16 @@ void copyin_do_copy(void* token, int err){
         size_t cpy_sz;
 
         /* Get the source's kernel address */
-        err = sos_get_kvaddr(cont->as, PAGE_ALIGN(cont->buf), &ksrc);
+        err = sos_get_kvaddr(cont->as, cont->buf, &ksrc);
         if (err) {
             copyin_end(cont, err);
             return;
         }
-        ksrc = ksrc + (cont->buf - PAGE_ALIGN(cont->buf));
 
         /* Copy maximum one page */
         cpy_sz = PAGE_SIZE - (ksrc & PAGE_OFFSET_MASK);
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
+        printf("cpy_sz = %u\n", cpy_sz);
 
         memcpy((void*)cont->kbuf, (void*)ksrc, cpy_sz);
 
@@ -162,6 +164,7 @@ void copyout_end(void* token, int err){
         return;
     }
 
+    printf("copyout calls back up\n");
     cont->callback(cont->token, 0);
     free(cont);
     return;
@@ -182,6 +185,7 @@ void copyout_do_copy(void* token, int err){
     /* Check if we need to either map the page or swap in */
     seL4_Word vaddr = cont->buf;
     if (!sos_page_is_inuse(cont->as, vaddr)) {
+        printf("copyout_do_copy: mapping page in\n");
         err = sos_page_map(cont->as, vaddr, cont->reg->rights, copyout_do_copy, (void*)cont, false);
         if (err) {
             copyout_end(token, err);
@@ -189,6 +193,7 @@ void copyout_do_copy(void* token, int err){
         }
         return;
     } else if (sos_page_is_swapped(cont->as, vaddr)) {
+        printf("copyout_do_copy: swapping page in\n");
         err = swap_in(cont->as, cont->reg->rights, vaddr,
                 false, copyout_do_copy, cont);
         if (err) {
@@ -206,17 +211,16 @@ void copyout_do_copy(void* token, int err){
         size_t cpy_sz;
 
         /* Get the user buffer's corresponding kernel address */
-        err = sos_get_kvaddr(cont->as, PAGE_ALIGN(cont->buf), &kdst);
+        err = sos_get_kvaddr(cont->as, cont->buf, &kdst);
         if (err) {
             copyout_end(token, err);
             return;
         }
 
-        kdst = kdst + (cont->buf - PAGE_ALIGN(cont->buf));
-
         /* Copy the data over */
         cpy_sz = PAGE_SIZE - (kdst & PAGE_OFFSET_MASK);
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
+        printf("cpy_sz = %u\n", cpy_sz);
         memcpy((void*)kdst, (void*)cont->kbuf, cpy_sz);
 
         cont->pos  += cpy_sz;
@@ -234,7 +238,7 @@ void copyout_do_copy(void* token, int err){
 int
 copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte, copyout_cb_t callback, void* token) {
     uint32_t permissions = 0;
-    printf("copyout\n");
+    printf("copyout called, kbuf=0x%08x, buf=0x%08x, nbyte=%u\n", kbuf, buf, nbyte);
 
     //printf("copyout buf = 0x%08x\n", buf);
 

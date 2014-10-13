@@ -165,9 +165,9 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
 
     state->bytes_read += count;
 
+    printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
     /* Check if we need to read more */
     if(state->bytes_read < PAGE_SIZE){
-        printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
         enum rpc_stat status = nfs_read(swap_fh, state->swap_slot * PAGE_SIZE + state->bytes_read,
                                         MIN(NFS_SEND_SIZE, PAGE_SIZE - state->bytes_read),
                                         swap_in_nfs_read_handler, (uintptr_t)state);
@@ -203,8 +203,9 @@ swap_in_page_map_cb(void *token, int err) {
     }
 
     printf("swap in start reading\n");
-    enum rpc_stat status = nfs_read(swap_fh, cont->swap_slot * PAGE_SIZE, MIN(PAGE_SIZE, NFS_SEND_SIZE),
-            swap_in_nfs_read_handler, (uintptr_t)cont);
+    enum rpc_stat status = nfs_read(swap_fh, cont->swap_slot * PAGE_SIZE,
+            MIN(PAGE_SIZE, NFS_SEND_SIZE), swap_in_nfs_read_handler,
+            (uintptr_t)cont);
     if(status != RPC_OK){
         swap_in_end(cont, EFAULT);
         return;
@@ -213,7 +214,7 @@ swap_in_page_map_cb(void *token, int err) {
 
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
         bool is_code, swap_in_cb_t callback, void* token){
-    printf("swap in entered\n");
+    printf("swap in entered, vaddr = 0x%08x\n", vaddr);
 
     // If swap file is not created, how can we swap in? This is a bug
     assert(swap_fh != NULL);
@@ -307,9 +308,9 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     }
 
     cont->written += (size_t)count;
+    printf("swap out 4 written = %u, free_slot = %d\n", cont->written, cont->free_slot);
     /* Check if we have written the whole page */
     if (cont->written < PAGE_SIZE) {
-        printf("swap out 4 writing more\n");
         enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written,
                 MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->written),
                 (void*)(cont->kvaddr + cont->written), swap_out_4_nfs_write_cb, (uintptr_t)cont);
@@ -336,8 +337,9 @@ swap_out_3(swap_out_cont_t *cont) {
     _set_slot(free_slot);
     cont->free_slot = free_slot;
 
-    enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE, NFS_SEND_SIZE,
-                        (void*)cont->kvaddr, swap_out_4_nfs_write_cb, (uintptr_t)cont);
+    enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE,
+                        MIN(NFS_SEND_SIZE, PAGE_SIZE), (void*)cont->kvaddr,
+                        swap_out_4_nfs_write_cb, (uintptr_t)cont);
     if (status != RPC_OK) {
         printf("swapout 3 err\n");
         swap_out_end(cont, EFAULT);

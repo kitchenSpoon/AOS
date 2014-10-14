@@ -30,8 +30,9 @@
 static int in;
 static sos_stat_t sbuf;
 
-static int benchmark(int argc, char *argv[]);
-static int benchmark2(int argc, char *argv[]);
+static int benchmark();
+static int benchmark2();
+static int thrash();
 
 static void prstat(const char *name) {
     /* print out stat buf */
@@ -280,7 +281,7 @@ struct command {
 
 struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
         "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2} };
+        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2}, {"thrash", thrash} };
 
 static void test_file_syscalls(void) {
     printf("Start file syscalls test...\n");
@@ -425,15 +426,13 @@ static void bm_write(char* filename, char* buf, size_t buf_size){
 }
 
 static int
-benchmark(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+benchmark(){
     /* Reads */
     printf("Reading\n");
     /* Reading with IO request changing*/
     printf("Reading with IO request changing\n");
-    char buf1000[1000];
-    char buf5000[5000];
+    char buf1000[1001];
+    char buf5000[5001];
     char buf10000[10000];
     char buf50000[50000];
     char buf100000[100000];
@@ -442,6 +441,9 @@ benchmark(int argc, char *argv[]) {
     char buf800000[800000];
     char buf1600000[1600000];
     char buf3200000[3200000];
+    char buf100000_2[100000];
+    char buf200000_2[200000];
+    char buf400000_2[400000];
     bm_read("read_test_1000", (char*)buf1000,1000);
     bm_write("write_test_1000", (char*)buf1000,1000);
 
@@ -471,18 +473,27 @@ benchmark(int argc, char *argv[]) {
 
     bm_read("read_test_3200000", (char*)buf3200000,3200000);
     bm_write("write_test_3200000", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_100000", (char*)buf100000_2,100000);
+    bm_write("write_test_100000_2", (char*)buf100000_2,100000);
+
+    bm_read("read_test_200000", (char*)buf200000_2,200000);
+    bm_write("write_test_200000_2", (char*)buf200000_2,200000);
+
+    bm_read("read_test_400000", (char*)buf400000_2,400000);
+    bm_write("write_test_400000_2", (char*)buf400000_2,400000);
+
     /* Reading with packet changing */
 
     /* Writes */
     printf("Writing\n");
     /* Writing with IO request changing*/
     /* Writing with packet changing */
+    return 0;
 }
 
 static int
-benchmark2(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+benchmark2() {
     char buf3200000[3200000];
     bm_read("read_test_3200000_1", (char*)buf3200000, 3200000);
     bm_write("write_test_3200000_1", (char*)buf3200000, 3200000);
@@ -507,6 +518,47 @@ benchmark2(int argc, char *argv[]) {
     return 0;
 }
 
+static
+int thrash(int argc, char *argv[]) {
+    if (argc != 3 ) {
+        printf("Usage: thrash num_kilobytes start_char[a-z]\n");
+        return 1;
+    }
+    int nbyte = atoi(argv[1])*1024;
+    char ch = argv[2][0];
+    if (ch < 'a' || ch > 'z') {
+        return 1;
+    }
+
+    char *big_buf = malloc(nbyte);
+    if(big_buf == NULL) {
+        printf("thrash failed to allocate enough memory\n");
+        return 1;
+    }
+
+    int mod = 'z' - 'a';
+
+    for(int i = 0; i < nbyte; i++){
+        if (i % 1024 == 0) {
+            printf("filling kbyte #%d\n", i >> 10);
+        }
+        big_buf[i] = ch;
+        ch = (ch + 1) % mod + 'a';
+    }
+
+    ch = argv[2][0];
+    for (int i=0; i<nbyte; i++) {
+        if (i % 1024 == 0) {
+            printf("testing kbyte #%d\n", i >> 10);
+        }
+        assert(big_buf[i] == ch);
+        ch = (ch + 1) % mod + 'a';
+    }
+
+    //free(big_buf);
+    return 0;
+}
+
 int main(void) {
     char buf[BUF_SIZ];
     char *argv[MAX_ARGS];
@@ -520,7 +572,10 @@ int main(void) {
     test_dynamic_heap();
     benchmark();
 */
-    test_file_syscalls();
+//    test_file_syscalls();
+
+    //test_swapping();
+
     in = open("console", O_RDONLY);
     assert(in >= 0);
 

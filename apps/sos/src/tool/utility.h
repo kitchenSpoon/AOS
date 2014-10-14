@@ -7,8 +7,8 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
 /* Page size and stuffs */
-#define PAGEMASK              ((PAGESIZE) - 1)
-#define PAGE_ALIGN(addr)      ((addr) & ~(PAGEMASK))
-#define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGEMASK))
+#define PAGE_OFFSET_MASK              ((PAGESIZE) - 1)
+#define PAGE_ALIGN(addr)      ((addr) & ~(PAGE_OFFSET_MASK))
+#define IS_PAGESIZE_ALIGNED(addr) !((addr) &  (PAGE_OFFSET_MASK))
 
 #endif /* _LIBOS_UTILITY_H_ */

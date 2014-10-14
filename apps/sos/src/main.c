@@ -32,6 +32,9 @@
 #include "proc/proc.h"
 #include "vm/addrspace.h"
 #include "syscall/syscall.h"
+#include "vm/swap.h"
+#include "tool/utility.h"
+#include <limits.h>
 
 #include <autoconf.h>
 
@@ -75,6 +78,7 @@ seL4_CPtr _sos_interrupt_ep_cap;
 extern fhandle_t mnt_point;
 
 void handle_syscall(seL4_Word badge, int num_args) {
+
     seL4_Word syscall_number;
     seL4_CPtr reply_cap;
 
@@ -177,33 +181,15 @@ void handle_pagefault(void) {
     seL4_Word fault_addr = seL4_GetMR(1);
     bool ifault = (bool)seL4_GetMR(2);
     seL4_Word fsr = seL4_GetMR(3);
-    dprintf(0, "vm fault at 0x%08x, pc = 0x%08x, %s\n", fault_addr, pc,
+    dprintf(0, "vm fault at 0x%08x, align = 0x%08x , pc = 0x%08x, %s\n", fault_addr, PAGE_ALIGN(fault_addr), pc,
             ifault ? "Instruction Fault" : "Data fault");
 
-    if (ifault) {
-        // we don't handle this
-    } else {
-        seL4_CPtr reply_cap;
-        int err;
+    seL4_CPtr reply_cap;
 
-        /* Save the caller */
-        reply_cap = cspace_save_reply_cap(cur_cspace);
-        assert(reply_cap != CSPACE_NULL);
-
-        err = sos_VMFaultHandler(fault_addr, fsr);
-        if (err) {
-            /* SOS doesn't handle the fault, the process is doing something
-             * wrong, kill it! */
-            // Just not replying to it for now
-            printf("Process is (pretend to be) killed\n");
-        } else {
-            seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-            seL4_Send(reply_cap, reply);
-        }
-
-        /* Free the saved reply cap */
-        cspace_free_slot(cur_cspace, reply_cap);
-    }
+    /* Save the caller */
+    reply_cap = cspace_save_reply_cap(cur_cspace);
+    assert(reply_cap != CSPACE_NULL);
+    sos_VMFaultHandler(reply_cap, fault_addr, fsr, ifault);
 }
 
 void syscall_loop(seL4_CPtr ep) {
@@ -305,15 +291,71 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"--------------------------------------------------------\n");
 }
 
+
+typedef struct{
+    char* elf_base;
+} start_first_process_cont_t;
+
+
+void start_first_process_part3(void* token, int err){
+    printf("start first process part3\n");
+    conditional_panic(err, "Failed to load elf image");
+    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
+
+    /* set up the stack & the heap */
+    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
+    as_define_heap(tty_test_process.as);
+    conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
+
+    //TODO: this might cause this page to be overwrite? Currently it won't
+    //because process doesn't have mmap The fix is simply creating a region for
+    //it and map the page in using sos_page_map and create a callback for it
+    //as_define_region();
+    /* Map in the IPC buffer for the thread */
+    err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,
+                   PROCESS_IPC_BUFFER,
+                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    conditional_panic(err, "Unable to map IPC buffer for user app");
+
+    /* Initialise filetable for this process */
+    err = filetable_init(NULL, NULL, NULL);
+    conditional_panic(err, "Unable to initialise filetable for user app");
+
+    /* Start the new process */
+    seL4_UserContext context;
+
+    memset(&context, 0, sizeof(context));
+    context.pc = elf_getEntryPoint(cont->elf_base);
+    context.sp = PROCESS_STACK_TOP;
+    seL4_TCB_WriteRegisters(tty_test_process.tcb_cap, 1, 0, 2, &context);
+
+    /* Clear */
+    free(cont);
+}
+
+void start_first_process_part2(void* token, addrspace_t *as){
+    printf("start first process part2\n");
+    conditional_panic(as==NULL, "start_first_process_part2: as is NULL\n");
+    conditional_panic(as->as_pd_caps == NULL || as->as_pd_regs == NULL,
+                      "start_first_process_part2: as contains invalid fields\n");
+
+    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
+
+    tty_test_process.as = as;
+    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
+
+    /* load the elf image */
+    elf_load(tty_test_process.as, cont->elf_base, start_first_process_part3, token);
+}
+
 void start_first_process(char* app_name, seL4_CPtr fault_ep) {
+    printf("start first process\n");
     int err;
 
     //seL4_Word stack_addr;
     //seL4_CPtr stack_cap;
     seL4_CPtr user_ep_cap;
-
-    /* These required for setting up the TCB */
-    seL4_UserContext context;
 
     /* These required for loading program sections */
     char* elf_base;
@@ -377,35 +419,14 @@ void start_first_process(char* app_name, seL4_CPtr fault_ep) {
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     conditional_panic(!elf_base, "Unable to locate cpio header");
 
+    /* Initialise the continuation preparing to call as_create */
+    start_first_process_cont_t* cont = malloc(sizeof(start_first_process_cont_t));
+    conditional_panic(cont == NULL, "Unable to allocate memory for first process");
+
+    cont->elf_base = elf_base;
+
     /* initialise address space */
-    tty_test_process.as = as_create(tty_test_process.vroot);
-    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
-
-    /* load the elf image */
-    err = elf_load(tty_test_process.as, elf_base);
-    conditional_panic(err, "Failed to load elf image");
-
-    /* set up the stack & the heap */
-    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
-    conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
-    as_define_heap(tty_test_process.as);
-    conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
-
-    /* Map in the IPC buffer for the thread */
-    err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,
-                   PROCESS_IPC_BUFFER,
-                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    conditional_panic(err, "Unable to map IPC buffer for user app");
-
-    /* Initialise filetable for this process */
-    err = filetable_init(NULL, NULL, NULL);
-    conditional_panic(err, "Unable to initialise filetable for user app");
-
-    /* Start the new process */
-    memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint(elf_base);
-    context.sp = PROCESS_STACK_TOP;
-    seL4_TCB_WriteRegisters(tty_test_process.tcb_cap, 1, 0, 2, &context);
+    as_create(tty_test_process.vroot, start_first_process_part2, (void*)cont);
 }
 
 static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
@@ -484,65 +505,91 @@ static void _sos_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
 #define TEST_1      1
 #define TEST_2      2
 #define TEST_3      4
+
+#define TEST_N_FRAMES 10
+int ftc1, ftc2, ftc3;
+static void
+ft_test_1(void* token, seL4_Word kvaddr) {
+    (void)token;
+    int err;
+    assert(kvaddr);
+    printf("ft_test_1: kvaddr[%d] = 0x%08x\n", ftc1, kvaddr);
+
+    ftc1++;
+
+    /* Test you can touch the page */
+    *(int*)kvaddr = 0x37;
+    assert(*(int*)kvaddr == 0x37);
+
+    if (ftc1 < TEST_N_FRAMES) {
+        err = frame_alloc(0, NULL, true, ft_test_1, NULL);
+        assert(!err);
+    } else {
+        printf("ft_test_1: Done!!!\n");
+    }
+}
+
+static void
+ft_test_2(void* token, seL4_Word kvaddr) {
+    (void)token;
+    int err;
+    printf("ft_test_2: kvaddr[%d] = 0x%08x\n", ftc2, kvaddr);
+    assert(kvaddr);
+    ftc2++;
+
+    /* Test you can touch the page */
+    int val = rand();
+    *(int*)kvaddr = val;
+    assert(*(int*)kvaddr == val);
+
+    err = frame_alloc(0,NULL,true,ft_test_2, NULL);
+    assert(!err);
+}
+
+static void
+ft_test_3(void* token, seL4_Word kvaddr) {
+    (void)token;
+    int err;
+    printf("ft_test_3: kvaddr[%d] = 0x%08x\n", ftc3, kvaddr);
+    assert(kvaddr);
+
+    /* Test you can touch the page */
+    int val = rand();
+    *(int*)kvaddr = val;
+    assert(*(int*)kvaddr == val);
+    frame_free(kvaddr);
+
+    err = frame_alloc(0,NULL,true,ft_test_3, NULL);
+    assert(!err);
+}
+
 static void
 frametable_test(uint32_t test_mask) {
+    int err;
+    //srand(0); this will eventually cause ft_test 2 to try
+    //and access invalid kvaddr srand(1) will last longer before
+    //hitting kvaddr == 0,(which is invalid)
+    srand(1);
     if (test_mask & TEST_1) {
         printf("Starting test 1...\n");
-        /* Allocate 10 pages and make sure you can touch them all */
-        for (int i = 0; i < 10; i++) {
-            /* Allocate a page */
-            seL4_Word vaddr = frame_alloc();
-            assert(vaddr);
-
-            /* Test you can touch the page */
-            *(int*)vaddr = 0x37;
-            assert(*(int*)vaddr == 0x37);
-
-            printf("Page #%d allocated at %p\n",  i, (void *) vaddr);
-        }
-        printf("Done!!!\n");
+        printf("Allocate %d frames and touch them\n", TEST_N_FRAMES);
+        ftc1 = 0;
+        err = frame_alloc(0,NULL,true,ft_test_1, NULL);
+        assert(!err);
     }
     if (test_mask & TEST_2) {
         printf("Starting test 2...\n");
-        /* Test that you eventually run out of memory gracefully,
-           and doesn't crash */
-        int i = 0;
-        for (;;i++) {
-            /* Allocate a page */
-            seL4_Word vaddr = frame_alloc();
-            //printf("vaddr = 0x%08x\n", vaddr);
-            if (!vaddr) {
-                printf("Out of memory!\n");
-                break;
-            }
-
-            /* Test you can touch the page */
-            *(int*)vaddr = 0x37;
-            assert(*(int*)vaddr == 0x37);
-        }
-        printf("Allocated %d frames\n", i);
-        printf("Done!!!\n");
+        printf("Test that frame_alloc runs out of memory after a while\n");
+        ftc2 = 0;
+        err = frame_alloc(0,NULL,true,ft_test_2, NULL);
+        assert(!err);
     }
     if (test_mask & TEST_3) {
         printf("Starting test 3...\n");
-        /* Test that you never run out of memory if you always free frames.
-           This loop should never finish */
-        for (int i = 0;; i++) {
-            /* Allocate a page */
-            seL4_Word vaddr = frame_alloc();
-            assert(vaddr != 0);
-
-            /* Test you can touch the page */
-            *(int*)vaddr = 0x37;
-            assert(*(int*)vaddr == 0x37);
-
-            printf("Page #%d allocated at %p\n",  i, (int*) vaddr);
-
-            int result = frame_free(vaddr);
-            assert(result == FRAMETABLE_OK);
-        }
-        printf("Done!!!\n");
-
+        printf("Test that you never run out of memory if you always free frames.\n");
+        ftc3 = 0;
+        err = frame_alloc(0,NULL,true,ft_test_3, NULL);
+        assert(!err);
     }
 }
 
@@ -564,7 +611,7 @@ filesystem_init(void) {
     vn->vn_ops = malloc(sizeof(struct vnode_ops));
     conditional_panic(vn->vn_ops == NULL, "Failed to allocate mountpoint vnode memory\n");
 
-    err = nfs_dev_init_mntpoint(vn, &mnt_point);
+    err = nfs_dev_init_mntpoint_vnode(vn, &mnt_point);
     conditional_panic(err, "Failed to initialise mountpoint vnode\n");
 
     vn->vn_opencount = 1;
@@ -582,6 +629,7 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
     return badged_cap;
 }
 
+
 /*
  * Main entry point - called by crt.
  */
@@ -595,8 +643,6 @@ int main(void) {
     /* Initialise the network hardware */
     network_init(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_NETWORK));
 
-    /* Start the user application */
-    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     /* Initialize timer driver */
     result = start_timer(badge_irq_ep(_sos_interrupt_ep_cap, IRQ_BADGE_TIMER));
@@ -604,9 +650,14 @@ int main(void) {
 
     /* Init file system */
     filesystem_init();
-    //frametable_test(TEST_1 | TEST_3);
+    //frametable_test(TEST_1 | TEST_2);
 
-    /* Wait on synchronous endpoint for IPC */
+    ///* Register swap test */
+    //register_timer(1000000, swap_test, NULL); //100ms
+
+    /* Start the user application */
+    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
+
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
 

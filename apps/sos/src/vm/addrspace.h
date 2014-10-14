@@ -6,7 +6,15 @@
 
 #define SEL4_N_PAGETABLES       (1<<12)
 
+#define INDEX_1_MASK        (0xffc00000)
+#define INDEX_2_MASK        (0x003ff000)
+#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
+#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
+
 #define PTE_IN_USE_BIT          (1)
+#define PTE_SWAPPED             (1<<1)
+#define PTE_SWAP_OFFSET         (2)
+#define PTE_SWAP_MASK           (0xfffffffc)
 #define PTE_KVADDR_MASK         (0xfffff000)
 
 /* Pagetable related defs */
@@ -41,38 +49,52 @@ struct addrspace {
 } addrspace_t;
 
 /*
- * Functions in addrspace.c:
- *
- *    as_create - create a new empty address space. You need to make
- *                sure this gets called in all the right places. You
- *                may find you want to change the argument list. May
- *                return NULL on out-of-memory error.
- *
- *    as_destroy - dispose of an address space. You may need to change
- *                the way this works if implementing user-level threads.
- *
- *    as_define_region - set up a region of memory within the address
- *                space.
- *
- *    as_define_stack - set up the stack region in the address space.
- *                (Normally called *after* as_complete_load().) Hands
- *                back the initial stack pointer for the new process.
- *
- *    as_define_heap - set up the heap region in the address space.
- *
- *    as_valid_memory - check if the given user buffer is a valid memory range
+ * Functions in addrspace.c
  *
  */
-addrspace_t *as_create(seL4_ARM_PageDirectory sel4_pd);
-void         as_destroy(addrspace_t *as);
-int          as_define_region(addrspace_t *as,
-                              seL4_Word vaddr,
-                              size_t sz,
-                              int32_t rights);
-int          as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
-int          as_define_heap(addrspace_t *as);
 
-bool         as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
+/* Find and return the region that this address is in */
+region_t* region_probe(struct addrspace* as, seL4_Word addr);
+
+/* Callback for as_create function, to be called when as_create finished and
+ * want to reply to the caller */
+typedef void (*as_create_cb_t)(void *token, addrspace_t *as);
+
+/*
+ * Create a new empty address space.
+ * This function is asynchronous.
+ * RETURN: if the immediate return value is 0, new addrspace will be returned via the callback
+ *         if the immediate return is not 0, it fails and callback will not be called
+ */
+int as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token);
+
+/*
+ * Dispose of an address space.
+ */
+void as_destroy(addrspace_t *as);
+
+/*
+ * set up a region of memory within the address space.
+ */
+int as_define_region(addrspace_t *as, seL4_Word vaddr,
+                              size_t sz, int32_t rights);
+
+/*
+ * set up the stack region in the address space.
+ * Hands back the initial stack pointer for the new process.
+ */
+int as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
+
+/*
+ * set up the heap region in the address space.
+ */
+int as_define_heap(addrspace_t *as);
+
+/*
+ * check if the given user buffer is a valid memory range
+ * @param permission can be NULL
+ */
+bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
                                 uint32_t* permission);
 
 /*
@@ -80,19 +102,12 @@ bool         as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
  *    elf_load - load an ELF user program executable into the current
  *               address space. (i.e. the only one address space )
  */
-int elf_load(addrspace_t *as, char* elf_file);
+typedef void (*elf_load_cb_t)(void *token, int err);
+void elf_load(addrspace_t *as, char* elf_file, elf_load_cb_t callback, void* token);
 
 /*
  * Functions in pagetable.c:
  *
- *    sos_map_page - create and map a page into indicated address for user
- *              level application
- *
- *    sos_unmap_page - unmap a page
- *
- *    sos_get_kframe_cap - get kframe_cap
- *
- *    sos_get_kvaddr - get kvaddr
  */
 
 /*
@@ -103,16 +118,29 @@ int elf_load(addrspace_t *as, char* elf_file);
  *
  * @Returns 0 if succesful
  */
-int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions);
+typedef void (*sos_page_map_cb_t)(void *token, int err);
+int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
+        sos_page_map_cb_t callback, void* token, bool noswap);
 
 /*
- * Unmap a page in into the page table
+ * Unmap a page in the pagetable.
+ * Note that this does not actually free the page, it only
+ * unmap the page from sel4 and free the frame_cap
  * Returns 0 if successful
  */
-int sos_page_unmap(pagedir_t* pd, seL4_Word vaddr);
+int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);
+
+/*
+ * Free a page, this will unmap the page before removing the page so that it
+ * can be reused
+ */
+void sos_page_free(addrspace_t *as, seL4_Word vaddr);
+
+/* Check if page at address VADDR is swapped */
+bool sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr);
 
 /* Check if page at address VADDR is mapped */
-bool sos_page_is_mapped(addrspace_t *as, seL4_Word vaddr);
+bool sos_page_is_inuse(addrspace_t *as, seL4_Word vaddr);
 
 /* Get the kframe_cap from the given ADDR in AS */
 int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap);

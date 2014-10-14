@@ -10,38 +10,133 @@
 #define N_PAGETABLES       (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 
-addrspace_t
-*as_create(seL4_ARM_PageDirectory sel4_pd) {
+region_t*
+region_probe(struct addrspace* as, seL4_Word addr) {
+    assert(as != NULL);
+    assert(addr != 0);
+
+    if(as->as_stack != NULL && as->as_stack->vbase <= addr && addr < as->as_stack->vtop)
+        return as->as_stack;
+
+    if(as->as_heap != NULL && as->as_heap->vbase <= addr && addr < as->as_heap->vtop)
+        return as->as_heap;
+
+    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
+        if (r->vbase <= addr && addr < r->vtop) {
+            return r;
+        }
+    }
+    return NULL;
+}
+
+typedef struct {
+    addrspace_t *as;
+    as_create_cb_t callback;
+    void *token;
+} as_create_cont_t;
+
+static void
+as_create_end(as_create_cont_t *cont, int err) {
+    printf("as create end\n");
+    if (!err) {
+        printf("as create end success\n");
+        cont->callback(cont->token, cont->as);
+        free(cont);
+        return;
+    }
+
+    printf("as create end err = %d\n",err);
+    /* Clean up as needed */
+    if (cont->as) {
+        if (cont->as->as_pd_caps != NULL) {
+            //frame_free((seL4_Word)(cont->as->as_pd_caps));
+        }
+        if (cont->as->as_pd_regs != NULL) {
+            //frame_free((seL4_Word)(cont->as->as_pd_regs));
+        }
+    }
+    cont->callback(cont->token, NULL);
+    return;
+}
+
+static void
+as_create_pagedir_regs_allocated(void *token, seL4_Word kvaddr) {
+    printf("as create pagedir_reg_allocated\n");
+    as_create_cont_t *cont = (as_create_cont_t*)token;
+    if (cont == NULL) {
+        printf("as_create_pagedir_regs_allocated: There is something wrong with the memory\n");
+        return;
+    }
+
+    if (kvaddr == 0) {
+        as_create_end(cont, ENOMEM);
+        return;
+    }
+    cont->as->as_pd_regs = (pagedir_t)kvaddr;
+    bzero((void*)(cont->as->as_pd_regs), PAGE_SIZE);
+
+    as_create_end(cont, 0);
+    return;
+}
+
+static void
+as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
+    printf("as create pagedir_cap_allocated\n");
+    int err;
+    as_create_cont_t *cont = (as_create_cont_t*)token;
+    if (cont == NULL) {
+        printf("as_create_pagedir_caps_allocated: There is something wrong with the memory\n");
+        return;
+    }
+
+    if (kvaddr == 0) {
+        printf("as create err 1\n");
+        as_create_end(cont, ENOMEM);
+        return;
+    }
+    cont->as->as_pd_caps = (pagedir_t)kvaddr;
+    bzero((void*)(cont->as->as_pd_caps), PAGE_SIZE);
+
+    err = frame_alloc(0, NULL, true, as_create_pagedir_regs_allocated, (void*)cont);
+    if (err) {
+        printf("as create err 2\n");
+        as_create_end(cont, err);
+        return;
+    }
+}
+
+int
+as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) {
+    printf("as_create called\n");
+    int err;
     addrspace_t* as = malloc(sizeof(addrspace_t));
-    if (as == NULL)
-        return as;
-
-    /* Initialise page directories */
-    seL4_Word vaddr = frame_alloc();
-    if (vaddr == 0) {
-        free(as);
-        return NULL;
+    if (as == NULL) {
+        return ENOMEM;
     }
-    as->as_pd_caps = (pagedir_t)vaddr;
-
-    vaddr = frame_alloc();
-    if (vaddr == 0) {
-        free(as);
-        return NULL;
-    }
-    as->as_pd_regs = (pagedir_t)vaddr;
-
-    bzero((void*)as->as_pd_caps, PAGE_SIZE);
-    bzero((void*)as->as_pd_regs, PAGE_SIZE);
-
-    /* Initialise the remaining values */
+    as->as_pd_caps = NULL;
+    as->as_pd_regs = NULL;
     as->as_rhead   = NULL;
     as->as_stack   = NULL;
     as->as_heap    = NULL;
     as->as_sel4_pd = sel4_pd;
     as->as_pt_head = NULL;
 
-    return as;
+    as_create_cont_t *cont = malloc(sizeof(as_create_cont_t));
+    if (cont == NULL) {
+        free(as);
+        return ENOMEM;
+    }
+    cont->callback = callback;
+    cont->token    = token;
+    cont->as       = as;
+
+    err = frame_alloc(0, NULL, true, as_create_pagedir_caps_allocated, (void*)cont);
+    if (err) {
+        free(as);
+        free(cont);
+        return err;
+    }
+    return 0;
 }
 
 void
@@ -85,6 +180,7 @@ static int
 _region_init(addrspace_t *as, seL4_Word vaddr, size_t sz,
         int rights, struct region* nregion)
 {
+    printf("as region init\n");
     assert(as != NULL);
 
     nregion->vbase = vaddr;
@@ -101,6 +197,7 @@ _region_init(addrspace_t *as, seL4_Word vaddr, size_t sz,
     }
 
     for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
+        printf("as region init loop, region base = 0x%08x, region top = 0x%08x\n", r->vbase,r->vtop);
         if (_region_overlap(nregion, r)) {
             return EINVAL;
         }
@@ -110,10 +207,12 @@ _region_init(addrspace_t *as, seL4_Word vaddr, size_t sz,
 
 int
 as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
+    printf("as define region\n");
     assert(as != NULL);
 
     region_t* nregion = malloc(sizeof(region_t));
     if (nregion == NULL) {
+        printf("as define region no mem\n");
         return ENOMEM;
     }
 
@@ -124,6 +223,7 @@ as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
     /* Check region overlap */
     int err = _region_init(as, vaddr, sz, rights, nregion);
     if (err) {
+        printf("as define region init failed\n");
         return err;
     }
 
@@ -131,6 +231,7 @@ as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
     nregion->next = as->as_rhead;
     as->as_rhead = nregion;
 
+    printf("as define region end\n");
     return 0;
 }
 
@@ -239,28 +340,18 @@ seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr){
             return 0;
         }
     }
+    printf("sos_sysbrk ended, vaddr = %p\n", (void*)vaddr);
     return vaddr;
 }
 
 bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
                         uint32_t* permission) {
-    seL4_Word range_start = vaddr;
-    seL4_Word range_end   = vaddr + (seL4_Word)size;
-    for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
-        if (r->vbase <= range_start && range_end <= r->vtop) {
-            *permission = r->rights;
-            return true;
+    region_t *reg = region_probe(as, vaddr);
+    if (reg != NULL) {
+        if (permission != NULL) {
+            *permission = reg->rights;
         }
+        return vaddr + size < reg->vtop;
     }
-
-    if (as->as_stack->vbase <= range_start && range_end <= as->as_stack->vtop) {
-        *permission = as->as_stack->rights;
-        return true;
-    }
-    if (as->as_heap->vbase <= range_start && range_end <= as->as_heap->vtop) {
-        *permission = as->as_heap->rights;
-        return true;
-    }
-
     return false;
 }

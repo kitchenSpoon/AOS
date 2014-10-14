@@ -8,6 +8,8 @@
 #include "vm/addrspace.h"
 #include "vfs/vnode.h"
 
+#define SWAP_FILE_NAME  "swap"
+
 typedef void (*swap_out_cb_t)(void *token, int err);
 typedef void (*swap_in_cb_t)(void *token, int err);
 

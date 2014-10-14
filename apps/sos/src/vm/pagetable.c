@@ -323,7 +323,7 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
 
 bool
 sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
-    printf("sos_page_is_swapped\n");
+    printf("sos_page_is_swapped is called\n");
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         printf("sos_page_is_swapped Invalid inputs\n");
         return false;

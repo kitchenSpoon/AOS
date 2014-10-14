@@ -23,7 +23,6 @@
  */
 #define NUM_CHUNKS (1<<10)
 #define NUM_BITS (32)
-#define SWAP_FILE_NAME  "swap"
 
 #define NFS_SEND_SIZE   1024 //This needs to be less than UDP package size
 
@@ -286,6 +285,10 @@ swap_out_end(swap_out_cont_t *cont, int err) {
 
     /* Update frametable data */
     frame_unlock_frame(cont->kvaddr);
+
+    seL4_CPtr kframe_cap;
+    err = frame_get_cap(cont->kvaddr, &kframe_cap);
+    seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
 
     err = frame_free(cont->kvaddr);
     if(err){

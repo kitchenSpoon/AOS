@@ -83,6 +83,13 @@ void copyin_do_copy(void* token, int err){
 
         memcpy((void*)cont->kbuf, (void*)ksrc, cpy_sz);
 
+        printf("copyin from (ubuf=0x%08x, ksrc=0x%08x) to (kbuf=0x%08x)\n", cont->buf, ksrc, cont->kbuf);
+        //printf("---test_data---\n");
+        //char *str = (char*)cont->kbuf;
+        //for (int i=0; i<cpy_sz; i++) {
+            //printf("%c", str[i]);
+        //}
+        //printf("\n---test_data end---\n");
         cont->pos  += cpy_sz;
         cont->buf  += cpy_sz;
         cont->kbuf += cpy_sz;
@@ -230,6 +237,13 @@ void copyout_do_copy(void* token, int err){
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
         printf("cpy_sz = %u\n", cpy_sz);
         memcpy((void*)kdst, (void*)cont->kbuf, cpy_sz);
+        printf("copyout from kbuf=0x%08x to (ubuf=0x%08x, kdst=0x%08x)\n", cont->kbuf, cont->buf, kdst);
+//        printf("---test_data---\n");
+        //char *str = (char*)kdst;
+        //for (int i=0; i<cpy_sz; i++) {
+            //printf("%c", str[i]);
+        //}
+        //printf("\n---test_data end---\n");
 
         cont->pos  += cpy_sz;
         cont->buf  += cpy_sz;

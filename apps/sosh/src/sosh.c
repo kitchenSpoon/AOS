@@ -448,8 +448,6 @@ benchmark(){
     bm_write("write_test_1000", (char*)buf1000,1000);
 
     bm_read("read_test_5000", (char*)buf5000,5000);
-    //buf5000[5000] = '\0';
-    //printf("read: %s\n", buf5000);
     bm_write("write_test_5000", (char*)buf5000,5000);
 
     bm_read("read_test_10000", (char*)buf10000,10000);

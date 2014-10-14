@@ -65,4 +65,6 @@ seL4_Word frame_get_vaddr(seL4_Word kvaddr);
 
 int set_frame_referenced(seL4_Word kvaddr);
 
+seL4_Word get_magic_kvaddr(void);
+
 #endif /* _LIBOS_VM_H_ */

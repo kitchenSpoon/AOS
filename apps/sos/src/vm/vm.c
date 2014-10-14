@@ -118,6 +118,14 @@ _set_page_reference(VMF_cont_t *cont) {
     seL4_Word kvaddr = (cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
     printf("mapping back into kvaddr -> 0x%08x, vaddr = 0x%08x\n", kvaddr, cont->vaddr);
 
+    //printf("---test_data---\n");
+    //char *kvaddr_str = (char*)kvaddr;
+    //for (int i=0; i<PAGE_SIZE; i++) {
+    //    printf("%c", kvaddr_str[i]);
+    //}
+    //printf("\n---test_data end---\n");
+
+
     err = frame_get_cap(kvaddr, &kframe_cap);
     assert(!err); // This kvaddr is ready to use, there should be no error
 

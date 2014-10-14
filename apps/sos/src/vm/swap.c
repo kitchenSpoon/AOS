@@ -116,10 +116,28 @@ typedef struct {
     size_t bytes_read;
 } swap_in_cont_t;
 
+typedef void (*test_swap_cb_t)(void *token, int err);
+static void test_swap(int slot, seL4_Word kvaddr, test_swap_cb_t callback, void *token);
+
+static void
+swap_in_end2(void *token, int err) {
+    swap_in_cont_t *state = (swap_in_cont_t*)token;
+
+    frame_unlock_frame(state->kvaddr);
+    _unset_slot(state->swap_slot);
+
+    /* We don't need to reset PTE as sos_page_map already done that for us */
+
+    printf("swap_in_end: calling back up\n");
+    state->callback((void*)state->token, 0);
+    free(state);
+}
+
 static void
 swap_in_end(void* token, int err){
     printf("swap in end entered\n");
     swap_in_cont_t *state = (swap_in_cont_t*)token;
+    printf("swap_slot = %d\n", state->swap_slot);
 
     if(err){
         if (state->kvaddr) {
@@ -139,15 +157,18 @@ swap_in_end(void* token, int err){
     if (state->is_code) {
         seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
     }
+    printf("test swapin\n");
+    test_swap(state->swap_slot, state->kvaddr, swap_in_end2, (void*)state);
+    return;
 
-    frame_unlock_frame(state->kvaddr);
-    _unset_slot(state->swap_slot);
+    //frame_unlock_frame(state->kvaddr);
+    //_unset_slot(state->swap_slot);
 
-    /* We don't need to reset PTE as sos_page_map already done that for us */
+    ///* We don't need to reset PTE as sos_page_map already done that for us */
 
-    printf("swap_in_end: calling back up\n");
-    state->callback((void*)state->token, 0);
-    free(state);
+    //printf("swap_in_end: calling back up\n");
+    //state->callback((void*)state->token, 0);
+    //free(state);
 }
 
 void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
@@ -165,7 +186,7 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
 
     state->bytes_read += (size_t)count;
 
-    printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
+    //printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
     /* Check if we need to read more */
     if(state->bytes_read < PAGE_SIZE){
         enum rpc_stat status = nfs_read(swap_fh, state->swap_slot * PAGE_SIZE + state->bytes_read,
@@ -263,7 +284,90 @@ typedef struct {
 } swap_out_cont_t;
 
 static void
+swap_out_end2(void *token, int err){
+
+    swap_out_cont_t *cont = (swap_out_cont_t*)token;
+
+    frame_unlock_frame(cont->kvaddr);
+    seL4_CPtr kframe_cap;
+    err = frame_get_cap(cont->kvaddr, &kframe_cap);
+    seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+
+    err = frame_free(cont->kvaddr);
+    if(err){
+        printf("frame free error in swap out\n");
+    }
+
+    cont->callback(cont->token, 0);
+    free(cont);
+}
+
+typedef struct {
+    size_t bytes_read;
+    seL4_Word swp_kvaddr;
+    int free_slot;
+    test_swap_cb_t callback;
+    void *token;
+} test_swp_t;
+
+static void
+test_swap_cb(uintptr_t token, enum nfs_stat status,
+                                fattr_t *fattr, int count, void* data){
+    printf("test_swap_cb\n");
+    assert(status == NFS_OK);
+
+    test_swp_t *cont = (test_swp_t*)token;
+
+    void *kdst = (void*)get_magic_kvaddr() + cont->bytes_read;
+    memcpy(kdst, data, count);
+
+    assert(count == 512);
+    cont->bytes_read += count;
+    //printf("bytes_read = %u\n",cont->bytes_read);
+    if(cont->bytes_read < PAGE_SIZE){
+        enum rpc_stat status = nfs_read(swap_fh, cont->free_slot * PAGE_SIZE + cont->bytes_read,
+                512, test_swap_cb,
+                (uintptr_t)cont);
+        assert(status == RPC_OK);
+    } else {
+        //check
+        char *magic = (char*)get_magic_kvaddr();
+        char *human = (char*)cont->swp_kvaddr;
+        //printf("---test_data---\n");
+        for (size_t i = 0; i<PAGE_SIZE; i++) {
+            //printf("%c", human[i]);
+            if (magic[i] != human[i]) {
+                printf("magic -> 0x%08x, human -> 0x%08x\n", magic[i], human[i]);
+                printf("swap out test failed at char %d\n", i);
+                assert(false);
+            }
+        }
+        //printf("\n---test_data ended---\n");
+        cont->callback(cont->token,0);
+        free(cont);
+    }
+}
+
+static void test_swap(int slot, seL4_Word kvaddr, test_swap_cb_t callback, void *token){
+    printf("test_swap\n");
+
+    test_swp_t *cont = malloc(sizeof(test_swp_t));
+    assert(cont != NULL);
+    cont->bytes_read = 0;
+    cont->free_slot = slot;
+    cont->swp_kvaddr = kvaddr;
+    cont->callback = callback;
+    cont->token = token;
+
+    enum rpc_stat status = nfs_read(swap_fh, cont->free_slot * PAGE_SIZE,
+            512, test_swap_cb,
+            (uintptr_t)cont);
+    assert(status == RPC_OK);
+}
+
+static void
 swap_out_end(swap_out_cont_t *cont, int err) {
+    printf("swap out end: free_slot = %d\n", cont->free_slot);
     if (err) {
         printf("swap_out_end err\n");
         _unset_slot(cont->free_slot);
@@ -278,13 +382,19 @@ swap_out_end(swap_out_cont_t *cont, int err) {
     assert(as != NULL);
 
     seL4_Word vpage = PAGE_ALIGN(frame_get_vaddr(cont->kvaddr));
+    assert(vpage != 0);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
     as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
 
+    //call test to check if swap file has 
+    printf("test swapout\n");
+    test_swap(cont->free_slot, cont->kvaddr, swap_out_end2, (void*)cont);
+    return;
+
     /* Update frametable data */
-    frame_unlock_frame(cont->kvaddr);
+    /*frame_unlock_frame(cont->kvaddr);
 
     seL4_CPtr kframe_cap;
     err = frame_get_cap(cont->kvaddr, &kframe_cap);
@@ -296,7 +406,7 @@ swap_out_end(swap_out_cont_t *cont, int err) {
     }
 
     cont->callback(cont->token, 0);
-    free(cont);
+    free(cont);*/
 }
 
 static void
@@ -314,7 +424,7 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     }
 
     cont->written += (size_t)count;
-    printf("swap out 4 written = %u, free_slot = %d\n", cont->written, cont->free_slot);
+    //printf("swap out 4 written = %u, free_slot = %d\n", cont->written, cont->free_slot);
     /* Check if we have written the whole page */
     if (cont->written < PAGE_SIZE) {
         enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written,
@@ -373,6 +483,7 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     kvaddr = PAGE_ALIGN(kvaddr);
 
     seL4_Word vaddr = frame_get_vaddr(kvaddr);
+    assert(vaddr != 0);
     printf("swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n",kvaddr,vaddr);
 
     /* Create the continuation here to be used in subsequent functions */

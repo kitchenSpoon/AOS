@@ -59,12 +59,6 @@ int frame_lock_frame(seL4_Word vaddr);
 int frame_unlock_frame(seL4_Word vaddr);
 int frame_is_locked(seL4_Word vaddr, bool *is_locked);
 
-/*
- * Get kvaddr of a avaliable frame
- * TODO: I don't think this is necessary anymore - Vy
- */
-seL4_Word get_free_frame_kvaddr();
-
 addrspace_t* frame_get_as(seL4_Word kvaddr);
 
 seL4_Word frame_get_vaddr(seL4_Word kvaddr);

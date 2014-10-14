@@ -42,18 +42,18 @@ void copyin_do_copy(void* token, int err){
     }
 
     /* Check if we need to either map the page or swap in */
-    seL4_Word vaddr = cont->buf;
-    if (!sos_page_is_inuse(cont->as, vaddr)) {
+    seL4_Word vpage = PAGE_ALIGN(cont->buf);
+    if (!sos_page_is_inuse(cont->as, vpage)) {
         printf("copyin_do_copy: mapping page in\n");
-        err = sos_page_map(cont->as, vaddr, cont->reg->rights, copyin_do_copy, (void*)cont, false);
+        err = sos_page_map(cont->as, vpage, cont->reg->rights, copyin_do_copy, (void*)cont, false);
         if (err) {
             copyin_end(cont, err);
             return;
         }
         return;
-    } else if (sos_page_is_swapped(cont->as, vaddr)) {
+    } else if (sos_page_is_swapped(cont->as, vpage)) {
         printf("copyin_do_copy: swapping page in\n");
-        err = swap_in(cont->as, cont->reg->rights, vaddr,
+        err = swap_in(cont->as, cont->reg->rights, vpage,
                 false, copyin_do_copy, cont);
         if (err) {
             copyin_end(cont, err);
@@ -97,6 +97,14 @@ void copyin_do_copy(void* token, int err){
 int
 copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, void *token) {
     printf("copyin called, kbuf=0x%08x, buf=0x%08x, nbyte=%u\n", kbuf, buf, nbyte);
+    uint32_t permissions = 0;
+
+    addrspace_t *as = proc_getas();
+    /* Ensure that the user buffer range is valid */
+    if (!as_is_valid_memory(as, buf, nbyte, &permissions)) {
+        return EINVAL;
+    }
+
     copyin_cont_t *cont = malloc(sizeof(copyin_cont_t));
     if (cont == NULL) {
         return ENOMEM;
@@ -107,7 +115,7 @@ copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, void *
     cont->buf      = buf;
     cont->nbyte    = nbyte;
     cont->pos      = 0;
-    cont->as       = proc_getas();
+    cont->as       = as;
     cont->reg      = region_probe(cont->as, buf);
 
     assert(cont->reg != NULL); // This address need to be valid, read precond in copyinout.h
@@ -183,18 +191,18 @@ void copyout_do_copy(void* token, int err){
     //might need to lock the frame when we have multiple process
 
     /* Check if we need to either map the page or swap in */
-    seL4_Word vaddr = cont->buf;
-    if (!sos_page_is_inuse(cont->as, vaddr)) {
+    seL4_Word vpage = PAGE_ALIGN(cont->buf);
+    if (!sos_page_is_inuse(cont->as, vpage)) {
         printf("copyout_do_copy: mapping page in\n");
-        err = sos_page_map(cont->as, vaddr, cont->reg->rights, copyout_do_copy, (void*)cont, false);
+        err = sos_page_map(cont->as, vpage, cont->reg->rights, copyout_do_copy, (void*)cont, false);
         if (err) {
             copyout_end(token, err);
             return;
         }
         return;
-    } else if (sos_page_is_swapped(cont->as, vaddr)) {
+    } else if (sos_page_is_swapped(cont->as, vpage)) {
         printf("copyout_do_copy: swapping page in\n");
-        err = swap_in(cont->as, cont->reg->rights, vaddr,
+        err = swap_in(cont->as, cont->reg->rights, vpage,
                 false, copyout_do_copy, cont);
         if (err) {
             copyout_end(token, err);

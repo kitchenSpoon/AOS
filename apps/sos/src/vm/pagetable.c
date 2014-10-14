@@ -336,10 +336,6 @@ sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
     printf("1sos_page_is_swapped\n");
 
     }
-    if(as->as_pd_regs[x][y] == NULL){
-    printf("2sos_page_is_swapped\n");
-
-    }
     return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_SWAPPED));
 }
 
@@ -368,8 +364,8 @@ int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap) 
     int err;
     int x = PT_L1_INDEX(vaddr);
     int y = PT_L2_INDEX(vaddr);
-    //TODO: what if this page is swapped out?
-    if (as->as_pd_regs[x] == NULL || !(as->as_pd_regs[x][y] & PTE_IN_USE_BIT)) {
+    if (as->as_pd_regs[x] == NULL || !(as->as_pd_regs[x][y] & PTE_IN_USE_BIT) ||
+            (as->as_pd_regs[x][y] & PTE_SWAPPED)) {
         return EINVAL;
     }
 

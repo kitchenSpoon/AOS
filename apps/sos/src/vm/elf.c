@@ -122,7 +122,7 @@ static void load_segment_into_vspace2(void* token, int err){
         vpage = PAGE_ALIGN(cont->dst);
 
         //printf("load segment into vspace2 page map\n");
-        sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token, false);
+        sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token, true);
         return;
     }
 

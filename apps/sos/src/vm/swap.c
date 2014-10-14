@@ -144,8 +144,9 @@ swap_in_end(void* token, int err){
     frame_unlock_frame(state->kvaddr);
     _unset_slot(state->swap_slot);
 
-    printf("swap_in_end: calling back up\n");
+    /* We don't need to reset PTE as sos_page_map already done that for us */
 
+    printf("swap_in_end: calling back up\n");
     state->callback((void*)state->token, 0);
     free(state);
 }
@@ -153,7 +154,7 @@ swap_in_end(void* token, int err){
 void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
                                 fattr_t *fattr, int count, void* data){
     printf("swap in handler entered\n");
-    if(status != NFS_OK){
+    if(status != NFS_OK || count < 0){
         swap_in_end((void*)token, EFAULT);
         return;
     }
@@ -163,7 +164,7 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
     /* Copy data in */
     memcpy((void*)(state->kvaddr) + state->bytes_read, data, count);
 
-    state->bytes_read += count;
+    state->bytes_read += (size_t)count;
 
     printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
     /* Check if we need to read more */
@@ -273,14 +274,6 @@ swap_out_end(swap_out_cont_t *cont, int err) {
         return;
     }
 
-    /* Update frametable data */
-    frame_unlock_frame(cont->kvaddr);
-
-    err = frame_free(cont->kvaddr);
-    if(err){
-        printf("frame free error in swap out\n");
-    }
-
     /* Update the page table entries */
     addrspace_t *as = frame_get_as(cont->kvaddr);
     assert(as != NULL);
@@ -290,6 +283,14 @@ swap_out_end(swap_out_cont_t *cont, int err) {
     int y = PT_L2_INDEX(vpage);
 
     as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
+
+    /* Update frametable data */
+    frame_unlock_frame(cont->kvaddr);
+
+    err = frame_free(cont->kvaddr);
+    if(err){
+        printf("frame free error in swap out\n");
+    }
 
     cont->callback(cont->token, 0);
     free(cont);
@@ -366,6 +367,7 @@ swap_out_2_init_callback(void *token, int err) {
 void
 swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     printf("swap_out entered, kvaddr = 0x%08x\n", kvaddr);
+    kvaddr = PAGE_ALIGN(kvaddr);
 
     seL4_Word vaddr = frame_get_vaddr(kvaddr);
     printf("swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n",kvaddr,vaddr);

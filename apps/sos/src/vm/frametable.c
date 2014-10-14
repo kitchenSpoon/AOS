@@ -154,13 +154,13 @@ rand_swap_victim(){
 
 int victim = 0;
 
+/*
+ * This function assumes that all frames are currently allocated
+ */
 static seL4_Word
 second_chance_swap_victim(){
     bool found = false;
     int cnt = 0;
-    printf("swappppp\n");
-    printf("swappppp2\n");
-    printf("swappppp3\n");
     while(!found && cnt < 3*NFRAMES){
     //while(!found){
         cnt++;
@@ -450,13 +450,6 @@ frame_unlock_frame(seL4_Word kvaddr){
         frametable[id].fte_locked = false;
         return 0;
     }
-}
-
-seL4_Word get_free_frame_kvaddr(){
-    if(first_free != FRAME_INVALID){
-        return (seL4_Word)ID_TO_KVADDR(first_free);
-    }
-    return FRAME_INVALID;
 }
 
 addrspace_t* frame_get_as(seL4_Word kvaddr){

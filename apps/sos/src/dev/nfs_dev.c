@@ -65,6 +65,7 @@ typedef struct nfs_stat_state{
     nfs_dev_stat_cb_t callback;
     void* token;
     sos_stat_t* stat;
+    char* path;
 } nfs_dev_getstat_state_t;
 
 typedef struct nfs_getdirent_state{
@@ -543,6 +544,14 @@ void nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
     state->stat->st_mtime.seconds = fattr->mtime.seconds;
     state->stat->st_mtime.useconds = fattr->mtime.useconds;
 
+    /* Show no permission when user ask for swap file perm
+     * I know magic string is bad, but changing the entire function interface
+     * for such a small coherence manner doesn't worth it
+     */
+    if (strcmp(state->path, "swap") == 0) {
+        state->stat->st_mode = 0;
+    }
+
     /* Needs to copy the data to sosh space */
     copyout((seL4_Word)state->stat_buf, (seL4_Word)state->stat, sizeof(sos_stat_t),
             nfs_dev_getstat_lookup_end, (void*)state);
@@ -561,6 +570,7 @@ void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf,
         callback(token, ENOMEM);
         return;
     }
+    cont->path = path;
     cont->stat_buf = buf;
     cont->callback = callback;
     cont->token = token;

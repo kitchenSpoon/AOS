@@ -51,6 +51,7 @@ serv_sys_open_end(void *token, int err, int fd) {
     if (cont->kbuf == NULL) {
         free(cont->kbuf);
     }
+    printf("serv_sys_open err = %d\n", err);
 
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(err, 0, 0, 1);
@@ -68,10 +69,15 @@ serv_sys_open_copyin_cb(void *token, int err) {
         serv_sys_open_end(token, err, -1);
         return;
     }
+
     cont_open_t *cont = (cont_open_t*)token;
     cont->kbuf[cont->nbyte] = '\0';
 
-    if (strcmp(cont->kbuf, SWAP_FILE_NAME) == 0) cont->flags = 0;
+    if (strcmp(cont->kbuf, SWAP_FILE_NAME) == 0) {
+        serv_sys_open_end((void*)cont, EINVAL, -1);
+        return;
+    }
+
     file_open(cont->kbuf, (int)cont->flags, serv_sys_open_end, (void*)cont);
 }
 

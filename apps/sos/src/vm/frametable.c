@@ -174,6 +174,14 @@ second_chance_swap_victim(){
             if (err) {
                 printf("second_chance_swap failed to unmap page\n");
             }
+
+            seL4_Word kvaddr = ID_TO_KVADDR(victim);
+            seL4_CPtr kframe_cap;
+
+            err = frame_get_cap(kvaddr, &kframe_cap);
+            assert(!err); // This kvaddr is ready to use, there should be no error
+            seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+
             frametable[victim].fte_referenced = false;
             printf("second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n",
                     frametable[victim].fte_kvaddr, vaddr);
@@ -186,7 +194,8 @@ second_chance_swap_victim(){
             int id = victim;
             victim++;
             victim = victim % NFRAMES;
-            printf("second_chance_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(id));
+            seL4_Word vaddr = frametable[id].fte_vaddr;
+            printf("second_chance_swap_victim kvaddr = 0x%08x, vaddr = 0x%08x\n", ID_TO_KVADDR(id), vaddr);
             return ID_TO_KVADDR(id);
         }
     }

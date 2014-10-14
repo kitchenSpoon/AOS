@@ -23,7 +23,6 @@
  */
 #define NUM_CHUNKS (1<<10)
 #define NUM_BITS (32)
-#define SWAP_FILE_NAME  "swap"
 
 #define NFS_SEND_SIZE   1024 //This needs to be less than UDP package size
 
@@ -273,13 +272,6 @@ swap_out_end(swap_out_cont_t *cont, int err) {
         return;
     }
 
-    /* Update frametable data */
-    frame_unlock_frame(cont->kvaddr);
-
-    err = frame_free(cont->kvaddr);
-    if(err){
-        printf("frame free error in swap out\n");
-    }
 
     /* Update the page table entries */
     addrspace_t *as = frame_get_as(cont->kvaddr);
@@ -290,6 +282,18 @@ swap_out_end(swap_out_cont_t *cont, int err) {
     int y = PT_L2_INDEX(vpage);
 
     as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
+
+    /* Update frametable data */
+    frame_unlock_frame(cont->kvaddr);
+
+    seL4_CPtr kframe_cap;
+    err = frame_get_cap(cont->kvaddr, &kframe_cap);
+    seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+
+    err = frame_free(cont->kvaddr);
+    if(err){
+        printf("frame free error in swap out\n");
+    }
 
     cont->callback(cont->token, 0);
     free(cont);

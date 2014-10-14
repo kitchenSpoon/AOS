@@ -39,7 +39,7 @@ sos_VMFaultHandler_reply(void* token, int err){
     }
 
     /* Flush the i-cache if this is an instruction fault */
-    if (state->is_code) {
+    //if (state->is_code) {
         seL4_Word vpage = PAGE_ALIGN(state->vaddr);
         int x = PT_L1_INDEX(vpage);
         int y = PT_L2_INDEX(vpage);
@@ -50,7 +50,7 @@ sos_VMFaultHandler_reply(void* token, int err){
         err = frame_get_cap(kvaddr, &kframe_cap);
         assert(!err); // This kvaddr is ready to use, there should be no error
         seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
-    }
+    //}
     /* If there is an err here, it is not the process's fault
      * It is either the kernel running out of memory or swapping doesn't work
      */
@@ -116,7 +116,7 @@ _set_page_reference(VMF_cont_t *cont) {
     }
 
     seL4_Word kvaddr = (cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
-    printf("mapping back into kvaddr -> 0x%08x\n", kvaddr);
+    printf("mapping back into kvaddr -> 0x%08x, vaddr = 0x%08x\n", kvaddr, cont->vaddr);
 
     err = frame_get_cap(kvaddr, &kframe_cap);
     assert(!err); // This kvaddr is ready to use, there should be no error

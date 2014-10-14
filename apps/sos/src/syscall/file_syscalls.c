@@ -14,6 +14,7 @@
 #include "syscall/syscall.h"
 #include "vm/copyinout.h"
 #include "vm/vm.h"
+#include "vm/swap.h"
 
 #define MAX_SERIAL_TRY  0x100
 #define MAX_IO_BUF      0x1000
@@ -70,6 +71,7 @@ serv_sys_open_copyin_cb(void *token, int err) {
     cont_open_t *cont = (cont_open_t*)token;
     cont->kbuf[cont->nbyte] = '\0';
 
+    if (strcmp(cont->kbuf, SWAP_FILE_NAME) == 0) cont->flags = 0;
     file_open(cont->kbuf, (int)cont->flags, serv_sys_open_end, (void*)cont);
 }
 

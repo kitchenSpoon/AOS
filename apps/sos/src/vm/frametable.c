@@ -42,7 +42,6 @@ typedef struct {
 
 frame_entry_t *frametable;
 int first_free;                     // Index of the first free/untyped frame
-int magic_frame;                     // test swap in and out
 static bool frame_initialised;
 size_t frametable_reserved;           // # of frames the frametable consumes
 
@@ -111,29 +110,6 @@ frame_init(void){
         frametable[i].fte_noswap        = true;
         frametable[i].fte_referenced    = true;
     }
-
-    magic_frame = i;
-
-    seL4_Word kvaddr = (seL4_Word)ID_TO_KVADDR(i);
-    seL4_Word tmp_paddr;
-    seL4_CPtr tmp_cap;
-    int err = _map_to_sel4(seL4_CapInitThreadPD, kvaddr, &tmp_paddr, &tmp_cap);
-    if (err) {
-        return err;
-    }
-
-    frametable[i].fte_status        = FRAME_STATUS_ALLOCATED;
-    frametable[i].fte_paddr         = tmp_paddr;
-    frametable[i].fte_cap           = tmp_cap;
-    frametable[i].fte_kvaddr        = kvaddr;
-    frametable[i].fte_vaddr         = 0;
-    frametable[i].fte_as            = NULL;
-    frametable[i].fte_next_free     = FRAME_INVALID;
-    frametable[i].fte_locked        = true;
-    frametable[i].fte_noswap        = true;
-    frametable[i].fte_referenced    = true;
-
-    i++;
 
     /* Mark the number of frames occupied by the frametable */
     frametable_reserved = i;
@@ -508,8 +484,4 @@ int set_frame_referenced(seL4_Word kvaddr){
 
     frametable[id].fte_referenced = true;
     return 0;
-}
-
-seL4_Word get_magic_kvaddr(void){
-    return ID_TO_KVADDR(magic_frame);
 }

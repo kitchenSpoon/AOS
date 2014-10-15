@@ -172,13 +172,13 @@ void handle_syscall(seL4_Word badge, int num_args) {
     case SOS_SYSCALL_PROC_CREATE:
     {
         char *app_name          = (char *)seL4_GetMR(1);
-        size_t len              = (char *)seL4_GetMR(2);
+        size_t len              = (size_t)seL4_GetMR(2);
         serv_proc_create(app_name, len, _sos_ipc_ep_cap, reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_DESTROY:
     {
-        int id          = (char *)seL4_GetMR(1);
+        int id          = (int)seL4_GetMR(1);
         serv_proc_destroy(id, reply_cap);
         break;
     }
@@ -664,6 +664,12 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
 /*
  * Main entry point - called by crt.
  */
+
+void main2(void* token, int err, int id){
+    dprintf(0, "\nSOS entering syscall loop\n");
+    syscall_loop(_sos_ipc_ep_cap);
+}
+
 int main(void) {
     int result;
 
@@ -687,7 +693,11 @@ int main(void) {
     //register_timer(1000000, swap_test, NULL); //100ms
 
     /* Start the user application */
-    start_first_process(TTY_NAME, _sos_ipc_ep_cap);
+    //start_first_process(TTY_NAME, _sos_ipc_ep_cap);
+
+    proc_create(TTY_NAME, _sos_ipc_ep_cap, main2, NULL);
+
+    return 0;
 
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

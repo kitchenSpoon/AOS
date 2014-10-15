@@ -15,6 +15,7 @@
 #include "vm/copyinout.h"
 #include "vm/vm.h"
 #include "vm/swap.h"
+#include "syscall/file.h"
 
 #define MAX_SERIAL_TRY  0x100
 #define MAX_IO_BUF      0x1000

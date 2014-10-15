@@ -4,7 +4,6 @@
 #include <sel4/sel4.h>
 #include <cspace/cspace.h>
 #include "vm/addrspace.h"
-#include "syscall/file.h"
 #include "vm/vmem_layout.h"
 
 //sosh also defines this for themself
@@ -35,6 +34,7 @@ struct process {
 };
 
 process_t tty_test_process;
+process_t* sosh_test_process;
 typedef void (*proc_create_cb_t)(void* token, int err, int id);
 
 

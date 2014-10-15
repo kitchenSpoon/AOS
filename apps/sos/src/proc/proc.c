@@ -8,6 +8,7 @@
 #include <ut_manager/ut.h>
 #include <elf/elf.h>
 #include <vm/mapping.h>
+#include <syscall/file.h>
 
 extern process_t tty_test_process;
 extern char _cpio_archive[];
@@ -18,7 +19,11 @@ extern char _cpio_archive[];
 
 //TODO: hacking before having cur_proc() function
 process_t* cur_proc(void) {
-    return &tty_test_process;
+    //return &tty_test_process;
+    if(sosh_test_process == NULL){
+        printf("sosh_test_process is NULL\n");
+    }
+    return sosh_test_process;
 }
 
 addrspace_t* proc_getas(void) {
@@ -87,6 +92,7 @@ void proc_create_end(void* token, int err){
         }
     }
 
+
     cont->callback(cont->token, err, cont->id);
 
     /* Clear */
@@ -122,6 +128,7 @@ void proc_create_part3(void* token, int err){
     //it and map the page in using sos_page_map and create a callback for it
     //as_define_region();
     /* Map in the IPC buffer for the thread */
+    printf("sos_process_create_part3, mapping ipc buf...\n");
     err = map_page(cont->proc->ipc_buffer_cap, cont->proc->vroot,
                    PROCESS_IPC_BUFFER,
                    seL4_AllRights, seL4_ARM_Default_VMAttributes);
@@ -133,13 +140,15 @@ void proc_create_part3(void* token, int err){
 
     /* Initialise filetable for this process */
     //TODO: filetable need to return something so that process can store it
-    err = filetable_init(NULL, NULL, NULL);
+    printf("sos_process_create_part3, filetable initing...\n");
+    err = filetable_init(NULL, NULL, NULL, cont->proc);
     if(err){
         printf("sos_process_create_part3, Unable to initialise filetable for user app\n");
         proc_create_end((void*)cont, err);
         return;
     }
 
+    printf("sos_process_create_part3, filetable initing done...\n");
     /* Start the new process */
     printf("start it\n");
     seL4_UserContext context;
@@ -206,6 +215,8 @@ void proc_create(char* app_name, seL4_CPtr fault_ep, proc_create_cb_t callback, 
     new_proc->croot = NULL;
     new_proc->as = NULL;
     new_proc->p_filetable = NULL;
+
+    sosh_test_process = new_proc;
 
     cont->proc = new_proc;
 

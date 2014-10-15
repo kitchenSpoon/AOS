@@ -171,29 +171,37 @@ file_close(int fd)
  */
 int
 filetable_init(const char *inpath, const char *outpath,
-               const char *errpath) {
+               const char *errpath, process_t* proc) {
+    printf("in file table init\n");
     /* the filenames come from the kernel; assume reasonable length */
     int fd;
 
     /* catch memory leaks, repeated calls */
     //assert(CURPROC->p_filetable == NULL);
+    if(proc == NULL){
+        printf("filetable init, proc is NULL \n");
+    }
 
-    CURPROC->p_filetable = malloc(sizeof(struct filetable));
-    if (CURPROC->p_filetable == NULL) {
+    printf("filetable malloc \n");
+    proc->p_filetable = malloc(sizeof(struct filetable));
+    if (proc->p_filetable == NULL) {
         return ENOMEM;
     }
 
     /* NULL-out the table */
+    printf("filetable nullout something \n");
     for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
-        CURPROC->p_filetable->ft_openfiles[fd] = NULL;
+        proc->p_filetable->ft_openfiles[fd] = NULL;
     }
 
     /* Initialise stdin, stdout & stderr */
     //TODO: Change these numbers to use constants
-    CURPROC->p_filetable->ft_openfiles[0] = (struct openfile *)1;
-    CURPROC->p_filetable->ft_openfiles[1] = (struct openfile *)1;
-    CURPROC->p_filetable->ft_openfiles[2] = (struct openfile *)1;
+    printf("filetable open something \n");
+    proc->p_filetable->ft_openfiles[0] = (struct openfile *)1;
+    proc->p_filetable->ft_openfiles[1] = (struct openfile *)1;
+    proc->p_filetable->ft_openfiles[2] = (struct openfile *)1;
 
+    printf("filetable done \n");
 
     return 0;
 }

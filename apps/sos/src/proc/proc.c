@@ -1,4 +1,5 @@
 #include "proc/proc.h"
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -11,6 +12,7 @@
 extern process_t tty_test_process;
 extern char _cpio_archive[];
 
+#define USER_EP_CAP 1 // hack TODO change this
 #define USER_BADGE 1 // hack TODO change this
 #define USER_PRIORITY  15 // hack TODO change this
 
@@ -35,8 +37,54 @@ typedef struct{
 } process_create_cont_t;
 
 void serv_process_create_end(void* token, int err){
-
     process_create_cont_t* cont = (process_create_cont_t*)token;
+    assert(cont != NULL);
+
+    /* Might need to clean up allocated data for the process */
+    if (err && cont->proc != NULL) {
+        process_t *proc = cont->proc;
+
+        /* Free TCB */
+        if (proc->tcb_cap) {
+            cspace_delete_cap(cur_cspace, proc->tcb_cap);
+        }
+        if (proc->tcb_addr) {
+            ut_free(proc->tcb_addr, seL4_PageBits);
+        }
+
+        /* Free VSpace */
+        if (proc->vroot) {
+            cspace_delete_cap(cur_cspace, proc->vroot);
+        }
+        if (proc->vroot_addr) {
+            ut_free(proc->vroot_addr, seL4_PageDirBits);
+        }
+
+        /* Free IPC */
+        if (proc->ipc_buffer_cap) {
+            cspace_delete_cap(cur_cspace, proc->vroot);
+        }
+        if (proc->ipc_buffer_addr) {
+            ut_free(proc->ipc_buffer_cap, seL4_PageBits);
+        }
+
+        /* Free CSpace
+         * This will also free user_ep_cap created in this cspace*/
+        if (proc->croot) {
+            cspace_destroy(proc->croot);
+        }
+
+        /* Free Addrspace */
+        if (proc->as) {
+            as_destroy(proc->as);
+        }
+
+        /* Free Filetable */
+        if (proc->p_filetable) {
+            filetable_destroy(proc->p_filetable);
+        }
+    }
+
     cont->callback(cont->token, err);
 
     /* Clear */
@@ -49,12 +97,7 @@ void serv_process_create_part3(void* token, int err){
 
     if(err){
         printf("sos_process_create_part3, Failed to load elf image\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //free AS
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end(token, err);
         return;
     }
 
@@ -62,23 +105,13 @@ void serv_process_create_part3(void* token, int err){
     as_define_stack(cont->proc->as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
     if(cont->proc->as->as_stack == NULL){
         printf("sos_process_create_part3, Stack failed to be defined\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //free AS
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
     as_define_heap(cont->proc->as);
     if(cont->proc->as->as_heap == NULL){
         printf("sos_process_create_part3, Heap failed to be defined\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //free AS
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -92,26 +125,16 @@ void serv_process_create_part3(void* token, int err){
                    seL4_AllRights, seL4_ARM_Default_VMAttributes);
     if(err){
         printf("sos_process_create_part3, Unable to map IPC buffer for user app\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //free AS
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
 
     /* Initialise filetable for this process */
+    //TODO: filetable need to return something so that process can store it
     err = filetable_init(NULL, NULL, NULL);
     if(err){
         printf("sos_process_create_part3, Unable to initialise filetable for user app\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //free AS
-        //unmap IPC buffer
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, err);
         return;
     }
 
@@ -128,14 +151,9 @@ void serv_process_create_part3(void* token, int err){
 
 void serv_process_create_part2(void* token, addrspace_t *as){
     printf("start process create part2\n");
-    if(as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL){
-        printf("sos_process_create_part2, as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL\n");
-        printf("Failed to initialise address space\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //call sos_process_create_end(ENOMEM);
+    if(as == NULL){
+        printf("sos_process_create_part2, Failed to initialise address space\n");
+        serv_process_create_end(token, EFAULT);
         return;
     }
 
@@ -150,13 +168,7 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
     printf("sos_process_create\n");
     printf("creating process %s\n",app_name); // somewhere before this we have to add \0 add the end or get the length of the name
     int err;
-
-    process_t* new_proc = malloc(sizeof(process_t));
-    if(new_proc == NULL){
-        printf("No memory to create new process\n");
-        //call sos_process_create_end(ENOMEM);
-        return;
-    }
+    struct filetable* p_filetable;
 
     seL4_CPtr user_ep_cap;
 
@@ -164,11 +176,39 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
     char* elf_base;
     unsigned long elf_size;
 
+    process_create_cont_t *cont = malloc(sizeof(process_create_cont_t));
+    if (cont == NULL) {
+        callback(token, ENOMEM);
+        return;
+    }
+    cont->elf_base = NULL;
+    cont->proc = NULL;
+    cont->callback = callback;
+    cont->token = token;
+
+    process_t* new_proc = malloc(sizeof(process_t));
+    if(new_proc == NULL){
+        printf("No memory to create new process\n");
+        serv_process_create_end((void*)cont, ENOMEM);
+        return;
+    }
+    new_proc->tcb_addr = 0;
+    new_proc->tcb_cap = 0;
+    new_proc->vroot_addr = 0;
+    new_proc->vroot = 0;
+    new_proc->ipc_buffer_addr = 0;
+    new_proc->ipc_buffer_cap = 0;
+    new_proc->croot = NULL;
+    new_proc->as = NULL;
+    new_proc->p_filetable = NULL;
+
+    cont->proc = new_proc;
+
     /* Create a VSpace */
     new_proc->vroot_addr = ut_alloc(seL4_PageDirBits);
     if(!new_proc->vroot_addr){
         printf("sos_process_create, No memory for new Page Directory\n");
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, ENOMEM);
         return;
     }
 
@@ -179,7 +219,7 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
                                 &new_proc->vroot);
     if(err){
         printf("sos_process_create, Failed to allocate page directory cap for client\n");
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -187,8 +227,7 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
     new_proc->croot = cspace_create(1);
     if(new_proc->croot == NULL){
         printf("sos_process_create, Failed to create CSpace\n");
-        //free VSPACE
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -196,21 +235,17 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
     new_proc->ipc_buffer_addr = ut_alloc(seL4_PageBits);
     if(!new_proc->ipc_buffer_addr){
         printf("sos_process_create, No memory for ipc buffer\n");
-        //free VSPACE
-        //free CSPACE
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, ENOMEM);
         return;
     }
     err =  cspace_ut_retype_addr(new_proc->ipc_buffer_addr,
                                  seL4_ARM_SmallPageObject,
                                  seL4_PageBits,
                                  cur_cspace,
-                                 &tty_test_process.ipc_buffer_cap);
+                                 &new_proc->ipc_buffer_cap);
     if(err){
         printf("sos_process_create, Unable to allocate page for IPC buffer\n");
-        //free VSPACE
-        //free CSPACE
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -221,17 +256,14 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
                                   seL4_AllRights,
                                   seL4_CapData_Badge_new(USER_BADGE)); //TODO add user badge
     /* should be the first slot in the space, hack I know */
-    //assert(user_ep_cap == 1);
-    //assert(user_ep_cap == USER_EP_CAP);
+    assert(user_ep_cap == 1);
+    assert(user_ep_cap == USER_EP_CAP);
 
     /* Create a new TCB object */
     new_proc->tcb_addr = ut_alloc(seL4_TCBBits);
     if(!new_proc->tcb_addr){
         printf("sos_process_create, No memory for new TCB\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, ENOMEM);
         return;
     }
     err =  cspace_ut_retype_addr(new_proc->tcb_addr,
@@ -241,10 +273,7 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
                                  &new_proc->tcb_cap);
     if(err){
         printf("sos_process_create, Failed to create TCB\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -255,46 +284,20 @@ void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create
                              new_proc->ipc_buffer_cap);
     if(err){
         printf("sos_process_create, Unable to configure new TCB\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
 
     /* parse the cpio image */
-    dprintf(1, "\nStarting \"%s\"...\n", app_name);
+    printf("\nStarting \"%s\"...\n", app_name);
     elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
     if(!elf_base){
         printf("sos_process_create, Unable to locate cpio header\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //call sos_process_create_end(ENOMEM);
+        serv_process_create_end((void*)cont, EFAULT);
         return;
     }
-
-    /* Initialise the continuation preparing to call as_create */
-    process_create_cont_t* cont = malloc(sizeof(process_create_cont_t));
-    if(cont == NULL){
-        printf("sos_process_create, Unable to allocate memory for first process\n");
-        //free VSPACE
-        //free CSPACE
-        //free IPC_BUF
-        //free TCB
-        //call sos_process_create_end(ENOMEM);
-        return;
-    }
-
     cont->elf_base = elf_base;
-    cont->proc = new_proc;
-    cont->callback = callback;
-    cont->token = token;
 
     /* initialise address space */
     as_create(new_proc->vroot, serv_process_create_part2, (void*)cont);
 }
-
-

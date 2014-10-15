@@ -141,6 +141,7 @@ void proc_create_part3(void* token, int err){
     }
 
     /* Start the new process */
+    printf("start it\n");
     seL4_UserContext context;
 
     memset(&context, 0, sizeof(context));

@@ -15,6 +15,7 @@ typedef struct{
 } serv_proc_create_cont_t;
 
 void serv_proc_create_end(void* token, int err, int id){
+    printf("serv_proc_create_end\n");
     serv_proc_create_cont_t* cont = (serv_proc_create_cont_t*)token;
 
     seL4_MessageInfo_t reply;
@@ -46,6 +47,7 @@ int serv_proc_create(char* app_name, size_t len, seL4_CPtr fault_ep, seL4_Word r
         return 1;
     }
     cont->fault_ep = fault_ep;
+    cont->reply_cap = reply_cap;
 
     uint32_t permissions = 0;
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)app_name, len, &permissions) ||

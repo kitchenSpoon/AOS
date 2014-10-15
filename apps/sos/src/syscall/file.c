@@ -176,7 +176,7 @@ filetable_init(const char *inpath, const char *outpath,
     int fd;
 
     /* catch memory leaks, repeated calls */
-    assert(CURPROC->p_filetable == NULL);
+    //assert(CURPROC->p_filetable == NULL);
 
     CURPROC->p_filetable = malloc(sizeof(struct filetable));
     if (CURPROC->p_filetable == NULL) {

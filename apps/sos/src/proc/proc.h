@@ -5,6 +5,10 @@
 #include <cspace/cspace.h>
 #include "vm/addrspace.h"
 #include "syscall/file.h"
+#include "vm/vmem_layout.h"
+
+//sosh also defines this for themself
+#define MAX_PROC 16
 
 typedef struct process process_t;
 struct process {
@@ -26,6 +30,13 @@ struct process {
 };
 
 process_t tty_test_process;
+typedef void (*serv_process_create_cb_t)(void* token, int err);
+
+
+//a list of process
+process_t* processes[MAX_PROC];
+
+void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create_cb_t callback, void* token);
 
 #define CURPROC     (cur_proc())
 

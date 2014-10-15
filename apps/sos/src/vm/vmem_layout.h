@@ -20,8 +20,8 @@
 /* Address where memory is used by frame table.
  * Do not use address range between FRAME_TABLE_VSTART and FRAME_TABLE_VEND */
 #define FRAME_VSTART        (0x20000000)
-//#define FRAME_MEMORY        (1ull << 30)            // 1GB
-#define FRAME_MEMORY        (1ull << 18)            // 128kb
+#define FRAME_MEMORY        (1ull << 30)            // 1GB
+//#define FRAME_MEMORY        (1ull << 18)            // 128kb
 #define FRAME_VEND          ((FRAME_VSTART) + (FRAME_MEMORY))
 
 /* From this address onwards is where any devices will get mapped in

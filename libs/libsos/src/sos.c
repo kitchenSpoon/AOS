@@ -20,16 +20,21 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define FAIL_TOLERANCE  10
 
-#define SOS_SYSCALL_PRINT       0
-#define SOS_SYSCALL_SYSBRK      1
-#define SOS_SYSCALL_OPEN        2
-#define SOS_SYSCALL_CLOSE       3
-#define SOS_SYSCALL_READ        4
-#define SOS_SYSCALL_WRITE       5
-#define SOS_SYSCALL_TIMESTAMP   6
-#define SOS_SYSCALL_SLEEP       7
-#define SOS_SYSCALL_GETDIRENT   8
-#define SOS_SYSCALL_STAT        9
+#define SOS_SYSCALL_PRINT              0
+#define SOS_SYSCALL_SYSBRK             1
+#define SOS_SYSCALL_OPEN               2
+#define SOS_SYSCALL_CLOSE              3
+#define SOS_SYSCALL_READ               4
+#define SOS_SYSCALL_WRITE              5
+#define SOS_SYSCALL_TIMESTAMP          6
+#define SOS_SYSCALL_SLEEP              7
+#define SOS_SYSCALL_GETDIRENT          8
+#define SOS_SYSCALL_STAT               9
+#define SOS_SYSCALL_PROC_CREATE       10
+#define SOS_SYSCALL_PROC_DESTROY      11
+#define SOS_SYSCALL_PROC_GET_ID       12
+#define SOS_SYSCALL_PROC_WAIT         13
+#define SOS_SYSCALL_PROC_STATUS       14
 
 #define MAXNAMLEN               255
 fildes_t sos_sys_open(const char *path, int flags) {
@@ -229,8 +234,26 @@ int sos_stat(const char *path, sos_stat_t *buf) {
 }
 
 pid_t sos_process_create(const char *path) {
-    printf("System call not implemented\n");
-    return -1;
+    int len = 0;
+    while(len < MAX_IO_BUF && path[len] != '\0') {
+        len++;
+    }
+
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_PROC_CREATE);
+    seL4_SetMR(1, (seL4_Word)path);
+    seL4_SetMR(2, len);
+
+    seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    int err = seL4_MessageInfo_get_label(message);
+    int pid;
+    if(!err){
+        pid = seL4_GetMR(0);
+    } else {
+        pid = -1;
+    }
+    return pid;
 }
 int sos_process_delete(pid_t pid) {
     printf("System call not implemented\n");

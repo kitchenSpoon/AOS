@@ -10,16 +10,21 @@
 
 #define PROCESS_MAX_FILES       16
 
-#define SOS_SYSCALL_PRINT       0
-#define SOS_SYSCALL_SYSBRK      1
-#define SOS_SYSCALL_OPEN        2
-#define SOS_SYSCALL_CLOSE       3
-#define SOS_SYSCALL_READ        4
-#define SOS_SYSCALL_WRITE       5
-#define SOS_SYSCALL_TIMESTAMP   6
-#define SOS_SYSCALL_SLEEP       7
-#define SOS_SYSCALL_GETDIRENT   8
-#define SOS_SYSCALL_STAT        9
+#define SOS_SYSCALL_PRINT              0
+#define SOS_SYSCALL_SYSBRK             1
+#define SOS_SYSCALL_OPEN               2
+#define SOS_SYSCALL_CLOSE              3
+#define SOS_SYSCALL_READ               4
+#define SOS_SYSCALL_WRITE              5
+#define SOS_SYSCALL_TIMESTAMP          6
+#define SOS_SYSCALL_SLEEP              7
+#define SOS_SYSCALL_GETDIRENT          8
+#define SOS_SYSCALL_STAT               9
+#define SOS_SYSCALL_PROC_CREATE       10
+#define SOS_SYSCALL_PROC_DESTROY      11
+#define SOS_SYSCALL_PROC_GET_ID       12
+#define SOS_SYSCALL_PROC_WAIT         13
+#define SOS_SYSCALL_PROC_STATUS       14
 
 #define MAX_NAME_LEN            255
 /* File syscalls */
@@ -85,5 +90,12 @@ void serv_sys_sbrk(seL4_CPtr reply_cap, seL4_Word newbrk);
 void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte);
 
 void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf);
+
+
+int serv_proc_create(char* app_name, size_t len, seL4_CPtr fault_ep, seL4_Word reply_cap);
+void serv_proc_destroy(int id, seL4_Word reply_cap);
+void serv_proc_get_id();
+void serv_proc_wait(int id);
+void serv_proc_status(void);
 
 #endif /* _SOS_SYSCALL_H_ */

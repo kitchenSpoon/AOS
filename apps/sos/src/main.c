@@ -169,6 +169,37 @@ void handle_syscall(seL4_Word badge, int num_args) {
         serv_sys_stat(reply_cap, path, path_len, stat);
         break;
     }
+    case SOS_SYSCALL_PROC_CREATE:
+    {
+        char *app_name          = (char *)seL4_GetMR(1);
+        size_t len              = (char *)seL4_GetMR(2);
+        serv_proc_create(app_name, len, _sos_ipc_ep_cap, reply_cap);
+        break;
+    }
+    case SOS_SYSCALL_PROC_DESTROY:
+    {
+        int id          = (char *)seL4_GetMR(1);
+        serv_proc_destroy(id, reply_cap);
+        break;
+    }
+    case SOS_SYSCALL_PROC_GET_ID:
+    {
+        //char *app_name          = (char *)seL4_GetMR(1);
+        //serv_proc_create(app_name, _sos_ipc_ep_cap, reply_cap);
+        break;
+    }
+    case SOS_SYSCALL_PROC_WAIT:
+    {
+        //char *app_name          = (char *)seL4_GetMR(1);
+        //serv_proc_create(app_name, _sos_ipc_ep_cap, reply_cap);
+        break;
+    }
+    case SOS_SYSCALL_PROC_STATUS:
+    {
+        //char *app_name          = (char *)seL4_GetMR(1);
+        //serv_proc_create(app_name, _sos_ipc_ep_cap, reply_cap);
+        break;
+    }
     default:
         printf("Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
@@ -195,7 +226,7 @@ void handle_pagefault(void) {
 void syscall_loop(seL4_CPtr ep) {
 
     while (1) {
-        //printf("looping\n");
+        printf("looping\n");
         seL4_Word badge;
         seL4_Word label;
         seL4_MessageInfo_t message;

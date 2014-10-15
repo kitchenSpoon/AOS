@@ -257,14 +257,14 @@ void elf_load_part2(void* token, int err){
             free(cont);
             return;
         }
-
+        int i = cont->i;
         cont->i++;
 
         printf("elf_load... part 2.3\n");
         /* Copy it across into the vspace. */
         err = load_segment_into_vspace(cont->as, source_addr, segment_size, file_size,
                                        vaddr, rights, elf_load_part2, (void*)cont);
-        printf("elf_load... part 2.4\n");
+        printf("elf_load... part 2.4, i = %d, ori i = %d\n\n\n\n",cont->i, i);
         if (err) {
             printf("elf_load... part 2 err load segment\n");
             cont->callback(cont->token, err);
@@ -275,6 +275,7 @@ void elf_load_part2(void* token, int err){
         return;
     }
 
+    printf("elf_load... calling back up\n");
     cont->callback(cont->token, 0);
     free(cont);
 }

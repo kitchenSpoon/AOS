@@ -26,17 +26,26 @@ struct process {
 
     addrspace_t *as;
 
+    uint32_t pid;
+    unsigned size;
+    unsigned stime;
+    char* name; // max 32 bytes, as defined by the client
+
     struct filetable* p_filetable;
 };
 
 process_t tty_test_process;
-typedef void (*serv_process_create_cb_t)(void* token, int err);
+typedef void (*proc_create_cb_t)(void* token, int err, int id);
 
 
 //a list of process
 process_t* processes[MAX_PROC];
 
-void serv_process_create(char* app_name, seL4_CPtr fault_ep, serv_process_create_cb_t callback, void* token);
+
+void proc_create(char* app_name, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);
+int proc_destroy(int id);
+int proc_get_id(void);
+int proc_wait(int id);
 
 #define CURPROC     (cur_proc())
 

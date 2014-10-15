@@ -6,7 +6,7 @@
 #include "vm/addrspace.h"
 #include "vm/vmem_layout.h"
 
-//sosh also defines this for themself
+//sosh also defines this for themselves
 #define MAX_PROC 16
 
 typedef struct process process_t;
@@ -35,14 +35,15 @@ struct process {
 
 process_t tty_test_process;
 process_t* sosh_test_process;
-typedef void (*proc_create_cb_t)(void* token, int err, int id);
+typedef void (*proc_create_cb_t)(void* token, int err, int pid);
 
 
 //a list of process
 process_t* processes[MAX_PROC];
 
-
-void proc_create(char* app_name, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);
+/* Create a process from the executable at *path*, this process shall
+ * communicate with sos through the *fault_ep* */
+void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);
 int proc_destroy(int id);
 int proc_get_id(void);
 int proc_wait(int id);

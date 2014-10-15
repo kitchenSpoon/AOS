@@ -8,7 +8,7 @@
 #include "vm/copyinout.h"
 
 typedef struct{
-    seL4_Word reply_cap;
+    seL4_CPtr reply_cap;
     char* kapp_name;
     size_t len;
     seL4_CPtr fault_ep;
@@ -38,7 +38,7 @@ void serv_proc_create_part2(void* token, int err){
     }
 }
 
-int serv_proc_create(char* app_name, size_t len, seL4_CPtr fault_ep, seL4_Word reply_cap){
+int serv_proc_create(char* app_name, size_t len, seL4_CPtr fault_ep, seL4_CPtr reply_cap){
 
     printf("serv_proc_create entered len = %d\n",len);
     serv_proc_create_cont_t* cont = malloc(sizeof(serv_proc_create_cont_t));
@@ -75,10 +75,10 @@ int serv_proc_create(char* app_name, size_t len, seL4_CPtr fault_ep, seL4_Word r
 }
 
 typedef struct{
-    seL4_Word reply_cap;
+    seL4_CPtr reply_cap;
 } serv_proc_destroy_cont_t;
 
-void serv_proc_destroy(int id, seL4_Word reply_cap){
+void serv_proc_destroy(int id, seL4_CPtr reply_cap){
     //serv_proc_destroy_cont_t* cont = malloc(sizeof(serv_proc_destroy_cont_t));
     /*if(cont == NULL){
         printf("serv_proc_destroy, no memory\n");
@@ -102,8 +102,9 @@ void serv_proc_get_id(){
     return;
 }
 
-void serv_proc_wait(int id){
+void serv_proc_wait(int id, seL4_CPtr reply_cap){
     (void)id;
+    printf("serv_proc_wait\n");
     //check if process id is valid
     //proc_is_valid(id);
 

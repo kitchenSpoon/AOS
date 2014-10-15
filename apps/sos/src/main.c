@@ -190,8 +190,8 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_WAIT:
     {
-        //char *app_name          = (char *)seL4_GetMR(1);
-        //serv_proc_create(app_name, _sos_ipc_ep_cap, reply_cap);
+        int pid          = (int)seL4_GetMR(1);
+        serv_proc_wait(pid, reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_STATUS:

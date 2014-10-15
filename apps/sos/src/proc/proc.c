@@ -167,9 +167,9 @@ void proc_create_part2(void* token, addrspace_t *as){
     elf_load(cont->proc->as, cont->elf_base, proc_create_part3, token);
 }
 
-void proc_create(char* app_name, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token) {
+void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token) {
     printf("process_create\n");
-    printf("creating process %s\n",app_name); // somewhere before this we have to add \0 add the end or get the length of the name
+    printf("creating process at %s\n", path);
     int err;
     struct filetable* p_filetable;
 
@@ -179,16 +179,16 @@ void proc_create(char* app_name, seL4_CPtr fault_ep, proc_create_cb_t callback, 
     char* elf_base;
     unsigned long elf_size;
 
-	printf("creating process cont\n");
+    printf("creating process cont\n");
     process_create_cont_t *cont = malloc(sizeof(process_create_cont_t));
     if (cont == NULL) {
         callback(token, ENOMEM, -1);
         return;
     }
-    cont->elf_base = NULL;
-    cont->proc = NULL;
-    cont->callback = callback;
-    cont->token = token;
+    cont->elf_base  = NULL;
+    cont->proc      = NULL;
+    cont->callback  = callback;
+    cont->token     = token;
 
     printf("creating process\n"); // somewhere before this we have to add \0 add the end or get the length of the name
     process_t* new_proc = malloc(sizeof(process_t));
@@ -197,15 +197,15 @@ void proc_create(char* app_name, seL4_CPtr fault_ep, proc_create_cb_t callback, 
         proc_create_end((void*)cont, ENOMEM);
         return;
     }
-    new_proc->tcb_addr = 0;
-    new_proc->tcb_cap = 0;
-    new_proc->vroot_addr = 0;
-    new_proc->vroot = 0;
-    new_proc->ipc_buffer_addr = 0;
-    new_proc->ipc_buffer_cap = 0;
-    new_proc->croot = NULL;
-    new_proc->as = NULL;
-    new_proc->p_filetable = NULL;
+    new_proc->tcb_addr          = 0;
+    new_proc->tcb_cap           = 0;
+    new_proc->vroot_addr        = 0;
+    new_proc->vroot             = 0;
+    new_proc->ipc_buffer_addr   = 0;
+    new_proc->ipc_buffer_cap    = 0;
+    new_proc->croot             = NULL;
+    new_proc->as                = NULL;
+    new_proc->p_filetable       = NULL;
 
     cont->proc = new_proc;
 
@@ -296,8 +296,8 @@ void proc_create(char* app_name, seL4_CPtr fault_ep, proc_create_cb_t callback, 
     }
 
     /* parse the cpio image */
-    printf("\nStarting \"%s\"...\n", app_name);
-    elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
+    printf("\nStarting \"%s\"...\n", path);
+    elf_base = cpio_get_file(_cpio_archive, path, &elf_size);
     if(!elf_base){
         printf("sos_process_create, Unable to locate cpio header\n");
         proc_create_end((void*)cont, EFAULT);

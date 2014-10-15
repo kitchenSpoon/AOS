@@ -92,7 +92,7 @@ void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte);
 void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf);
 
 
-int serv_proc_create(char* app_name, size_t len, seL4_CPtr fault_ep, seL4_CPtr reply_cap);
+void serv_proc_create(char* path, size_t len, seL4_CPtr fault_ep, seL4_CPtr reply_cap);
 void serv_proc_destroy(int id, seL4_CPtr reply_cap);
 void serv_proc_get_id();
 void serv_proc_wait(int id, seL4_CPtr reply_cap);

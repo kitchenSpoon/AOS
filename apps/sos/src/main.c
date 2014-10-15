@@ -171,15 +171,15 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_CREATE:
     {
-        char *app_name          = (char *)seL4_GetMR(1);
-        size_t len              = (char *)seL4_GetMR(2);
-        serv_proc_create(app_name, len, _sos_ipc_ep_cap, reply_cap);
+        char *path          = (char *)seL4_GetMR(1);
+        size_t len          = (size_t)seL4_GetMR(2);
+        serv_proc_create(path, len, _sos_ipc_ep_cap, reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_DESTROY:
     {
-        int id          = (char *)seL4_GetMR(1);
-        serv_proc_destroy(id, reply_cap);
+        int pid             = (int)seL4_GetMR(1);
+        serv_proc_destroy(pid, reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_GET_ID:

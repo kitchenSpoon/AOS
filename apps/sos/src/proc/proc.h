@@ -9,6 +9,10 @@
 //sosh also defines this for themselves
 #define MAX_PROC 100
 
+#define USER_EP_CAP         1
+#define USER_PRIORITY       0
+#define USER_EP_BADGE       (1 << (seL4_BadgeBits - 2))
+
 typedef struct process process_t;
 struct process {
 

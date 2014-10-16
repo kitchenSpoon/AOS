@@ -13,10 +13,6 @@
 extern process_t tty_test_process;
 extern char _cpio_archive[];
 
-#define USER_EP_CAP         1 // hack TODO change this
-#define USER_PRIORITY       0 // hack TODO change this
-#define USER_EP_BADGE       (1 << (seL4_BadgeBits - 2))
-
 static uint32_t next_free_pid = 0;
 static process_t* _cur_proc = NULL;
 
@@ -296,12 +292,17 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
         return;
     }
 
+    if (next_free_pid & USER_EP_BADGE) {
+        printf("sos_process_create: SOS ran out of pid\n");
+        proc_create_end((void*)cont, EFAULT);
+        return;
+    }
     /* Copy the fault endpoint to the user app to enable IPC */
     user_ep_cap = cspace_mint_cap(new_proc->croot,
                                   cur_cspace,
                                   fault_ep,
                                   seL4_AllRights,
-                                  seL4_CapData_Badge_new(USER_EP_BADGE | next_free_pid)); //TODO check if next_free_pid is at max
+                                  seL4_CapData_Badge_new(USER_EP_BADGE | next_free_pid));
 
     /* should be the first slot in the space, hack I know */
     assert(user_ep_cap == 1);

@@ -56,10 +56,6 @@
 #define IRQ_BADGE_TIMER (1 << 1)
 
 #define TTY_NAME             CONFIG_SOS_STARTUP_APP
-#define TTY_PRIORITY         (0)
-#define TTY_EP_BADGE         (101)
-#define USER_EP_BADGE        (1 << (seL4_BadgeBits - 2))
-
 
 #define ROOT_PATH           "/"
 

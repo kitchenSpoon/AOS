@@ -11,7 +11,7 @@ typedef struct{
     char* kpath;
     size_t len;
     seL4_CPtr fault_ep;
-    seL4_Word reply_cap;
+    seL4_CPtr reply_cap;
 } serv_proc_create_cont_t;
 
 void serv_proc_create_end(void* token, int err, int pid){

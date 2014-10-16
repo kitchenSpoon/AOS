@@ -366,7 +366,7 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
 }
 
 
-int proc_destroy(pid_t pid) {
+int proc_destroy(int pid) {
     (void)pid;
     return 0;
 }

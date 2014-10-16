@@ -11,6 +11,7 @@
 #include "dev/console.h"
 #include "vfs/vnode.h"
 #include "vm/copyinout.h"
+#include "proc/proc.h"
 
 #define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
@@ -96,17 +97,19 @@ read_handler(struct serial * serial , char c){
 
 static int
 con_eachopen(struct vnode *file, int flags){
-    printf("con_open called\n");
+    printf("con_open called by %d\n", proc_get_id());
     int err;
 
     if(flags == O_RDWR || flags == O_RDONLY){
         if(!con_read_state.opened_for_reading){
             err = serial_register_handler(console.serial, read_handler);
             if(err){
+            printf("con_open con_read cant register\n");
                 return EFAULT;
             }
             con_read_state.opened_for_reading = 1;
         } else {
+            printf("con_open con_read opened for reading\n");
             return EFAULT;
         }
     }
@@ -136,6 +139,7 @@ con_eachclose(struct vnode *file, uint32_t flags){
 static int
 con_lastclose(struct vnode *con_vn) {
     /* If any of these fails, that means we have a bug */
+    printf("con_lastclose\n");
     assert(con_vn->vn_ops != NULL);
     assert(con_vn->vn_opencount == 1);
 

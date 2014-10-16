@@ -20,14 +20,14 @@ extern char _cpio_archive[];
 static uint32_t next_free_pid = 0;
 static process_t* _cur_proc = NULL;
 
-void proc_list_init(){
+void proc_list_init(void){
     for(int i = 0; i < MAX_PROC; i++){
         processes[i] = NULL;
     }
 }
 
-void set_cur_proc(uint32_t pid){
-    //do checking herer
+void set_cur_proc(uint32_t pid) {
+    printf("set_cur_proc");
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] != NULL) printf("searching for cur_proc, we are at proc = %u\n",processes[i]->pid);
         if(processes[i] != NULL && processes[i]->pid == pid){
@@ -37,19 +37,16 @@ void set_cur_proc(uint32_t pid){
     }
 }
 
-//TODO: hacking before having cur_proc() function
 process_t* cur_proc(void) {
-    //return &tty_test_process;
-    printf("cur_proc\n");
     return _cur_proc;
 }
 
 addrspace_t* proc_getas(void) {
-    return (cur_proc()->as);
+    return (_cur_proc == NULL) ? NULL : (_cur_proc->as);
 }
 
 cspace_t* proc_getcroot(void) {
-    return (cur_proc()->croot);
+    return (_cur_proc == NULL) ? 0 : (_cur_proc->croot);
 }
 
 typedef struct{
@@ -59,7 +56,8 @@ typedef struct{
     void* token;
 } process_create_cont_t;
 
-void proc_create_end(void* token, int err){
+static void
+proc_create_end(void* token, int err){
     printf("start process create end\n");
     process_create_cont_t* cont = (process_create_cont_t*)token;
     assert(cont != NULL);
@@ -117,7 +115,8 @@ void proc_create_end(void* token, int err){
     free(cont);
 }
 
-void proc_create_part3(void* token, int err){
+static void
+proc_create_part3(void* token, int err){
     printf("start process create part3\n");
     process_create_cont_t* cont = (process_create_cont_t*)token;
 
@@ -193,7 +192,8 @@ void proc_create_part3(void* token, int err){
     proc_create_end(token, 0);
 }
 
-void proc_create_part2(void* token, addrspace_t *as){
+static void
+proc_create_part2(void* token, addrspace_t *as){
     printf("start process create part2\n");
     if(as == NULL){
         printf("sos_process_create_part2, Failed to initialise address space\n");

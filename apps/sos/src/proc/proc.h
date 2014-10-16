@@ -41,7 +41,7 @@ typedef void (*proc_create_cb_t)(void* token, int err, int pid);
 //a list of process
 process_t* processes[MAX_PROC];
 
-void proc_list_init();
+void proc_list_init(void);
 void set_cur_proc(uint32_t pid);
 
 /* Create a process from the executable at *path*, this process shall

@@ -20,6 +20,8 @@
 
 typedef int pid_t;
 
+typedef struct proc_wait_node *proc_wait_node_t;
+
 typedef struct process process_t;
 struct process {
 
@@ -42,12 +44,14 @@ struct process {
     char* name; // max 32 bytes, as defined by the client
 
     struct filetable* p_filetable;
+    proc_wait_node_t p_wait_queue;
 };
 
 process_t* processes[MAX_PROC];
 
 /* These are callback functions corresponding to the proc_* functions below */
-typedef void (*proc_create_cb_t)(void* token, int err, pid_t pid);
+typedef void (*proc_create_cb_t)(void *token, int err, pid_t pid);
+typedef void (*proc_wait_cb_t)(void *token, pid_t pid);
 
 /* This function should be called before any process is created */
 void proc_list_init(void);
@@ -67,9 +71,10 @@ int proc_destroy(pid_t pid);
 /* Get PID of the current process */
 pid_t proc_get_id(void);
 
-/* Wait for a certain process to exit, if pid == -1, wait for any process to
- * exit */
-int proc_wait(pid_t pid);
+/* Wait for a certain process to exit
+ * if pid == -1, wait for any process to exit
+ * "callback" will be called whenever the specified process finished */
+int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token);
 
 process_t* cur_proc(void);
 addrspace_t* proc_getas(void);

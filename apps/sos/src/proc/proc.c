@@ -12,17 +12,46 @@
 
 extern char _cpio_archive[];
 
-static uint32_t next_free_pid = 0;
-static process_t* _cur_proc = NULL;
+static uint32_t next_free_pid;
+static process_t *_cur_proc = NULL;
+static proc_wait_node_t _wait_queue = NULL;
+
+struct proc_wait_node {
+    proc_wait_cb_t callback;
+    void *token;
+    struct proc_wait_node *next;
+};
+
+/* This function will allocate a proc_wait_node_t and initialise the node with
+ * data provided */
+static proc_wait_node_t
+_wait_node_create(proc_wait_cb_t callback, void *token) {
+    proc_wait_node_t node = malloc(sizeof(proc_wait_node_t));
+    if (node == NULL) {
+        return NULL;
+    }
+    node->callback  = callback;
+    node->token     = token;
+    node->next      = NULL;
+    return node;
+}
+
+static proc_wait_node_t
+_wait_node_add(proc_wait_node_t head, proc_wait_node_t node) {
+    assert(node != NULL);
+    node->next = head;
+    return head = node;
+}
 
 void proc_list_init(void){
+    next_free_pid = 1;
     for(int i = 0; i < MAX_PROC; i++){
         processes[i] = NULL;
     }
 }
 
 void set_cur_proc(pid_t pid) {
-    printf("set_cur_proc");
+    printf("set_cur_proc, pid = %d\n", pid);
     if (pid == PROC_NULL) {
         _cur_proc = NULL;
         return;
@@ -172,7 +201,9 @@ proc_create_part3(void* token, int err){
         return;
     }
 
-    //Add new process to our process list
+    // Add new process to our process list
+    // This should be the last call before calling proc_create_end()
+    // as proc_create_end() doesn't clear the processes array on error
     bool found = false;
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] == NULL){
@@ -254,6 +285,7 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
     new_proc->croot             = NULL;
     new_proc->as                = NULL;
     new_proc->p_filetable       = NULL;
+    new_proc->p_wait_queue      = NULL;
 
     cont->proc = new_proc;
 
@@ -367,7 +399,36 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
 
 
 int proc_destroy(int pid) {
-    (void)pid;
+    //TODO: callback from the list of wait_queue
+    process_t *proc = NULL;
+    proc_wait_node_t node = NULL;
+    for (int i = 0; i < MAX_PROC; i++) {
+        if (processes[i]->pid == pid) {
+            proc = processes[i];
+            break;
+        }
+    }
+    if (proc == NULL) {
+        return EINVAL;
+    }
+
+    /* Wake up processes in the global wait queue */
+    node = _wait_queue;
+    while (node != NULL) {
+        node->callback(node->token, pid);
+        proc_wait_node_t prev = node;
+        node = node->next;
+        free(prev);
+    }
+
+    /* Wake up processes in the wait queue of this process */
+    node = proc->p_wait_queue;
+    while (node != NULL) {
+        node->callback(node->token, pid);
+        proc_wait_node_t prev = node;
+        node = node->next;
+        free(prev);
+    }
     return 0;
 }
 
@@ -375,7 +436,27 @@ pid_t proc_get_id(){
     return (_cur_proc == NULL) ? PROC_NULL : _cur_proc->pid;
 }
 
-int proc_wait(pid_t pid){
-    (void)pid;
-    return 0;
+int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token){
+    if (pid == -1) {
+        proc_wait_node_t node = _wait_node_create(callback, token);
+        if (node == NULL) {
+            return ENOMEM;
+        }
+        _wait_queue = _wait_node_add(_wait_queue, node);
+        return 0;
+    }
+
+    for (int i = 0; i < MAX_PROC; i++) {
+        if (processes[i]->pid == pid) {
+            proc_wait_node_t node = _wait_node_create(callback, token);
+            if (node == NULL) {
+                return ENOMEM;
+            }
+            processes[i]->p_wait_queue =
+                _wait_node_add(processes[i]->p_wait_queue, node);
+            return 0;
+        }
+    }
+
+    return EINVAL;
 }

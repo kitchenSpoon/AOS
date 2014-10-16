@@ -120,15 +120,47 @@ void serv_proc_get_id(seL4_CPtr reply_cap){
     return;
 }
 
-void serv_proc_wait(pid_t id, seL4_CPtr reply_cap){
-    (void)id;
-    printf("serv_proc_wait\n");
-    //check if process id is valid
-    //proc_is_valid(id);
+typedef struct {
+    seL4_CPtr reply_cap;
+} serv_proc_wait_cont_t;
 
-    //if it is then call
-    //proc_add_wait(id);
-    set_cur_proc(PROC_NULL);
+static void
+serv_proc_wait_cb(void *token, pid_t pid) {
+    serv_proc_wait_cont_t *cont = (serv_proc_wait_cont_t*)token;
+    assert(cont != NULL);
+
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(0, 0, 0, 1);
+    seL4_SetMR(0, pid);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+    free(cont);
+
+    // we don't want to clear cur_proc because the caller is still in process
+    // of destroying itself
+    //set_cur_proc(PROC_NULL);
+}
+
+void serv_proc_wait(pid_t pid, seL4_CPtr reply_cap){
+    printf("serv_proc_wait, proc = %d\n", proc_get_id());
+    serv_proc_wait_cont_t *cont = malloc(sizeof(serv_proc_wait_cont_t));
+    if (cont == NULL) {
+        // No memory, reply to user with pid -1
+        seL4_MessageInfo_t reply;
+        reply = seL4_MessageInfo_new(0, 0, 0, 1);
+        seL4_SetMR(0, -1);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+
+        set_cur_proc(PROC_NULL);
+        return;
+    }
+    cont->reply_cap = reply_cap;
+
+    int err = proc_wait(pid, serv_proc_wait_cb, (void*)cont);
+    if (err) {
+        serv_proc_wait_cb((void*)cont, -1);
+    }
 }
 
 void serv_proc_status(void){

@@ -204,8 +204,8 @@ void handle_pagefault(void) {
     seL4_Word fault_addr = seL4_GetMR(1);
     bool ifault = (bool)seL4_GetMR(2);
     seL4_Word fsr = seL4_GetMR(3);
-    dprintf(0, "vm fault at 0x%08x, align = 0x%08x , pc = 0x%08x, %s\n", fault_addr, PAGE_ALIGN(fault_addr), pc,
-            ifault ? "Instruction Fault" : "Data fault");
+    dprintf(0, "vm fault at 0x%08x, align = 0x%08x, pc = 0x%08x, proc = %d, %s\n",
+            fault_addr, PAGE_ALIGN(fault_addr), pc, proc_get_id(), ifault ? "iFault" : "dFault");
 
     seL4_CPtr reply_cap;
 

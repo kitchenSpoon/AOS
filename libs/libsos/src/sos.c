@@ -261,8 +261,21 @@ int sos_process_delete(pid_t pid) {
 }
 
 int sos_process_status(sos_process_t *processes, unsigned max) {
-    printf("System call not implemented\n");
-    return 0;
+    seL4_MessageInfo_t tag, message;
+
+    tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_PROC_STATUS);
+    seL4_SetMR(1, (seL4_Word)processes);
+    seL4_SetMR(2, (seL4_Word)max);
+
+    message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    int err = seL4_MessageInfo_get_label(message);
+    if (err) {
+        return -1;
+    }
+    unsigned num = seL4_GetMR(0);
+    return num;
 }
 
 pid_t sos_process_wait(pid_t pid) {

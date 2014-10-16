@@ -21,6 +21,15 @@ void proc_list_init(void){
     }
 }
 
+void inc_proc_size(int pid){
+    for(int i = 0; i < MAX_PROC; i++){
+        if(processes[i] != NULL && processes[i]->pid == pid){
+            processes[i]->size++;
+            return;
+        }
+    }
+}
+
 void set_cur_proc(uint32_t pid) {
     printf("set_cur_proc");
     if (pid == PROC_NULL) {
@@ -163,6 +172,7 @@ proc_create_part3(void* token, int err){
         proc_create_end((void*)cont, EFAULT);
         return;
     }
+    inc_proc_size(cont->proc->pid);
 
     /* Initialise filetable for this process */
     printf("sos_process_create_part3, filetable initing...\n");
@@ -217,7 +227,7 @@ proc_create_part2(void* token, addrspace_t *as){
     elf_load(cont->proc->as, cont->elf_base, proc_create_part3, token);
 }
 
-void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token) {
+void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token) {
     printf("process_create\n");
     printf("creating process at %s\n", path);
     int err;
@@ -255,6 +265,11 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
     new_proc->croot             = NULL;
     new_proc->as                = NULL;
     new_proc->p_filetable       = NULL;
+    new_proc->name              = malloc(len);
+    new_proc->name_len          = len;
+    strcpy(new_proc->name, path);
+    new_proc->size              = 0;
+    new_proc->stime             = (unsigned)time_stamp()/1000; //microsec to millsec
 
     cont->proc = new_proc;
 

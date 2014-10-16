@@ -35,7 +35,8 @@ struct process {
     uint32_t pid;
     unsigned size;
     unsigned stime;
-    char* name; // max 32 bytes, as defined by the client
+    char *name; // max 32 bytes, as defined by the client
+    size_t name_len;
 
     struct filetable* p_filetable;
 };
@@ -54,7 +55,7 @@ void set_cur_proc(uint32_t pid);
 
 /* Create a process from the executable at *path*, this process shall
  * communicate with sos through the *fault_ep* */
-void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);
+void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);
 
 /* Destroy a process with this pid, clean up process data and return the back
  * to seL4*/

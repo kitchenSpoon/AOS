@@ -191,8 +191,9 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_STATUS:
     {
-        //char *app_name          = (char *)seL4_GetMR(1);
-        //serv_proc_create(app_name, _sos_ipc_ep_cap, reply_cap);
+        seL4_Word buf          = (seL4_Word)seL4_GetMR(1);
+        unsigned max           = (unsigned)seL4_GetMR(2);
+        serv_proc_status(buf, max, reply_cap);
         break;
     }
     default:
@@ -554,7 +555,7 @@ int main(void) {
     //start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     proc_list_init();
-    proc_create(TTY_NAME, _sos_ipc_ep_cap, main2, NULL);
+    proc_create(TTY_NAME, strlen(TTY_NAME), _sos_ipc_ep_cap, main2, NULL);
 
     return 0;
 

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <proc/proc.h>
 #include <errno.h>
+#include "tool/utility.h"
 
 #include "vm/copyinout.h"
 
@@ -37,7 +38,7 @@ serv_proc_create_part2(void* token, int err){
         serv_proc_create_end(token, err, -1);
     } else {
         cont->kpath[cont->len] = '\0';
-        proc_create(cont->kpath, cont->fault_ep, serv_proc_create_end, (void*)cont);
+        proc_create(cont->kpath, cont->len, cont->fault_ep, serv_proc_create_end, (void*)cont);
     }
 }
 
@@ -131,6 +132,83 @@ void serv_proc_wait(int id, seL4_CPtr reply_cap){
     set_cur_proc(PROC_NULL);
 }
 
-void serv_proc_status(void){
+typedef struct {
+    seL4_Word kbuf;
+    seL4_Word buf;
+    unsigned num;
+    int pid;
+    seL4_CPtr reply_cap;
+} serv_proc_status_cont_t ;
+
+void serv_proc_status_end(void* token, int err){
+    printf("serv_proc_status end\n");
+    serv_proc_status_cont_t* cont = (serv_proc_status_cont_t*)token;
+
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, cont->num);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+
+    free(cont);
     set_cur_proc(PROC_NULL);
+}
+
+void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
+    printf("serv_proc_status\n");
+
+    serv_proc_status_cont_t* cont = malloc(sizeof(serv_proc_status_cont_t));
+    if(cont == NULL){
+        set_cur_proc(PROC_NULL);
+        //send message back
+        seL4_MessageInfo_t reply;
+        reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+        return;
+    }
+    cont->reply_cap = reply_cap;
+
+
+    printf("serv_proc_status\n");
+    uint32_t permissions = 0;
+    if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_process_t) * MIN(MAX_PROC, max), &permissions) ||
+            !(permissions & seL4_CanWrite)){
+        serv_proc_status_end((void*)cont, EINVAL);
+        return;
+    }
+
+    printf("serv_proc_status\n");
+    sos_process_t* kbuf = malloc(sizeof(sos_process_t) * MIN(MAX_PROC, max));
+    if(kbuf == NULL){
+        serv_proc_status_end((void*)cont, ENOMEM);
+        return;
+    }
+
+    printf("serv_proc_status\n");
+    cont->num = 0;
+    for(int i = 0; i < MAX_PROC; i++){
+        if(processes[i] != NULL){
+        printf("serv_proc_status, procing i = %d\n",i);
+            kbuf[cont->num].pid = processes[i]->pid;
+        printf("serv_proc_status, procing i = %d\n",i);
+            kbuf[cont->num].size = processes[i]->size;
+        printf("serv_proc_status, procing i = %d\n",i);
+            kbuf[cont->num].stime = processes[i]->stime;
+        printf("serv_proc_status, procing i = %d\n",i);
+            memcpy(kbuf[cont->num].command, processes[i]->name, processes[i]->name_len);
+            kbuf[cont->num].command[N_NAME] = '\0';
+        printf("serv_proc_status, procing i = %d kbuf name = %s\n",i,kbuf[cont->num].command);
+
+            cont->num++;
+            if(cont->num > max) break;
+        }
+    }
+
+    printf("serv_proc_status\n");
+    int err = copyout((seL4_Word)buf, (seL4_Word)kbuf, sizeof(sos_process_t) * MIN(cont->num, max), serv_proc_status_end, (void*)cont);
+    if(err){
+        serv_proc_status_end((void*)cont, err);
+        return;
+    }
 }

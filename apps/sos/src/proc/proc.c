@@ -13,17 +13,36 @@
 extern process_t tty_test_process;
 extern char _cpio_archive[];
 
-#define USER_EP_CAP 1 // hack TODO change this
-#define USER_BADGE (101) // hack TODO change this
-#define USER_PRIORITY  0 // hack TODO change this
+#define USER_EP_CAP         1 // hack TODO change this
+#define USER_PRIORITY       0 // hack TODO change this
+#define USER_EP_BADGE       (1 << (seL4_BadgeBits - 2))
+
+uint32_t next_free_pid = 0;
+uint32_t cur_proc_pid = 0;
+process_t* p_cur_proc = NULL;
+
+void proc_list_init(){
+    for(int i = 0; i < MAX_PROC; i++){
+        processes[i] = NULL;
+    }
+}
+
+void set_cur_proc(uint32_t pid){
+    //do checking herer
+    for(int i = 0; i < MAX_PROC; i++){
+        if(processes[i] != NULL) printf("searching for cur_proc, we are at proc = %u\n",processes[i]->pid);
+        if(processes[i] != NULL && processes[i]->pid == pid){
+            p_cur_proc = processes[i];
+            return;
+        }
+    }
+}
 
 //TODO: hacking before having cur_proc() function
 process_t* cur_proc(void) {
     //return &tty_test_process;
-    if(sosh_test_process == NULL){
-        printf("sosh_test_process is NULL\n");
-    }
-    return sosh_test_process;
+    printf("cur_proc\n");
+    return p_cur_proc;
 }
 
 addrspace_t* proc_getas(void) {
@@ -39,7 +58,6 @@ typedef struct{
     process_t* proc;
     proc_create_cb_t callback;
     void* token;
-    int id;
 } process_create_cont_t;
 
 void proc_create_end(void* token, int err){
@@ -93,7 +111,7 @@ void proc_create_end(void* token, int err){
     }
 
 
-    cont->callback(cont->token, err, cont->id);
+    cont->callback(cont->token, err, cont->proc->pid);
 
     /* Clear */
     free(cont);
@@ -146,6 +164,20 @@ void proc_create_part3(void* token, int err){
         printf("sos_process_create_part3, Unable to initialise filetable for user app\n");
         proc_create_end((void*)cont, err);
         return;
+    }
+
+    //Add new process to our process list
+    bool found = false;
+    for(int i = 0; i < MAX_PROC; i++){
+        if(processes[i] == NULL){
+            processes[i] = cont->proc;
+            found = true;
+            break;
+        }
+    }
+    if(!found){
+        printf("sos_process_create_part3, can't find a slot in our process list, too many process\n");
+        proc_create_end((void*)cont, EFAULT);
     }
 
     printf("sos_process_create_part3, filetable initing done...\n");
@@ -270,11 +302,14 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
                                   cur_cspace,
                                   fault_ep,
                                   seL4_AllRights,
-                                  seL4_CapData_Badge_new(USER_BADGE)); //TODO add user badge
+                                  seL4_CapData_Badge_new(USER_EP_BADGE | next_free_pid)); //TODO check if next_free_pid is at max
+
     /* should be the first slot in the space, hack I know */
     assert(user_ep_cap == 1);
     assert(user_ep_cap == USER_EP_CAP);
 
+    new_proc->pid = next_free_pid;
+    next_free_pid++;
 
 
     /* Create a new TCB object */

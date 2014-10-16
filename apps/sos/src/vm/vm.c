@@ -160,7 +160,9 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
 
     int err;
 
+    printf("sos vmfault handler, getting as \n");
     addrspace_t *as = proc_getas();
+    printf("sos vmfault handler, gotten as \n");
     if (as == NULL) {
         printf("app as is NULL\n");
         /* Kernel is probably failed when bootstraping */

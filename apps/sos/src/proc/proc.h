@@ -7,7 +7,7 @@
 #include "vm/vmem_layout.h"
 
 //sosh also defines this for themselves
-#define MAX_PROC 16
+#define MAX_PROC 100
 
 typedef struct process process_t;
 struct process {

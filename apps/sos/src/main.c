@@ -58,6 +58,8 @@
 #define TTY_NAME             CONFIG_SOS_STARTUP_APP
 #define TTY_PRIORITY         (0)
 #define TTY_EP_BADGE         (101)
+#define USER_EP_BADGE        (1 << (seL4_BadgeBits - 2))
+
 
 #define ROOT_PATH           "/"
 
@@ -226,7 +228,7 @@ void handle_pagefault(void) {
 void syscall_loop(seL4_CPtr ep) {
 
     while (1) {
-        printf("looping\n");
+        //printf("looping\n");
         seL4_Word badge;
         seL4_Word label;
         seL4_MessageInfo_t message;
@@ -247,10 +249,14 @@ void syscall_loop(seL4_CPtr ep) {
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
+            printf("user with pid = %d, 0x%08x is having a vmfault\n", badge & ~USER_EP_BADGE, badge);
+            set_cur_proc(badge & ~USER_EP_BADGE);
             handle_pagefault();
 
         }else if(label == seL4_NoFault) {
             /* System call */
+            printf("user with pid = %d, 0x%08x is having a vmfault\n", badge & ~USER_EP_BADGE, badge);
+            set_cur_proc(badge & ~USER_EP_BADGE);
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 
         }else{
@@ -695,6 +701,7 @@ int main(void) {
     /* Start the user application */
     //start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
+    proc_list_init();
     proc_create(TTY_NAME, _sos_ipc_ep_cap, main2, NULL);
 
     return 0;

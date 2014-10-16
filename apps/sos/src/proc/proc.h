@@ -41,6 +41,9 @@ typedef void (*proc_create_cb_t)(void* token, int err, int pid);
 //a list of process
 process_t* processes[MAX_PROC];
 
+void proc_list_init();
+void set_cur_proc(uint32_t pid);
+
 /* Create a process from the executable at *path*, this process shall
  * communicate with sos through the *fault_ep* */
 void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);

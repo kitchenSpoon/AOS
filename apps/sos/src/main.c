@@ -328,144 +328,6 @@ static void print_bootinfo(const seL4_BootInfo* info) {
     dprintf(1,"--------------------------------------------------------\n");
 }
 
-
-typedef struct{
-    char* elf_base;
-} start_first_process_cont_t;
-
-
-void start_first_process_part3(void* token, int err){
-    printf("start first process part3\n");
-    conditional_panic(err, "Failed to load elf image");
-    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
-
-    /* set up the stack & the heap */
-    as_define_stack(tty_test_process.as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
-    conditional_panic(tty_test_process.as->as_stack == NULL, "Heap failed to be defined");
-    as_define_heap(tty_test_process.as);
-    conditional_panic(tty_test_process.as->as_heap == NULL, "Heap failed to be defined");
-
-    //TODO: this might cause this page to be overwrite? Currently it won't
-    //because process doesn't have mmap The fix is simply creating a region for
-    //it and map the page in using sos_page_map and create a callback for it
-    //as_define_region();
-    /* Map in the IPC buffer for the thread */
-    err = map_page(tty_test_process.ipc_buffer_cap, tty_test_process.vroot,
-                   PROCESS_IPC_BUFFER,
-                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    conditional_panic(err, "Unable to map IPC buffer for user app");
-
-    /* Initialise filetable for this process */
-    err = filetable_init(NULL, NULL, NULL);
-    conditional_panic(err, "Unable to initialise filetable for user app");
-
-    /* Start the new process */
-    seL4_UserContext context;
-
-    memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint(cont->elf_base);
-    context.sp = PROCESS_STACK_TOP;
-    seL4_TCB_WriteRegisters(tty_test_process.tcb_cap, 1, 0, 2, &context);
-
-    /* Clear */
-    free(cont);
-}
-
-void start_first_process_part2(void* token, addrspace_t *as){
-    printf("start first process part2\n");
-    conditional_panic(as==NULL, "start_first_process_part2: as is NULL\n");
-    conditional_panic(as->as_pd_caps == NULL || as->as_pd_regs == NULL,
-                      "start_first_process_part2: as contains invalid fields\n");
-
-    start_first_process_cont_t* cont = (start_first_process_cont_t*)token;
-
-    tty_test_process.as = as;
-    conditional_panic(tty_test_process.as == NULL, "Failed to initialise address space");
-
-    /* load the elf image */
-    elf_load(tty_test_process.as, cont->elf_base, start_first_process_part3, token);
-}
-
-void start_first_process(char* app_name, seL4_CPtr fault_ep) {
-    printf("start first process\n");
-    int err;
-
-    //seL4_Word stack_addr;
-    //seL4_CPtr stack_cap;
-    seL4_CPtr user_ep_cap;
-
-    /* These required for loading program sections */
-    char* elf_base;
-    unsigned long elf_size;
-
-    /* Create a VSpace */
-    tty_test_process.vroot_addr = ut_alloc(seL4_PageDirBits);
-    conditional_panic(!tty_test_process.vroot_addr,
-                      "No memory for new Page Directory");
-    err = cspace_ut_retype_addr(tty_test_process.vroot_addr,
-                                seL4_ARM_PageDirectoryObject,
-                                seL4_PageDirBits,
-                                cur_cspace,
-                                &tty_test_process.vroot);
-    conditional_panic(err, "Failed to allocate page directory cap for client");
-
-    /* Create a simple 1 level CSpace */
-    tty_test_process.croot = cspace_create(1);
-    assert(tty_test_process.croot != NULL);
-
-    /* Create an IPC buffer */
-    tty_test_process.ipc_buffer_addr = ut_alloc(seL4_PageBits);
-    conditional_panic(!tty_test_process.ipc_buffer_addr, "No memory for ipc buffer");
-    err =  cspace_ut_retype_addr(tty_test_process.ipc_buffer_addr,
-                                 seL4_ARM_SmallPageObject,
-                                 seL4_PageBits,
-                                 cur_cspace,
-                                 &tty_test_process.ipc_buffer_cap);
-    conditional_panic(err, "Unable to allocate page for IPC buffer");
-
-    /* Copy the fault endpoint to the user app to enable IPC */
-    user_ep_cap = cspace_mint_cap(tty_test_process.croot,
-                                  cur_cspace,
-                                  fault_ep,
-                                  seL4_AllRights,
-                                  seL4_CapData_Badge_new(TTY_EP_BADGE));
-    /* should be the first slot in the space, hack I know */
-    assert(user_ep_cap == 1);
-    assert(user_ep_cap == USER_EP_CAP);
-
-    /* Create a new TCB object */
-    tty_test_process.tcb_addr = ut_alloc(seL4_TCBBits);
-    conditional_panic(!tty_test_process.tcb_addr, "No memory for new TCB");
-    err =  cspace_ut_retype_addr(tty_test_process.tcb_addr,
-                                 seL4_TCBObject,
-                                 seL4_TCBBits,
-                                 cur_cspace,
-                                 &tty_test_process.tcb_cap);
-    conditional_panic(err, "Failed to create TCB");
-
-    /* Configure the TCB */
-    err = seL4_TCB_Configure(tty_test_process.tcb_cap, user_ep_cap, TTY_PRIORITY,
-                             tty_test_process.croot->root_cnode, seL4_NilData,
-                             tty_test_process.vroot, seL4_NilData, PROCESS_IPC_BUFFER,
-                             tty_test_process.ipc_buffer_cap);
-    conditional_panic(err, "Unable to configure new TCB");
-
-
-    /* parse the cpio image */
-    dprintf(1, "\nStarting \"%s\"...\n", app_name);
-    elf_base = cpio_get_file(_cpio_archive, app_name, &elf_size);
-    conditional_panic(!elf_base, "Unable to locate cpio header");
-
-    /* Initialise the continuation preparing to call as_create */
-    start_first_process_cont_t* cont = malloc(sizeof(start_first_process_cont_t));
-    conditional_panic(cont == NULL, "Unable to allocate memory for first process");
-
-    cont->elf_base = elf_base;
-
-    /* initialise address space */
-    as_create(tty_test_process.vroot, start_first_process_part2, (void*)cont);
-}
-
 static void _sos_ipc_init(seL4_CPtr* ipc_ep, seL4_CPtr* async_ep){
     seL4_Word ep_addr, aep_addr;
     int err;
@@ -635,7 +497,7 @@ frametable_test(uint32_t test_mask) {
  * As it requires nfs to be mounted
  */
 static void
-filesystem_init(void) {
+_filesystem_init(void) {
     int err;
 
     struct vnode* vn = malloc(sizeof(struct vnode));
@@ -692,11 +554,8 @@ int main(void) {
     conditional_panic(result != CLOCK_R_OK, "Failed to initialize timer\n");
 
     /* Init file system */
-    filesystem_init();
+    _filesystem_init();
     //frametable_test(TEST_1 | TEST_2);
-
-    ///* Register swap test */
-    //register_timer(1000000, swap_test, NULL); //100ms
 
     /* Start the user application */
     //start_first_process(TTY_NAME, _sos_ipc_ep_cap);

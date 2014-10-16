@@ -177,9 +177,9 @@ filetable_init(const char *inpath, const char *outpath,
     int fd;
 
     /* catch memory leaks, repeated calls */
-    //assert(CURPROC->p_filetable == NULL);
     if(proc == NULL){
         printf("filetable init, proc is NULL \n");
+        return EINVAL;
     }
 
     printf("filetable malloc \n");

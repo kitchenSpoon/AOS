@@ -17,9 +17,8 @@ extern char _cpio_archive[];
 #define USER_PRIORITY       0 // hack TODO change this
 #define USER_EP_BADGE       (1 << (seL4_BadgeBits - 2))
 
-uint32_t next_free_pid = 0;
-uint32_t cur_proc_pid = 0;
-process_t* p_cur_proc = NULL;
+static uint32_t next_free_pid = 0;
+static process_t* _cur_proc = NULL;
 
 void proc_list_init(){
     for(int i = 0; i < MAX_PROC; i++){
@@ -32,7 +31,7 @@ void set_cur_proc(uint32_t pid){
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] != NULL) printf("searching for cur_proc, we are at proc = %u\n",processes[i]->pid);
         if(processes[i] != NULL && processes[i]->pid == pid){
-            p_cur_proc = processes[i];
+            _cur_proc = processes[i];
             return;
         }
     }
@@ -42,7 +41,7 @@ void set_cur_proc(uint32_t pid){
 process_t* cur_proc(void) {
     //return &tty_test_process;
     printf("cur_proc\n");
-    return p_cur_proc;
+    return _cur_proc;
 }
 
 addrspace_t* proc_getas(void) {
@@ -61,7 +60,7 @@ typedef struct{
 } process_create_cont_t;
 
 void proc_create_end(void* token, int err){
-	printf("start process create end\n");
+    printf("start process create end\n");
     process_create_cont_t* cont = (process_create_cont_t*)token;
     assert(cont != NULL);
 
@@ -108,12 +107,13 @@ void proc_create_end(void* token, int err){
         if (proc->p_filetable) {
             filetable_destroy(proc->p_filetable);
         }
+
+        cont->callback(cont->token, err, -1);
+        free(cont);
+        return;
     }
 
-
     cont->callback(cont->token, err, cont->proc->pid);
-
-    /* Clear */
     free(cont);
 }
 
@@ -157,7 +157,6 @@ void proc_create_part3(void* token, int err){
     }
 
     /* Initialise filetable for this process */
-    //TODO: filetable need to return something so that process can store it
     printf("sos_process_create_part3, filetable initing...\n");
     err = filetable_init(NULL, NULL, NULL, cont->proc);
     if(err){
@@ -178,6 +177,7 @@ void proc_create_part3(void* token, int err){
     if(!found){
         printf("sos_process_create_part3, can't find a slot in our process list, too many process\n");
         proc_create_end((void*)cont, EFAULT);
+        return;
     }
 
     printf("sos_process_create_part3, filetable initing done...\n");
@@ -212,7 +212,6 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
     printf("process_create\n");
     printf("creating process at %s\n", path);
     int err;
-    struct filetable* p_filetable;
 
     seL4_CPtr user_ep_cap;
 

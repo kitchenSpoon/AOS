@@ -65,8 +65,6 @@ extern char _cpio_archive[];
 
 const seL4_BootInfo* _boot_info;
 
-extern process_t tty_test_process;
-
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
 

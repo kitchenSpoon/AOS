@@ -14,10 +14,12 @@ typedef struct{
     seL4_CPtr reply_cap;
 } serv_proc_create_cont_t;
 
-void serv_proc_create_end(void* token, int err, int pid){
+static void
+serv_proc_create_end(void* token, int err, int pid){
     printf("serv_proc_create_end\n");
     serv_proc_create_cont_t* cont = (serv_proc_create_cont_t*)token;
 
+    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(err, 0, 0, 1);
     seL4_SetMR(0, pid);
@@ -28,7 +30,8 @@ void serv_proc_create_end(void* token, int err, int pid){
     free(cont);
 }
 
-void serv_proc_create_part2(void* token, int err){
+static void
+serv_proc_create_part2(void* token, int err){
     serv_proc_create_cont_t* cont = (serv_proc_create_cont_t*)token;
     if(err){
         serv_proc_create_end(token, err, -1);
@@ -44,6 +47,7 @@ void serv_proc_create(char* path, size_t len, seL4_CPtr fault_ep, seL4_CPtr repl
     serv_proc_create_cont_t* cont = malloc(sizeof(serv_proc_create_cont_t));
     if(cont == NULL){
         printf("serv_proc_create, err no mem for continuation\n");
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply;
         reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
         seL4_SetMR(0, -1);
@@ -94,7 +98,7 @@ void serv_proc_destroy(int pid, seL4_CPtr reply_cap){
     }*/
     int err = proc_destroy(pid);
 
-    //reply
+    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(err, 0, 0, 0);
     //seL4_SetMR(0, 0);
@@ -103,9 +107,10 @@ void serv_proc_destroy(int pid, seL4_CPtr reply_cap){
     return;
 }
 
-void serv_proc_get_id(){
+void serv_proc_get_id(void){
     int id = proc_get_id();
     //reply
+    set_cur_proc(PROC_NULL);
     (void)id;
     return;
 }
@@ -118,8 +123,9 @@ void serv_proc_wait(int id, seL4_CPtr reply_cap){
 
     //if it is then call
     //proc_add_wait(id);
+    set_cur_proc(PROC_NULL);
 }
 
 void serv_proc_status(void){
-
+    set_cur_proc(PROC_NULL);
 }

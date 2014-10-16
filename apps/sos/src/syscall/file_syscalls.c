@@ -30,6 +30,7 @@ void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
         tries++;
     }
 
+    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 1);
     seL4_SetMR(0, (seL4_Word)sent);
     seL4_Send(reply_cap, reply);
@@ -54,6 +55,7 @@ serv_sys_open_end(void *token, int err, int fd) {
     }
     printf("serv_sys_open err = %d\n", err);
 
+    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(err, 0, 0, 1);
     seL4_SetMR(0, (seL4_Word)fd);
@@ -87,6 +89,7 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
     cont_open_t *cont = malloc(sizeof(cont_open_t));
     //printf("--serv_cont = %p, size = %u\n", cont, sizeof(cont_open_t));
     if (cont == NULL) {
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)-1);
         seL4_Send(reply_cap, reply);
@@ -130,6 +133,7 @@ void serv_sys_close(seL4_CPtr reply_cap, int fd){
 
     err = err || file_close(fd);
 
+    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
@@ -157,6 +161,7 @@ void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
     //printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
     if(err || !more_to_read || cont->bytes_read >= cont->bytes_wanted){
         /* Reply app*/
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)cont->bytes_read);
         seL4_Send(cont->reply_cap, reply);
@@ -177,6 +182,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     int err;
     cont_read_t *cont = malloc(sizeof(cont_read_t));
     if (cont == NULL) {
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)0);
         seL4_Send(reply_cap, reply);
@@ -242,6 +248,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
 
     cont_write_t *cont = malloc(sizeof(cont_write_t));
     if (cont == NULL) {
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)0);
         seL4_Send(reply_cap, reply);
@@ -354,6 +361,8 @@ static
 void serv_sys_write_end(cont_write_t* cont, int err) {
     printf("serv_write_end\n");
 
+    set_cur_proc(PROC_NULL);
+
     /* Reply app*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
     seL4_SetMR(0, (seL4_Word)cont->byte_written);
@@ -374,6 +383,7 @@ typedef struct {
 static void serv_sys_getdirent_end(void *token, int err, size_t size) {
     cont_getdirent_t *cont = (cont_getdirent_t*)token;
 
+    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
     seL4_SetMR(0, (seL4_Word)size);
     seL4_Send(cont->reply_cap, reply);
@@ -387,6 +397,7 @@ void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
 
     cont_getdirent_t *cont = malloc(sizeof(cont_getdirent_t));
     if (cont == NULL) {
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)0);
         seL4_Send(reply_cap, reply);
@@ -427,6 +438,8 @@ static void serv_sys_stat_end(void *token, int err){
         free(cont->kbuf);
     }
 
+    set_cur_proc(PROC_NULL);
+
     /* reply sosh*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
     seL4_Send(cont->reply_cap, reply);
@@ -455,6 +468,7 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
 
     cont_stat_t *cont = malloc(sizeof(cont_stat_t));
     if(cont == NULL){
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 0);
         seL4_Send(reply_cap, reply);
         cspace_free_slot(cur_cspace, reply_cap);

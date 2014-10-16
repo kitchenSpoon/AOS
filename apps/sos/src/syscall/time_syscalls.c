@@ -6,6 +6,7 @@
 
 #include "syscall/syscall.h"
 #include "dev/clock.h"
+#include "proc/proc.h"
 
 #define TIMESTAMP_LOW_MASK      (0x00000000ffffffffULL)
 #define TIMESTAMP_HIGH_MASK     (0xffffffff00000000ULL)
@@ -20,6 +21,7 @@ serv_sys_timestamp(seL4_CPtr reply_cap) {
     timestamp_t ts;
 
     ts = time_stamp();
+    set_cur_proc(PROC_NULL);
     reply = seL4_MessageInfo_new(0, 0, 0, 2);
     seL4_SetMR(0, (uint32_t)(ts & TIMESTAMP_LOW_MASK));
     seL4_SetMR(1, (uint32_t)((ts & TIMESTAMP_HIGH_MASK)>>32));
@@ -35,6 +37,7 @@ sleep_callback(uint32_t id, void *data) {
 
     state = (struct sleep_state*)data;
 
+    set_cur_proc(PROC_NULL);
     reply = seL4_MessageInfo_new(0, 0, 0, 0);
     seL4_Send(state->reply_cap, reply);
     cspace_free_slot(cur_cspace, state->reply_cap);
@@ -61,6 +64,7 @@ serv_sys_sleep(seL4_CPtr reply_cap, const int msec) {
 
     err = _sys_sleep(reply_cap, msec);
     if (err) {
+        set_cur_proc(PROC_NULL);
         reply = seL4_MessageInfo_new(err, 0, 0, 0);
         seL4_Send(reply_cap, reply);
         cspace_free_slot(cur_cspace, reply_cap);

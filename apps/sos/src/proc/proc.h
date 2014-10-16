@@ -13,6 +13,9 @@
 #define USER_PRIORITY       0
 #define USER_EP_BADGE       (1 << (seL4_BadgeBits - 2))
 
+#define CURPROC             (cur_proc())
+#define PROC_NULL           (0xffffffff)
+
 typedef struct process process_t;
 struct process {
 
@@ -37,25 +40,32 @@ struct process {
     struct filetable* p_filetable;
 };
 
-process_t tty_test_process;
-process_t* sosh_test_process;
-typedef void (*proc_create_cb_t)(void* token, int err, int pid);
-
-
-//a list of process
 process_t* processes[MAX_PROC];
 
+/* These are callback functions corresponding to the proc_* functions below */
+typedef void (*proc_create_cb_t)(void* token, int err, int pid);
+
+/* This function should be called before any process is created */
 void proc_list_init(void);
+
+/* Kernel can use this function to set the current process
+ * If the pid is PROC_NULL then the current process will be NULL */
 void set_cur_proc(uint32_t pid);
 
 /* Create a process from the executable at *path*, this process shall
  * communicate with sos through the *fault_ep* */
 void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);
-int proc_destroy(int id);
-int proc_get_id(void);
-int proc_wait(int id);
 
-#define CURPROC     (cur_proc())
+/* Destroy a process with this pid, clean up process data and return the back
+ * to seL4*/
+int proc_destroy(int pid);
+
+/* Get PID of the current process */
+int proc_get_id(void);
+
+/* Wait for a certain process to exit, if pid == -1, wait for any process to
+ * exit */
+int proc_wait(int pid);
 
 process_t* cur_proc(void);
 addrspace_t* proc_getas(void);

@@ -10,7 +10,6 @@
 #include <vm/mapping.h>
 #include <syscall/file.h>
 
-extern process_t tty_test_process;
 extern char _cpio_archive[];
 
 static uint32_t next_free_pid = 0;
@@ -24,6 +23,11 @@ void proc_list_init(void){
 
 void set_cur_proc(uint32_t pid) {
     printf("set_cur_proc");
+    if (pid == PROC_NULL) {
+        _cur_proc = NULL;
+        return;
+    }
+
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] != NULL) printf("searching for cur_proc, we are at proc = %u\n",processes[i]->pid);
         if(processes[i] != NULL && processes[i]->pid == pid){
@@ -31,9 +35,17 @@ void set_cur_proc(uint32_t pid) {
             return;
         }
     }
+
+    /* Do this so that we can catch bug quickly */
+    printf("set_cur_proc: Could not find process with pid in process list\n");
+    printf("              Setting cur_proc to NULL\n");
+    _cur_proc = NULL;
 }
 
 process_t* cur_proc(void) {
+    if (_cur_proc == NULL) {
+        printf("cur_proc: Someone is getting a NULL proc\n");
+    }
     return _cur_proc;
 }
 
@@ -243,8 +255,6 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
     new_proc->as                = NULL;
     new_proc->p_filetable       = NULL;
 
-    sosh_test_process = new_proc;
-
     cont->proc = new_proc;
 
     /* Create a VSpace */
@@ -356,8 +366,8 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
 }
 
 
-int proc_destroy(int proc_id) {
-    (void)proc_id;
+int proc_destroy(int pid) {
+    (void)pid;
     return 0;
 }
 
@@ -365,7 +375,7 @@ int proc_get_id(){
     return 42;
 }
 
-int proc_wait(int proc_id){
-    (void)proc_id;
+int proc_wait(int pid){
+    (void)pid;
     return 0;
 }

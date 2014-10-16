@@ -269,7 +269,7 @@ pid_t sos_process_wait(pid_t pid) {
 
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
     seL4_SetTag(tag);
-    seL4_SetMR(0, SOS_SYSCALL_PROC_CREATE);
+    seL4_SetMR(0, SOS_SYSCALL_PROC_WAIT);
     seL4_SetMR(1, (seL4_Word)pid);
 
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
@@ -277,6 +277,21 @@ pid_t sos_process_wait(pid_t pid) {
     if(!err){
         return 0;
     } else {
-        return-1;
+        return -1;
+    }
+}
+
+pid_t sos_my_id(void){
+    seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 1);
+    seL4_SetTag(tag);
+    seL4_SetMR(0, SOS_SYSCALL_PROC_GET_ID);
+
+    seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    int err = seL4_MessageInfo_get_label(message);
+    if(!err){
+        pid_t pid = seL4_GetMR(0);
+        return pid;
+    } else {
+        return -1;
     }
 }

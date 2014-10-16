@@ -57,6 +57,7 @@ cspace_t* proc_getcroot(void) {
     return (_cur_proc == NULL) ? 0 : (_cur_proc->croot);
 }
 
+
 typedef struct{
     char* elf_base;
     process_t* proc;
@@ -372,7 +373,7 @@ int proc_destroy(int pid) {
 }
 
 int proc_get_id(){
-    return 42;
+    return (_cur_proc == NULL) ? -1 : (_cur_proc->pid);
 }
 
 int proc_wait(int pid){

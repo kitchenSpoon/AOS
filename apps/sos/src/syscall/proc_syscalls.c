@@ -107,11 +107,16 @@ void serv_proc_destroy(int pid, seL4_CPtr reply_cap){
     return;
 }
 
-void serv_proc_get_id(void){
+void serv_proc_get_id(seL4_CPtr reply_cap){
     int id = proc_get_id();
     //reply
     set_cur_proc(PROC_NULL);
-    (void)id;
+
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(0, 0, 0, 1);
+    seL4_SetMR(0, id);
+    seL4_Send(reply_cap, reply);
+    cspace_free_slot(cur_cspace, reply_cap);
     return;
 }
 

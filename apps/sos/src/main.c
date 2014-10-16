@@ -42,9 +42,6 @@
 #include <sys/debug.h>
 #include <sys/panic.h>
 
-/* This is the index where a clients syscall enpoint will
- * be stored in the clients cspace. */
-#define USER_EP_CAP          (1)
 /* To differencient between async and and sync IPC, we assign a
  * badge to the async endpoint. The badge that we receive will
  * be the bitwise 'OR' of the async endpoint badge and the badges
@@ -174,7 +171,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_DESTROY:
     {
-        int pid             = (int)seL4_GetMR(1);
+        pid_t pid             = (pid_t)seL4_GetMR(1);
         serv_proc_destroy(pid, reply_cap);
         break;
     }
@@ -186,7 +183,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_WAIT:
     {
-        int pid          = (int)seL4_GetMR(1);
+        pid_t pid          = (pid_t)seL4_GetMR(1);
         serv_proc_wait(pid, reply_cap);
         break;
     }
@@ -527,7 +524,7 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
  * Main entry point - called by crt.
  */
 
-void main2(void* token, int err, int id){
+void main2(void* token, int err, pid_t id){
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);
 }

@@ -15,7 +15,7 @@ typedef struct{
 } serv_proc_create_cont_t;
 
 static void
-serv_proc_create_end(void* token, int err, int pid){
+serv_proc_create_end(void* token, int err, pid_t pid){
     printf("serv_proc_create_end\n");
     serv_proc_create_cont_t* cont = (serv_proc_create_cont_t*)token;
 
@@ -90,7 +90,7 @@ typedef struct{
     seL4_CPtr reply_cap;
 } serv_proc_destroy_cont_t;
 
-void serv_proc_destroy(int pid, seL4_CPtr reply_cap){
+void serv_proc_destroy(pid_t pid, seL4_CPtr reply_cap){
     //serv_proc_destroy_cont_t* cont = malloc(sizeof(serv_proc_destroy_cont_t));
     /*if(cont == NULL){
         printf("serv_proc_destroy, no memory\n");
@@ -108,14 +108,14 @@ void serv_proc_destroy(int pid, seL4_CPtr reply_cap){
 }
 
 void serv_proc_get_id(void){
-    int id = proc_get_id();
+    pid_t id = proc_get_id();
     //reply
     set_cur_proc(PROC_NULL);
     (void)id;
     return;
 }
 
-void serv_proc_wait(int id, seL4_CPtr reply_cap){
+void serv_proc_wait(pid_t id, seL4_CPtr reply_cap){
     (void)id;
     printf("serv_proc_wait\n");
     //check if process id is valid

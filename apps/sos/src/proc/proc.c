@@ -21,7 +21,7 @@ void proc_list_init(void){
     }
 }
 
-void set_cur_proc(uint32_t pid) {
+void set_cur_proc(pid_t pid) {
     printf("set_cur_proc");
     if (pid == PROC_NULL) {
         _cur_proc = NULL;
@@ -366,16 +366,16 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
 }
 
 
-int proc_destroy(int pid) {
+int proc_destroy(pid_t pid) {
     (void)pid;
     return 0;
 }
 
-int proc_get_id(){
-    return 42;
+pid_t proc_get_id(){
+    return (_cur_proc == NULL) ? PROC_NULL : _cur_proc->pid;
 }
 
-int proc_wait(int pid){
+int proc_wait(pid_t pid){
     (void)pid;
     return 0;
 }

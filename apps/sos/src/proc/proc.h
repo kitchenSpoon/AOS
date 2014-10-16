@@ -9,12 +9,16 @@
 //sosh also defines this for themselves
 #define MAX_PROC 100
 
+/* This is the index where a clients syscall enpoint will
+ * be stored in the clients cspace. */
 #define USER_EP_CAP         1
 #define USER_PRIORITY       0
 #define USER_EP_BADGE       (1 << (seL4_BadgeBits - 2))
 
 #define CURPROC             (cur_proc())
-#define PROC_NULL           (0xffffffff)
+#define PROC_NULL           (-1)
+
+typedef int pid_t;
 
 typedef struct process process_t;
 struct process {
@@ -32,7 +36,7 @@ struct process {
 
     addrspace_t *as;
 
-    uint32_t pid;
+    pid_t pid;
     unsigned size;
     unsigned stime;
     char* name; // max 32 bytes, as defined by the client
@@ -43,14 +47,14 @@ struct process {
 process_t* processes[MAX_PROC];
 
 /* These are callback functions corresponding to the proc_* functions below */
-typedef void (*proc_create_cb_t)(void* token, int err, int pid);
+typedef void (*proc_create_cb_t)(void* token, int err, pid_t pid);
 
 /* This function should be called before any process is created */
 void proc_list_init(void);
 
 /* Kernel can use this function to set the current process
  * If the pid is PROC_NULL then the current process will be NULL */
-void set_cur_proc(uint32_t pid);
+void set_cur_proc(pid_t pid);
 
 /* Create a process from the executable at *path*, this process shall
  * communicate with sos through the *fault_ep* */
@@ -58,14 +62,14 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
 
 /* Destroy a process with this pid, clean up process data and return the back
  * to seL4*/
-int proc_destroy(int pid);
+int proc_destroy(pid_t pid);
 
 /* Get PID of the current process */
-int proc_get_id(void);
+pid_t proc_get_id(void);
 
 /* Wait for a certain process to exit, if pid == -1, wait for any process to
  * exit */
-int proc_wait(int pid);
+int proc_wait(pid_t pid);
 
 process_t* cur_proc(void);
 addrspace_t* proc_getas(void);

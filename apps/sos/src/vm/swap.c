@@ -15,6 +15,7 @@
 #include "dev/nfs_dev.h"
 #include "vm/addrspace.h"
 #include "vm/vm.h"
+#include "proc/proc.h"
 
 /*
  * Bitmap use to track free slots in our swap file
@@ -114,6 +115,7 @@ typedef struct {
     seL4_CapRights rights;
     bool is_code;
     size_t bytes_read;
+    pid_t pid;
 } swap_in_cont_t;
 
 static void
@@ -154,12 +156,13 @@ swap_in_end(void* token, int err){
 void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
                                 fattr_t *fattr, int count, void* data){
     printf("swap in handler entered\n");
+    swap_in_cont_t *state = (swap_in_cont_t*)token;
+
+    set_cur_proc(state->pid);
     if(status != NFS_OK || count < 0){
         swap_in_end((void*)token, EFAULT);
         return;
     }
-
-    swap_in_cont_t *state = (swap_in_cont_t*)token;
 
     /* Copy data in */
     memcpy((void*)(state->kvaddr) + state->bytes_read, data, count);
@@ -174,8 +177,10 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
                                         swap_in_nfs_read_handler, (uintptr_t)state);
         if (status != RPC_OK) {
             swap_in_end((void*)token, EFAULT);
-            return;
+        } else {
+            //state->pid = proc_get_id(); // we don't need to do this
         }
+        return;
     } else {
         swap_in_end((void*)token, 0);
     }
@@ -209,8 +214,10 @@ swap_in_page_map_cb(void *token, int err) {
             (uintptr_t)cont);
     if(status != RPC_OK){
         swap_in_end(cont, EFAULT);
-        return;
+    } else {
+        //state->pid = proc_get_id(); //we don't need to set it here
     }
+    return;
 }
 
 int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
@@ -243,6 +250,7 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
     swap_cont->rights     = rights;
     swap_cont->is_code    = is_code;
     swap_cont->bytes_read = 0;
+    swap_cont->pid        = proc_get_id();
 
     int err;
     err = sos_page_map(as, vpage, rights, swap_in_page_map_cb, (void*)swap_cont, false);
@@ -261,6 +269,7 @@ typedef struct {
     seL4_Word kvaddr;
     int free_slot;
     size_t written;
+    pid_t pid;
 } swap_out_cont_t;
 
 static void
@@ -306,10 +315,9 @@ static void
 swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
     printf("swap out 4 entered\n");
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
-    if (cont == NULL) {
-        printf("NFS or swap.c is broken!!!\n");
-        return;
-    }
+    assert(cont != NULL);
+
+    set_cur_proc(cont->pid);
 
     if (status != NFS_OK || fattr == NULL || count < 0) {
         swap_out_end(cont, EFAULT);
@@ -389,6 +397,7 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     cont->token     = token;
     cont->kvaddr    = kvaddr;
     cont->written   = 0;
+    cont->pid       = proc_get_id();
 
     frame_lock_frame(kvaddr);
 

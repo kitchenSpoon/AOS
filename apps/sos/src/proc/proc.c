@@ -26,7 +26,7 @@ struct proc_wait_node {
  * data provided */
 static proc_wait_node_t
 _wait_node_create(proc_wait_cb_t callback, void *token) {
-    proc_wait_node_t node = malloc(sizeof(proc_wait_node_t));
+    proc_wait_node_t node = malloc(sizeof(struct proc_wait_node));
     if (node == NULL) {
         return NULL;
     }
@@ -448,26 +448,19 @@ int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token){
         _wait_queue = _wait_node_add(_wait_queue, node);
         return 0;
     }
-    printf("proc_wait 2\n");
 
     for (int i = 0; i < MAX_PROC; i++) {
         if (processes[i] != NULL && processes[i]->pid == pid) {
-            printf("proc_wait 2.a\n");
 
             proc_wait_node_t node = _wait_node_create(callback, token);
             if (node == NULL) {
                 return ENOMEM;
             }
-            //processes[i]->p_wait_queue =
-                //_wait_node_add(processes[i]->p_wait_queue, node);
-            //printf("node = %p, processes[%d]->p_wait_queue = %p\n", node, i, processes[i]->p_wait_queue);
-            printf("poop %p\n", node);
-            //printf("poop %p\n", processes[i]->p_wait_queue);
-            printf("proc_wait 2.b\n");
+            processes[i]->p_wait_queue =
+                _wait_node_add(processes[i]->p_wait_queue, node);
             return 0;
         }
     }
-    printf("proc_wait 3\n");
 
     return EINVAL;
 }

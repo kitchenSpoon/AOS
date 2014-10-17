@@ -54,18 +54,11 @@ sos_VMFaultHandler_reply(void* token, int err){
     /* If there is an err here, it is not the process's fault
      * It is either the kernel running out of memory or swapping doesn't work
      */
-    printf("sos_vmf_reply: 1\n");
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-    printf("sos_vmf_reply: 2\n");
     seL4_Send(state->reply_cap, reply);
-    printf("sos_vmf_reply: 3\n");
-    printf("sos_vmf_reply: reply_cap = %d\n", (int)state->reply_cap);
     cspace_free_slot(cur_cspace, state->reply_cap);
-    printf("sos_vmf_reply: 4\n");
     free(state);
-    printf("sos_vmf_reply: 5\n");
     set_cur_proc(PROC_NULL);
-    printf("sos_vmf_reply: 6\n");
 }
 
 static void

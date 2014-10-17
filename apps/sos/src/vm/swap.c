@@ -258,6 +258,7 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
         free(swap_cont);
         return err;
     }
+    inc_cur_proc_size();
     return 0;
 }
 

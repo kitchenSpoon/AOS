@@ -50,6 +50,7 @@ void copyin_do_copy(void* token, int err){
             copyin_end(cont, err);
             return;
         }
+        inc_cur_proc_size();
         return;
     } else if (sos_page_is_swapped(cont->as, vpage)) {
         printf("copyin_do_copy: swapping page in\n");
@@ -206,6 +207,7 @@ void copyout_do_copy(void* token, int err){
             copyout_end(token, err);
             return;
         }
+        inc_cur_proc_size();
         return;
     } else if (sos_page_is_swapped(cont->as, vpage)) {
         printf("copyout_do_copy: swapping page in\n");

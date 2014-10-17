@@ -7,6 +7,7 @@
 
 #include "vm/addrspace.h"
 #include "vfs/vnode.h"
+#include "proc/proc.h"
 
 #define SWAP_FILE_NAME  "swap"
 

@@ -96,6 +96,6 @@ void serv_proc_create(char* path, size_t len, seL4_CPtr fault_ep, seL4_CPtr repl
 void serv_proc_destroy(int id, seL4_CPtr reply_cap);
 void serv_proc_get_id(seL4_CPtr reply_cap);
 void serv_proc_wait(int id, seL4_CPtr reply_cap);
-void serv_proc_status(void);
+void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap);
 
 #endif /* _SOS_SYSCALL_H_ */

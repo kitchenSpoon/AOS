@@ -85,6 +85,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     switch (syscall_number) {
     case SOS_SYSCALL_PRINT:
     {
+        printf("\n---sos print called---\n");
         size_t msg_len = num_args;
         char data[seL4_MsgMaxLength];
         for (size_t i=0; i<msg_len; i++) {
@@ -97,6 +98,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_SYSBRK:
     {
+        printf("\n---sos sbrk called---\n");
         seL4_Word newbrk = (seL4_Word)seL4_GetMR(1);
         serv_sys_sbrk(reply_cap, newbrk);
         break;
@@ -112,6 +114,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_CLOSE:
     {
+        printf("\n---sos close called---\n");
         int fd = seL4_GetMR(1);
         serv_sys_close(reply_cap, fd);
         break;
@@ -164,6 +167,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_CREATE:
     {
+        printf("\n---sos proc create called at %lu---\n", (long unsigned)time_stamp());
         char *path          = (char *)seL4_GetMR(1);
         size_t len          = (size_t)seL4_GetMR(2);
         serv_proc_create(path, len, _sos_ipc_ep_cap, reply_cap);
@@ -177,19 +181,23 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_GET_ID:
     {
+        printf("\n---sos proc get id called at %lu---\n", (long unsigned)time_stamp());
         serv_proc_get_id(reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_WAIT:
     {
+        printf("\n---sos proc wait called at %lu---\n", (long unsigned)time_stamp());
         pid_t pid          = (pid_t)seL4_GetMR(1);
         serv_proc_wait(pid, reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_STATUS:
     {
-        //char *app_name          = (char *)seL4_GetMR(1);
-        //serv_proc_create(app_name, _sos_ipc_ep_cap, reply_cap);
+        printf("\n---sos proc status called at %lu---\n", (long unsigned)time_stamp());
+        seL4_Word buf          = (seL4_Word)seL4_GetMR(1);
+        unsigned max           = (unsigned)seL4_GetMR(2);
+        serv_proc_status(buf, max, reply_cap);
         break;
     }
     default:
@@ -245,7 +253,7 @@ void syscall_loop(seL4_CPtr ep) {
 
         }else if(label == seL4_NoFault) {
             /* System call */
-            printf("user with pid = %d, 0x%08x is having a vmfault\n", badge & ~USER_EP_BADGE, badge);
+            printf("user with pid = %d, 0x%08x is having a syscall\n", badge & ~USER_EP_BADGE, badge);
             set_cur_proc(badge & ~USER_EP_BADGE);
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 
@@ -551,7 +559,8 @@ int main(void) {
     //start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
     proc_list_init();
-    proc_create(TTY_NAME, _sos_ipc_ep_cap, main2, NULL);
+    proc_create(TTY_NAME, strlen(TTY_NAME), _sos_ipc_ep_cap, main2, NULL);
+    //set_cur_proc(0);
 
     return 0;
 

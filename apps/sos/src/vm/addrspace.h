@@ -98,14 +98,6 @@ bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
                                 uint32_t* permission);
 
 /*
- * Functions in elf.c
- *    elf_load - load an ELF user program executable into the current
- *               address space. (i.e. the only one address space )
- */
-typedef void (*elf_load_cb_t)(void *token, int err);
-void elf_load(addrspace_t *as, char* elf_file, elf_load_cb_t callback, void* token);
-
-/*
  * Functions in pagetable.c:
  *
  */

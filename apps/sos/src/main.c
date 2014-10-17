@@ -212,14 +212,15 @@ void handle_pagefault(void) {
     seL4_Word fault_addr = seL4_GetMR(1);
     bool ifault = (bool)seL4_GetMR(2);
     seL4_Word fsr = seL4_GetMR(3);
-    dprintf(0, "vm fault at 0x%08x, align = 0x%08x , pc = 0x%08x, %s\n", fault_addr, PAGE_ALIGN(fault_addr), pc,
-            ifault ? "Instruction Fault" : "Data fault");
+    dprintf(0, "vm fault at 0x%08x, align = 0x%08x, pc = 0x%08x, proc = %d, %s\n",
+            fault_addr, PAGE_ALIGN(fault_addr), pc, proc_get_id(), ifault ? "iFault" : "dFault");
 
     seL4_CPtr reply_cap;
 
     /* Save the caller */
     reply_cap = cspace_save_reply_cap(cur_cspace);
     assert(reply_cap != CSPACE_NULL);
+    printf("handle_pagefault: reply_cap = %d\n", (int)reply_cap);
     sos_VMFaultHandler(reply_cap, fault_addr, fsr, ifault);
 }
 
@@ -253,7 +254,7 @@ void syscall_loop(seL4_CPtr ep) {
 
         }else if(label == seL4_NoFault) {
             /* System call */
-            printf("user with pid = %d, 0x%08x is having a syscall\n", badge & ~USER_EP_BADGE, badge);
+            printf("user with pid = %d, 0x%08x is making a syscall\n", badge & ~USER_EP_BADGE, badge);
             set_cur_proc(badge & ~USER_EP_BADGE);
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 

@@ -13,10 +13,39 @@
 
 extern char _cpio_archive[];
 
-static uint32_t next_free_pid = 0;
-static process_t* _cur_proc = NULL;
+static uint32_t next_free_pid;
+static process_t *_cur_proc = NULL;
+static proc_wait_node_t _wait_queue = NULL;
+
+struct proc_wait_node {
+    proc_wait_cb_t callback;
+    void *token;
+    struct proc_wait_node *next;
+};
+
+/* This function will allocate a proc_wait_node_t and initialise the node with
+ * data provided */
+static proc_wait_node_t
+_wait_node_create(proc_wait_cb_t callback, void *token) {
+    proc_wait_node_t node = malloc(sizeof(struct proc_wait_node));
+    if (node == NULL) {
+        return NULL;
+    }
+    node->callback  = callback;
+    node->token     = token;
+    node->next      = NULL;
+    return node;
+}
+
+static proc_wait_node_t
+_wait_node_add(proc_wait_node_t head, proc_wait_node_t node) {
+    assert(node != NULL);
+    node->next = head;
+    return head = node;
+}
 
 void proc_list_init(void){
+    next_free_pid = 1;
     for(int i = 0; i < MAX_PROC; i++){
         processes[i] = NULL;
     }
@@ -97,10 +126,12 @@ process_t* cur_proc(void) {
 }
 
 addrspace_t* proc_getas(void) {
+    printf("proc_getas called by proc = %d\n", proc_get_id());
     return (_cur_proc == NULL) ? NULL : (_cur_proc->as);
 }
 
 cspace_t* proc_getcroot(void) {
+    printf("proc_getcroot called by proc = %d\n", proc_get_id());
     return (_cur_proc == NULL) ? 0 : (_cur_proc->croot);
 }
 
@@ -209,7 +240,7 @@ proc_create_part3(void* token, int err){
         proc_create_end((void*)cont, EFAULT);
         return;
     }
-    inc_proc_size(cont->proc->pid);
+    inc_proc_size_proc(cont->proc);
 
     /* Initialise filetable for this process */
     printf("sos_process_create_part3, filetable initing...\n");
@@ -220,7 +251,9 @@ proc_create_part3(void* token, int err){
         return;
     }
 
-    //Add new process to our process list
+    // Add new process to our process list
+    // This should be the last call before calling proc_create_end()
+    // as proc_create_end() doesn't clear the processes array on error
     bool found = false;
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] == NULL){
@@ -308,9 +341,11 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->name[len]         = '\0';
     new_proc->size              = 0;
     new_proc->stime             = (unsigned)time_stamp()/1000; //microsec to millsec
+    new_proc->p_wait_queue      = NULL;
 
     cont->proc = new_proc;
 
+    //TODO: check name field and add free code in proc_create_end
     /* Create a VSpace */
     new_proc->vroot_addr = ut_alloc(seL4_PageDirBits);
     if(!new_proc->vroot_addr){
@@ -421,7 +456,37 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
 
 
 int proc_destroy(int pid) {
-    (void)pid;
+    //TODO: callback from the list of wait_queue
+    printf("proc_destroyed called, proc = %d\n", proc_get_id());
+    process_t *proc = NULL;
+    proc_wait_node_t node = NULL;
+    for (int i = 0; i < MAX_PROC; i++) {
+        if (processes[i] != NULL && processes[i]->pid == pid) {
+            proc = processes[i];
+            break;
+        }
+    }
+    if (proc == NULL) {
+        return EINVAL;
+    }
+
+    /* Wake up processes in the global wait queue */
+    node = _wait_queue;
+    while (node != NULL) {
+        node->callback(node->token, pid);
+        proc_wait_node_t prev = node;
+        node = node->next;
+        free(prev);
+    }
+
+    /* Wake up processes in the wait queue of this process */
+    node = proc->p_wait_queue;
+    while (node != NULL) {
+        node->callback(node->token, pid);
+        proc_wait_node_t prev = node;
+        node = node->next;
+        free(prev);
+    }
     return 0;
 }
 
@@ -429,7 +494,29 @@ pid_t proc_get_id(){
     return (_cur_proc == NULL) ? PROC_NULL : _cur_proc->pid;
 }
 
-int proc_wait(pid_t pid){
-    (void)pid;
-    return 0;
+int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token){
+    printf("proc_wait called, proc %d waiting for pid %d\n", proc_get_id(), pid);
+    if (pid == -1) {
+        proc_wait_node_t node = _wait_node_create(callback, token);
+        if (node == NULL) {
+            return ENOMEM;
+        }
+        _wait_queue = _wait_node_add(_wait_queue, node);
+        return 0;
+    }
+
+    for (int i = 0; i < MAX_PROC; i++) {
+        if (processes[i] != NULL && processes[i]->pid == pid) {
+
+            proc_wait_node_t node = _wait_node_create(callback, token);
+            if (node == NULL) {
+                return ENOMEM;
+            }
+            processes[i]->p_wait_queue =
+                _wait_node_add(processes[i]->p_wait_queue, node);
+            return 0;
+        }
+    }
+
+    return EINVAL;
 }

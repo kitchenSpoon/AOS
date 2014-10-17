@@ -287,12 +287,14 @@ pid_t sos_process_wait(pid_t pid) {
     seL4_SetMR(1, (seL4_Word)pid);
 
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
-    int err = seL4_MessageInfo_get_label(message);
-    if(!err){
-        return 0;
-    } else {
-        return -1;
-    }
+    pid_t ret = (pid_t)seL4_GetMR(0);
+    return ret;
+//    int err = seL4_MessageInfo_get_label(message);
+//    if(!err){
+//        return 0;
+//    } else {
+//        return -1;
+//    }
 }
 
 pid_t sos_my_id(void){

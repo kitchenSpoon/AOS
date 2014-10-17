@@ -80,6 +80,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     /* Save the caller */
     reply_cap = cspace_save_reply_cap(cur_cspace);
     assert(reply_cap != CSPACE_NULL);
+    printf("handle_syscall: reply_cap = %d\n", (int)reply_cap);
 
     /* Process system call */
     switch (syscall_number) {
@@ -212,6 +213,7 @@ void handle_pagefault(void) {
     /* Save the caller */
     reply_cap = cspace_save_reply_cap(cur_cspace);
     assert(reply_cap != CSPACE_NULL);
+    printf("handle_pagefault: reply_cap = %d\n", (int)reply_cap);
     sos_VMFaultHandler(reply_cap, fault_addr, fsr, ifault);
 }
 
@@ -245,7 +247,7 @@ void syscall_loop(seL4_CPtr ep) {
 
         }else if(label == seL4_NoFault) {
             /* System call */
-            printf("user with pid = %d, 0x%08x is having a vmfault\n", badge & ~USER_EP_BADGE, badge);
+            printf("user with pid = %d, 0x%08x is making a syscall\n", badge & ~USER_EP_BADGE, badge);
             set_cur_proc(badge & ~USER_EP_BADGE);
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 

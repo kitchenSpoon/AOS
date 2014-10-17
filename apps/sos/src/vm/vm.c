@@ -31,7 +31,7 @@ typedef struct {
 
 static void
 sos_VMFaultHandler_reply(void* token, int err){
-    printf("sos_vmf_end\n");
+    printf("sos_vmf_reply called\n");
 
     VMF_cont_t *state = (VMF_cont_t*)token;
     if(err){
@@ -54,11 +54,18 @@ sos_VMFaultHandler_reply(void* token, int err){
     /* If there is an err here, it is not the process's fault
      * It is either the kernel running out of memory or swapping doesn't work
      */
-    set_cur_proc(PROC_NULL);
+    printf("sos_vmf_reply: 1\n");
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+    printf("sos_vmf_reply: 2\n");
     seL4_Send(state->reply_cap, reply);
+    printf("sos_vmf_reply: 3\n");
+    printf("sos_vmf_reply: reply_cap = %d\n", (int)state->reply_cap);
     cspace_free_slot(cur_cspace, state->reply_cap);
+    printf("sos_vmf_reply: 4\n");
     free(state);
+    printf("sos_vmf_reply: 5\n");
+    set_cur_proc(PROC_NULL);
+    printf("sos_vmf_reply: 6\n");
 }
 
 static void
@@ -167,6 +174,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
     if (as == NULL) {
         printf("app as is NULL\n");
         /* Kernel is probably failed when bootstraping */
+        set_cur_proc(PROC_NULL);
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }
@@ -175,6 +183,8 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
 
     /* Is this a segfault? */
     if (_check_segfault(as, fault_addr, fsr, &reg)) {
+        printf("vmf: segfault\n");
+        set_cur_proc(PROC_NULL);
         cspace_free_slot(cur_cspace, reply_cap);
         return;
     }

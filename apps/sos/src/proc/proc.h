@@ -20,7 +20,7 @@
 
 typedef int pid_t;
 
-typedef struct proc_wait_node *proc_wait_node_t;
+typedef struct proc_wait_node* proc_wait_node_t;
 
 typedef struct process process_t;
 struct process {

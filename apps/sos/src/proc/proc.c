@@ -79,10 +79,11 @@ process_t* cur_proc(void) {
 }
 
 addrspace_t* proc_getas(void) {
-    return (_cur_proc == NULL) ? NULL : (_cur_proc->as);
-}
+    printf("proc_getas called by proc = %d\n", proc_get_id());
+    return (_cur_proc == NULL) ? NULL : (_cur_proc->as); }
 
 cspace_t* proc_getcroot(void) {
+    printf("proc_getcroot called by proc = %d\n", proc_get_id());
     return (_cur_proc == NULL) ? 0 : (_cur_proc->croot);
 }
 
@@ -400,10 +401,11 @@ void proc_create(char* path, seL4_CPtr fault_ep, proc_create_cb_t callback, void
 
 int proc_destroy(int pid) {
     //TODO: callback from the list of wait_queue
+    printf("proc_destroyed called, proc = %d\n", proc_get_id());
     process_t *proc = NULL;
     proc_wait_node_t node = NULL;
     for (int i = 0; i < MAX_PROC; i++) {
-        if (processes[i]->pid == pid) {
+        if (processes[i] != NULL && processes[i]->pid == pid) {
             proc = processes[i];
             break;
         }
@@ -437,6 +439,7 @@ pid_t proc_get_id(){
 }
 
 int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token){
+    printf("proc_wait called, proc %d waiting for pid %d\n", proc_get_id(), pid);
     if (pid == -1) {
         proc_wait_node_t node = _wait_node_create(callback, token);
         if (node == NULL) {
@@ -445,18 +448,26 @@ int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token){
         _wait_queue = _wait_node_add(_wait_queue, node);
         return 0;
     }
+    printf("proc_wait 2\n");
 
     for (int i = 0; i < MAX_PROC; i++) {
-        if (processes[i]->pid == pid) {
+        if (processes[i] != NULL && processes[i]->pid == pid) {
+            printf("proc_wait 2.a\n");
+
             proc_wait_node_t node = _wait_node_create(callback, token);
             if (node == NULL) {
                 return ENOMEM;
             }
-            processes[i]->p_wait_queue =
-                _wait_node_add(processes[i]->p_wait_queue, node);
+            //processes[i]->p_wait_queue =
+                //_wait_node_add(processes[i]->p_wait_queue, node);
+            //printf("node = %p, processes[%d]->p_wait_queue = %p\n", node, i, processes[i]->p_wait_queue);
+            printf("poop %p\n", node);
+            //printf("poop %p\n", processes[i]->p_wait_queue);
+            printf("proc_wait 2.b\n");
             return 0;
         }
     }
+    printf("proc_wait 3\n");
 
     return EINVAL;
 }

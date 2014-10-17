@@ -197,7 +197,7 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
             kbuf[cont->num].stime = processes[i]->stime;
         printf("serv_proc_status, procing i = %d\n",i);
             memcpy(kbuf[cont->num].command, processes[i]->name, processes[i]->name_len);
-            kbuf[cont->num].command[N_NAME] = '\0';
+            kbuf[cont->num].command[processes[i]->name_len] = '\0';
         printf("serv_proc_status, procing i = %d kbuf name = %s\n",i,kbuf[cont->num].command);
 
             cont->num++;

@@ -55,6 +55,7 @@ sos_VMFaultHandler_reply(void* token, int err){
      * It is either the kernel running out of memory or swapping doesn't work
      */
     set_cur_proc(PROC_NULL);
+
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
     seL4_Send(state->reply_cap, reply);
     cspace_free_slot(cur_cspace, state->reply_cap);
@@ -223,8 +224,10 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
     } else {
         /* This page has never been mapped, so do that and return */
         printf("vmf tries to map a page\n");
+        inc_cur_proc_size();
         err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
+            dec_cur_proc_size();
             sos_VMFaultHandler_reply((void*)cont, err);
         }
         return;

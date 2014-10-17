@@ -238,6 +238,7 @@ pid_t sos_process_create(const char *path) {
     while(len < MAX_IO_BUF && path[len] != '\0') {
         len++;
     }
+    printf("sos_process_create len = %d\n",len);
 
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
     seL4_SetTag(tag);

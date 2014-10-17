@@ -152,6 +152,11 @@ proc_create_end(void* token, int err){
     if (err && cont->proc != NULL) {
         process_t *proc = cont->proc;
 
+        /* Free process name */
+        if (proc->name) {
+            free(proc->name);
+        }
+
         /* Free TCB */
         if (proc->tcb_cap) {
             cspace_delete_cap(cur_cspace, proc->tcb_cap);
@@ -335,17 +340,24 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->croot             = NULL;
     new_proc->as                = NULL;
     new_proc->p_filetable       = NULL;
-    new_proc->name              = malloc(len+1);
+    new_proc->name              = NULL;
     new_proc->name_len          = len;
-    strcpy(new_proc->name, path);
-    new_proc->name[len]         = '\0';
     new_proc->size              = 0;
     new_proc->stime             = (unsigned)time_stamp()/1000; //microsec to millsec
     new_proc->p_wait_queue      = NULL;
 
     cont->proc = new_proc;
 
-    //TODO: check name field and add free code in proc_create_end
+    new_proc->name              = malloc(len+1);
+    if (new_proc->name == NULL) {
+        printf("sos_process_create, No memory for name\n");
+        proc_create_end((void*)cont, ENOMEM);
+        return;
+    }
+    new_proc->name_len          = len;
+    strncpy(new_proc->name, path, len);
+    new_proc->name[len]         = '\0';
+
     /* Create a VSpace */
     new_proc->vroot_addr = ut_alloc(seL4_PageDirBits);
     if(!new_proc->vroot_addr){

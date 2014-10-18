@@ -206,14 +206,16 @@ proc_create_end(void* token, int err){
     process_create_cont_t* cont = (process_create_cont_t*)token;
     assert(cont != NULL);
 
-    if (err && cont->proc != NULL) {
-        _free_proc_data(cont->proc);
-        free(cont->proc);
-
+    if (err) {
+        if (cont->proc != NULL) {
+            _free_proc_data(cont->proc);
+            free(cont->proc);
+        }
         cont->callback(cont->token, err, -1);
         free(cont);
         return;
     }
+    next_free_pid++;
 
     cont->callback(cont->token, err, cont->proc->pid);
     free(cont);
@@ -450,7 +452,6 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     assert(user_ep_cap == USER_EP_CAP);
 
     new_proc->pid = next_free_pid;
-    next_free_pid++;
 
 
     /* Create a new TCB object */

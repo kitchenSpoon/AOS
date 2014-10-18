@@ -19,8 +19,6 @@
 #define PAGETABLE_BITS      (12)
 #define PAGETABLE_PAGES     (PAGE_SIZE >> 2)
 
-#define 
-
 static void
 _insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap, seL4_Word pt_addr) {
     sel4_pt_node_t* node = malloc(sizeof(sel4_pt_node_t));

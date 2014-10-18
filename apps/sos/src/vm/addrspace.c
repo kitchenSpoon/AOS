@@ -153,7 +153,7 @@ as_destroy(addrspace_t *as) {
     assert(as->as_pd_regs != NULL && as->as_pd_caps != NULL);
     for(int i = 0; i < N_PAGETABLES; i++){
         if (as->as_pd_regs[i] == NULL) {
-            assert(as->as_pd_caps == NULL);
+            assert(as->as_pd_caps[i] == NULL);
             continue;
         }
 

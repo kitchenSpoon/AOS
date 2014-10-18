@@ -8,10 +8,11 @@
 #include <ut_manager/ut.h>
 #include <elf/elf.h>
 #include <vm/mapping.h>
-#include "syscall/file.h"
 
+#include "syscall/file.h"
 #include "vm/addrspace.h"
 #include "vm/elf.h"
+#include "dev/clock.h"
 
 extern char _cpio_archive[];
 
@@ -219,6 +220,46 @@ proc_create_end(void* token, int err){
 }
 
 static void
+proc_create_part4(void* token, int err) {
+    printf("start process create part4\n");
+    process_create_cont_t* cont = (process_create_cont_t*)token;
+
+    if (err) {
+        printf("failed initialising filetable\n");
+        proc_create_end((void*)cont, err);
+        return;
+    }
+    // Add new process to our process list
+    // This should be the last call before calling proc_create_end()
+    // as proc_create_end() doesn't clear the processes array on error
+    bool found = false;
+    for(int i = 0; i < MAX_PROC; i++){
+        if(processes[i] == NULL){
+            processes[i] = cont->proc;
+            found = true;
+            break;
+        }
+    }
+    if(!found){
+        printf("sos_process_create_part3, can't find a slot in our process list, too many process\n");
+        proc_create_end((void*)cont, EFAULT);
+        return;
+    }
+
+    printf("sos_process_create_part3, filetable initing done...\n");
+    /* Start the new process */
+    printf("start it\n");
+    seL4_UserContext context;
+
+    memset(&context, 0, sizeof(context));
+    context.pc = elf_getEntryPoint(cont->elf_base);
+    context.sp = PROCESS_STACK_TOP;
+    seL4_TCB_WriteRegisters(cont->proc->tcb_cap, 1, 0, 2, &context);
+
+    proc_create_end(token, 0);
+}
+
+static void
 proc_create_part3(void* token, int err){
     printf("start process create part3\n");
     process_create_cont_t* cont = (process_create_cont_t*)token;
@@ -267,41 +308,12 @@ proc_create_part3(void* token, int err){
         proc_create_end((void*)cont, ENOMEM);
         return;
     }
-    err = filetable_init(cont->proc->p_filetable, NULL, NULL, NULL);
+    err = filetable_init(cont->proc->p_filetable, proc_create_part4, (void*)cont);
     if(err){
         printf("sos_process_create_part3, Unable to initialise filetable for user app\n");
         proc_create_end((void*)cont, err);
         return;
     }
-
-    // Add new process to our process list
-    // This should be the last call before calling proc_create_end()
-    // as proc_create_end() doesn't clear the processes array on error
-    bool found = false;
-    for(int i = 0; i < MAX_PROC; i++){
-        if(processes[i] == NULL){
-            processes[i] = cont->proc;
-            found = true;
-            break;
-        }
-    }
-    if(!found){
-        printf("sos_process_create_part3, can't find a slot in our process list, too many process\n");
-        proc_create_end((void*)cont, EFAULT);
-        return;
-    }
-
-    printf("sos_process_create_part3, filetable initing done...\n");
-    /* Start the new process */
-    printf("start it\n");
-    seL4_UserContext context;
-
-    memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint(cont->elf_base);
-    context.sp = PROCESS_STACK_TOP;
-    seL4_TCB_WriteRegisters(cont->proc->tcb_cap, 1, 0, 2, &context);
-
-    proc_create_end(token, 0);
 }
 
 static void

@@ -4,8 +4,6 @@
 #include <sos.h>
 #include <stdio.h>
 #include <sel4/sel4.h>
-//TODO: remove this
-#include "syscall/syscall.h"
 
 struct vnode {
     bool initialised; //TODO: remove this field

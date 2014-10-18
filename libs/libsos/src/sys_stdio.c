@@ -130,7 +130,7 @@ sys_ioctl(va_list ap)
 static long
 sos_sys_open_wrapper(const char *pathname, int flags) {
     long fd = sos_sys_open(pathname, flags);
-    if (fd == STDIN_FD || fd == STDOUT_FD || fd == STDERR_FD) {
+    if (fd == STDOUT_FD || fd == STDERR_FD) {
         /* Internally muslc believes it is on a posix system with
          * stdin, stdout and stderr already open with fd's 0, 1 and 2
          * respectively. To make the system semi-sane we want to

@@ -12,20 +12,12 @@
 
 /*** openfile functions ***/
 
-//TODO: This needs to handle concurrency when we have multiple processes
-//      Especially when they open the same file
-
 typedef struct {
     file_open_cb_t callback;
     void *token;
     int flags;
 } cont_file_open_t;
 
-/*
- * file_open
- * opens a file, places it in the filetable, sets RETFD to the file
- * descriptor. the pointer arguments must be kernel pointers.
- */
 static void file_open_end(void *token, int err, struct vnode *vn) {
     printf("file_open_end called\n");
     assert(token != NULL);
@@ -40,7 +32,6 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
 
     // Compare openning permission with file permission
     int accmode = cont->flags & O_ACCMODE;
-    printf("------accmode = %s\n", accmode == O_RDONLY ? "O_RDONLY" : "O_WRONLY");
     bool file_readable = vn->sattr.st_mode & S_IRUSR;
     bool file_writable = vn->sattr.st_mode & S_IWUSR;
     printf("file_readable = %d, file_writable = %d\n", (int)file_readable, (int)file_writable);
@@ -48,6 +39,7 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
         (accmode == O_WRONLY && !file_writable) ||
         (accmode == O_RDWR && !(file_readable && file_writable)))
     {
+        vfs_close(vn, cont->flags);
         cont->callback(cont->token, EINVAL, -1);
         free(cont);
         return;
@@ -58,6 +50,7 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
     file = malloc(sizeof(struct openfile));
     printf("created an openfile at %p\n", file);
     if (file == NULL) {
+        vfs_close(vn, cont->flags);
         cont->callback(cont->token, ENOMEM, -1);
         free(cont);
         return;
@@ -135,10 +128,6 @@ file_doclose(struct openfile *file, uint32_t flags)
     return 0;
 }
 
-/*
- * file_close
- * knock off the refcount, freeing the memory if it goes to 0.
- */
 int
 file_close(int fd)
 {
@@ -164,13 +153,40 @@ file_close(int fd)
 }
 
 /*** filetable functions ***/
+typedef struct {
+    struct filetable *filetable;
+    filetable_init_cb_t callback;
+    void *token;
+} cont_filetable_init_t;
 
-/*
- * filetable_init
- * pretty straightforward -- allocate the space, initialize to NULL.
- */
+static void
+filetable_init_end(void *token, int err, struct vnode *vn) {
+    cont_filetable_init_t *cont = (cont_filetable_init_t*)token;
+
+    struct openfile *file;
+
+    file = malloc(sizeof(struct openfile));
+    if (file == NULL) {
+        vfs_close(vn, O_WRONLY);
+        cont->callback(cont->token, ENOMEM);
+        free(cont);
+        return;
+    }
+
+    file->of_offset = 0; // console doesn't use offset
+    file->of_accmode = O_WRONLY;
+    file->of_refcount = 2;
+    file->of_vnode = vn;
+
+    cont->filetable->ft_openfiles[STDOUT_FD] = file;
+    cont->filetable->ft_openfiles[STDERR_FD] = file;
+
+    cont->callback(cont->token, 0);
+    free(cont);
+}
+
 int
-filetable_init(struct filetable *filetable, const char *inpath, const char *outpath, const char *errpath) {
+filetable_init(struct filetable *filetable, filetable_init_cb_t callback, void *token) {
     printf("in file table init\n");
     /* the filenames come from the kernel; assume reasonable length */
     int fd;
@@ -186,22 +202,20 @@ filetable_init(struct filetable *filetable, const char *inpath, const char *outp
     }
 
     /* Initialise stdin, stdout & stderr */
-    //TODO: Change these numbers to use constants
     printf("filetable open something \n");
-    filetable->ft_openfiles[0] = (struct openfile *)1;
-    filetable->ft_openfiles[1] = (struct openfile *)1;
-    filetable->ft_openfiles[2] = (struct openfile *)1;
+    cont_filetable_init_t *cont = malloc(sizeof(cont_file_open_t));
+    if (cont == NULL) {
+        return ENOMEM;
+    }
+    cont->filetable = filetable;
+    cont->callback  = callback;
+    cont->token     = token;
 
-    printf("filetable done \n");
-
+    /* Open console for stdout and stderr */
+    vfs_open("console", O_WRONLY, filetable_init_end, (void*)cont);
     return 0;
 }
 
-/*
- * filetable_findfile
- * verifies that the file descriptor is valid and actually references an
- * open file, setting the FILE to the file at that index if it's there.
- */
 int
 filetable_findfile(int fd, struct openfile **file)
 {
@@ -219,11 +233,6 @@ filetable_findfile(int fd, struct openfile **file)
     return 0;
 }
 
-/*
- * filetable_placefile
- * finds the smallest available file descriptor, places the file at the point,
- * sets FD to it.
- */
 int
 filetable_placefile(struct openfile *file, int *fd)
 {
@@ -243,10 +252,6 @@ filetable_placefile(struct openfile *file, int *fd)
     return EMFILE;
 }
 
-/*
- * filetable_destroy
- * closes the files in the file table, frees the table.
- */
 void
 filetable_destroy(struct filetable *ft)
 {
@@ -254,8 +259,7 @@ filetable_destroy(struct filetable *ft)
 
     assert(ft != NULL);
 
-    //TODO: hack because filetable_init is not opening stdout & stderr properly
-    for (fd = 3; fd < PROCESS_MAX_FILES; fd++) {
+    for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
         struct openfile *file = ft->ft_openfiles[fd];
         if (file != NULL) {
             result = file_doclose(file, file->of_accmode);

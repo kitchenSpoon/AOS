@@ -170,9 +170,7 @@ void serv_proc_wait(pid_t pid, seL4_CPtr reply_cap){
 
 typedef struct {
     seL4_Word kbuf;
-    seL4_Word buf;
     unsigned num;
-    int pid;
     seL4_CPtr reply_cap;
 } serv_proc_status_cont_t ;
 
@@ -180,6 +178,9 @@ void serv_proc_status_end(void* token, int err){
     printf("serv_proc_status end\n");
     serv_proc_status_cont_t* cont = (serv_proc_status_cont_t*)token;
 
+    if (cont->kbuf) {
+        free(cont->kbuf);
+    }
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(err, 0, 0, 1);
     seL4_SetMR(0, cont->num);
@@ -220,24 +221,21 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
         serv_proc_status_end((void*)cont, ENOMEM);
         return;
     }
+    cont->kbuf = kbuf;
 
     printf("serv_proc_status\n");
     cont->num = 0;
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] != NULL){
-        printf("serv_proc_status, procing i = %d\n",i);
             kbuf[cont->num].pid = processes[i]->pid;
-        printf("serv_proc_status, procing i = %d\n",i);
             kbuf[cont->num].size = processes[i]->size;
-        printf("serv_proc_status, procing i = %d\n",i);
             kbuf[cont->num].stime = (unsigned int)time_stamp()/1000 - processes[i]->stime;
-        printf("serv_proc_status, procing i = %d\n",i);
             memcpy(kbuf[cont->num].command, processes[i]->name, processes[i]->name_len);
             kbuf[cont->num].command[processes[i]->name_len] = '\0';
-        printf("serv_proc_status, procing i = %d kbuf name = %s\n",i,kbuf[cont->num].command);
+            printf("serv_proc_status, procing i = %d kbuf name = %s\n",i,kbuf[cont->num].command);
 
             cont->num++;
-            if(cont->num > max) break;
+            if(cont->num >= max) break;
         }
     }
 

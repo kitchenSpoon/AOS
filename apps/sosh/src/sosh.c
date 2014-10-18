@@ -274,14 +274,24 @@ static uint64_t getmicro_time() {
     return micros;
 }
 
+static int whoami(int argc, char **argv) {
+    pid_t pid;
+
+    pid = sos_my_id();
+    printf("pid = %d\n", pid);
+    return 0;
+}
+
 struct command {
     char *name;
     int (*command)(int argc, char **argv);
 };
 
-struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
-        "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep}, {"msleep",milli_sleep},
-        {"time", second_time}, {"mtime", micro_time}, {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2}, {"thrash", thrash} };
+struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat },
+    { "cp", cp }, { "ps", ps }, { "exec", exec }, {"sleep",second_sleep},
+    {"msleep",milli_sleep}, {"time", second_time}, {"mtime", micro_time},
+    {"kill", kill}, {"bm", benchmark}, {"bm2", benchmark2}, {"thrash", thrash},
+    {"whoami", whoami} };
 
 static void test_file_syscalls(void) {
     printf("Start file syscalls test...\n");
@@ -370,7 +380,7 @@ test_dynamic_heap(void) {
     printf("Beginning dynamic heap...\n");
     void* addr;
 
-    printf("current brk is at: %p\n", sbrk((intptr_t)0));
+    printf("current brk is at: 0x%08x\n", sbrk((intptr_t)0));
     printf("Mallocing 8K memory...\n");
     addr = malloc((1<<13));
     printf("Touching the address\n");
@@ -380,7 +390,7 @@ test_dynamic_heap(void) {
     addr += (1<<11);
     *(int*)addr = 100;
 
-    printf("brk is now at: %p\n", sbrk((intptr_t)0));
+    printf("brk is now at: 0x%08x\n", sbrk((intptr_t)0));
     printf("Mallocing 10K memory...\n");
     addr = malloc((1<<13) + (1<<11));
     printf("Touching the address\n");
@@ -389,7 +399,7 @@ test_dynamic_heap(void) {
     *(int*)addr = 100;
     addr += (1<<11);
     *(int*)addr = 100;
-    printf("brk is now at: %p\n", sbrk((intptr_t)0));
+    printf("brk is now at: 0x%08x\n", sbrk((intptr_t)0));
 
     printf("Exiting dynamic heap test\n");
 }

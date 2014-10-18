@@ -561,13 +561,6 @@ int main(void) {
 
     proc_list_init();
     proc_create(TTY_NAME, strlen(TTY_NAME), _sos_ipc_ep_cap, main2, NULL);
-    //set_cur_proc(0);
 
-    return 0;
-
-    dprintf(0, "\nSOS entering syscall loop\n");
-    syscall_loop(_sos_ipc_ep_cap);
-
-    /* Not reached */
     return 0;
 }

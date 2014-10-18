@@ -23,7 +23,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
 #include <sel4/sel4.h>
+#include <unistd.h>
 
 
 #include "ttyout.h"
@@ -114,6 +116,9 @@ int main(void){
 
     do {
         printf("task:\tHello world, I'm\ttty_test2!\n");
+        char *str = "tty_test2\n";
+        write(1, str, sizeof(str));
+        write(2, str, sizeof(str));
         //pt_test();
         //readonly_test();
         //stack_overflow_test();

@@ -30,7 +30,6 @@ struct console{
     int buf_size;
     int start;
     int end;
-    pid_t cur_proc_pid;
     struct serial * serial;
 } console;
 
@@ -43,6 +42,7 @@ struct con_read_state{
     vop_read_cb_t callback;
     void* token;
     size_t offset;
+    pid_t cur_proc_pid;
 } con_read_state;
 
 int
@@ -76,7 +76,7 @@ con_init(struct vnode *con_vn) {
     console.buf_size = 0;
     console.start = 0;
     console.end= 0;
-    console.cur_proc_pid = -1;
+    con_read_state.cur_proc_pid = PROC_NULL;
     con_read_state.opened_for_reading = 0;
 
     return 0;
@@ -85,7 +85,7 @@ con_init(struct vnode *con_vn) {
 static void
 read_handler(struct serial * serial , char c){
     printf("con_read handler called by %d\n", proc_get_id());
-    set_cur_proc(console.cur_proc_pid);
+    //set_cur_proc(console.cur_proc_pid);
     //printf("read_handler called, c = %d\n", (int)c);
     if(console.buf_size < MAX_IO_BUF){
         console.buf[console.end++] = c;
@@ -111,7 +111,7 @@ con_eachopen(struct vnode *file, int flags){
             printf("con_open con_read cant register\n");
                 return EFAULT;
             }
-            console.cur_proc_pid = proc_get_id();
+            con_read_state.cur_proc_pid = proc_get_id();
             con_read_state.opened_for_reading = 1;
         } else {
             printf("con_open con_read opened for reading\n");
@@ -136,7 +136,7 @@ con_eachclose(struct vnode *file, uint32_t flags){
         }
 
         console.buf_size = 0;
-        console.cur_proc_pid = -1;
+        con_read_state.cur_proc_pid = PROC_NULL;
         con_read_state.opened_for_reading = 0;
     }
     return 0;
@@ -259,6 +259,8 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
     if(console.buf_size > 0){
         size_t len = 0;
         printf("console start = %d, nbytes = %u, console.buf_size = %u \n",console.start, nbytes, console.buf_size);
+        set_cur_proc(con_read_state.cur_proc_pid);
+
         for(size_t cur = console.start; len < nbytes && len < console.buf_size; cur++, cur%=MAX_IO_BUF){
             printf("\n%c\n",console.buf[cur]);
             len++;

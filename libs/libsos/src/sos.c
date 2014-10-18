@@ -295,6 +295,7 @@ pid_t sos_process_wait(pid_t pid) {
     seL4_SetMR(1, (seL4_Word)pid);
 
     seL4_MessageInfo_t message = seL4_Call(SOS_IPC_EP_CAP, tag);
+    (void)message;
     pid_t ret = (pid_t)seL4_GetMR(0);
     return ret;
 }

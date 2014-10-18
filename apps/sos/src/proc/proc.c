@@ -8,7 +8,9 @@
 #include <ut_manager/ut.h>
 #include <elf/elf.h>
 #include <vm/mapping.h>
-#include <syscall/file.h>
+#include "syscall/file.h"
+
+#include "vm/addrspace.h"
 #include "vm/elf.h"
 
 extern char _cpio_archive[];

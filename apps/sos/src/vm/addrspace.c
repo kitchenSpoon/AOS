@@ -145,22 +145,24 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
 
 void
 as_destroy(addrspace_t *as) {
-    //TODO: clean up page table and also seL4's caps related to this as
     if(as == NULL){
         return;
     }
 
     //Free page directory
-    if(as->as_pd_regs != NULL && as->as_pd_caps != NULL){
-        for(int i = 0; i < N_PAGETABLES; i++){
-            if(as->as_pd_regs[i] != NULL && as->as_pd_caps != NULL){
-                for(int j = 0; j < N_PAGETABLES_ENTRIES; j++){
-                        sos_page_free(as, PT_INDEX_TO_VPAGE(i,j));
-                }
-                frame_free((seL4_Word)as->as_pd_caps[i]);
-                frame_free((seL4_Word)as->as_pd_regs[i]);
-            }
+    assert(as->as_pd_regs != NULL && as->as_pd_caps != NULL);
+    for(int i = 0; i < N_PAGETABLES; i++){
+        if (as->as_pd_regs[i] == NULL) {
+            assert(as->as_pd_caps == NULL);
+            continue;
         }
+
+        assert(as->as_pd_caps != NULL);
+        for(int j = 0; j < N_PAGETABLES_ENTRIES; j++){
+            sos_page_free(as, PT_ID_TO_VPAGE(i, j));
+        }
+        frame_free((seL4_Word)as->as_pd_caps[i]);
+        frame_free((seL4_Word)as->as_pd_regs[i]);
     }
 
     frame_free((seL4_Word)as->as_pd_regs);
@@ -172,7 +174,7 @@ as_destroy(addrspace_t *as) {
     //Free stack
     free(as->as_stack);
 
-    //Free regionhead
+    //Free regions
     region_t* cur_r = as->as_rhead;
     region_t* prev_r = cur_r;
     while(cur_r != NULL){
@@ -181,7 +183,7 @@ as_destroy(addrspace_t *as) {
         prev_r = cur_r;
     }
 
-    //free sel4 page tabless
+    //Free sel4 page tables
     sel4_pt_node_t* cur_pt  = as->as_pt_head;
     sel4_pt_node_t* prev_pt = cur_pt;
     while(cur_pt != NULL){

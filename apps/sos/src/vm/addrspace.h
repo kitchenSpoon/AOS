@@ -6,11 +6,11 @@
 
 #define SEL4_N_PAGETABLES       (1<<12)
 
-#define INDEX_1_MASK        (0xffc00000)
-#define INDEX_2_MASK        (0x003ff000)
-#define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
-#define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
-#define PT_INDEX_TO_VPAGE(id1, id2)   (((id1) << 22) | ((id2) << 12))
+#define INDEX_1_MASK                (0xffc00000)
+#define INDEX_2_MASK                (0x003ff000)
+#define PT_L1_INDEX(a)              (((a) & INDEX_1_MASK) >> 22)
+#define PT_L2_INDEX(a)              (((a) & INDEX_2_MASK) >> 12)
+#define PT_ID_TO_VPAGE(id1, id2)    (((id1) << 22) | ((id2) << 12))
 
 #define PTE_IN_USE_BIT          (1)
 #define PTE_SWAPPED             (1<<1)

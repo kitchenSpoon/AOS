@@ -19,6 +19,8 @@
 #define PAGETABLE_BITS      (12)
 #define PAGETABLE_PAGES     (PAGE_SIZE >> 2)
 
+#define 
+
 static void
 _insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap, seL4_Word pt_addr) {
     sel4_pt_node_t* node = malloc(sizeof(sel4_pt_node_t));
@@ -314,7 +316,7 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
         free_swapout_page((as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET);
     } else {
         int err;
-        err = sos_page_unmap(as, vaddr);
+        err = sos_page_unmap(as, vpage);
         if (err) {
             return;
         }

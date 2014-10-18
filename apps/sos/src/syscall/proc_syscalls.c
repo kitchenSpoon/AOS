@@ -169,7 +169,7 @@ void serv_proc_wait(pid_t pid, seL4_CPtr reply_cap){
 }
 
 typedef struct {
-    seL4_Word kbuf;
+    sos_process_t *kbuf;
     unsigned num;
     seL4_CPtr reply_cap;
 } serv_proc_status_cont_t ;
@@ -205,6 +205,8 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
         return;
     }
     cont->reply_cap = reply_cap;
+    cont->kbuf = NULL;
+    cont->num = 0;
 
 
     printf("serv_proc_status\n");

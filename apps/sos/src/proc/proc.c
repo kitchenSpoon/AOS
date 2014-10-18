@@ -44,6 +44,55 @@ _wait_node_add(proc_wait_node_t head, proc_wait_node_t node) {
     return head = node;
 }
 
+static void
+_free_proc(process_t *proc) {
+
+    /* Free process name */
+    if (proc->name) {
+        free(proc->name);
+    }
+
+    /* Free Filetable */
+    if (proc->p_filetable) {
+        filetable_destroy(proc->p_filetable);
+    }
+
+    /* Free Addrspace. Need to do this before freeing vroot */
+    if (proc->as) {
+        as_destroy(proc->as);
+    }
+
+    /* Free TCB */
+    if (proc->tcb_cap) {
+        cspace_delete_cap(cur_cspace, proc->tcb_cap);
+    }
+    if (proc->tcb_addr) {
+        ut_free(proc->tcb_addr, seL4_PageBits);
+    }
+
+    /* Free IPC */
+    if (proc->ipc_buffer_cap) {
+        cspace_delete_cap(cur_cspace, proc->vroot);
+    }
+    if (proc->ipc_buffer_addr) {
+        ut_free(proc->ipc_buffer_cap, seL4_PageBits);
+    }
+
+    /* Free VSpace */
+    if (proc->vroot) {
+        cspace_delete_cap(cur_cspace, proc->vroot);
+    }
+    if (proc->vroot_addr) {
+        ut_free(proc->vroot_addr, seL4_PageDirBits);
+    }
+
+    /* Free CSpace
+     * This will also free user_ep_cap created in this cspace*/
+    if (proc->croot) {
+        cspace_destroy(proc->croot);
+    }
+}
+
 void proc_list_init(void){
     next_free_pid = 1;
     for(int i = 0; i < MAX_PROC; i++){
@@ -148,54 +197,8 @@ proc_create_end(void* token, int err){
     process_create_cont_t* cont = (process_create_cont_t*)token;
     assert(cont != NULL);
 
-    /* Might need to clean up allocated data for the process */
     if (err && cont->proc != NULL) {
-        process_t *proc = cont->proc;
-
-        /* Free process name */
-        if (proc->name) {
-            free(proc->name);
-        }
-
-        /* Free TCB */
-        if (proc->tcb_cap) {
-            cspace_delete_cap(cur_cspace, proc->tcb_cap);
-        }
-        if (proc->tcb_addr) {
-            ut_free(proc->tcb_addr, seL4_PageBits);
-        }
-
-        /* Free VSpace */
-        if (proc->vroot) {
-            cspace_delete_cap(cur_cspace, proc->vroot);
-        }
-        if (proc->vroot_addr) {
-            ut_free(proc->vroot_addr, seL4_PageDirBits);
-        }
-
-        /* Free IPC */
-        if (proc->ipc_buffer_cap) {
-            cspace_delete_cap(cur_cspace, proc->vroot);
-        }
-        if (proc->ipc_buffer_addr) {
-            ut_free(proc->ipc_buffer_cap, seL4_PageBits);
-        }
-
-        /* Free CSpace
-         * This will also free user_ep_cap created in this cspace*/
-        if (proc->croot) {
-            cspace_destroy(proc->croot);
-        }
-
-        /* Free Addrspace */
-        if (proc->as) {
-            as_destroy(proc->as);
-        }
-
-        /* Free Filetable */
-        if (proc->p_filetable) {
-            filetable_destroy(proc->p_filetable);
-        }
+        _free_proc(cont->proc);
 
         cont->callback(cont->token, err, -1);
         free(cont);
@@ -468,8 +471,8 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
 
 
 int proc_destroy(int pid) {
-    //TODO: callback from the list of wait_queue
     printf("proc_destroyed called, proc = %d\n", proc_get_id());
+
     process_t *proc = NULL;
     proc_wait_node_t node = NULL;
     for (int i = 0; i < MAX_PROC; i++) {
@@ -481,6 +484,8 @@ int proc_destroy(int pid) {
     if (proc == NULL) {
         return EINVAL;
     }
+
+    _free_proc(proc);
 
     /* Wake up processes in the global wait queue */
     node = _wait_queue;
@@ -499,6 +504,7 @@ int proc_destroy(int pid) {
         node = node->next;
         free(prev);
     }
+
     return 0;
 }
 

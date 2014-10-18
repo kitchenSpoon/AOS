@@ -2,12 +2,16 @@
 #include <stdio.h>
 #include <strings.h>
 #include <limits.h>
+#include <sel4/sel4.h>
+#include <ut_manager/ut.h>
 
 #include "vm/vm.h"
+#include "vm/swap.h"
 #include "vm/addrspace.h"
 #include "tool/utility.h"
 
-#define N_PAGETABLES       (1024)
+#define N_PAGETABLES             (1024)
+#define N_PAGETABLES_ENTRIES     (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 
 region_t*
@@ -49,10 +53,10 @@ as_create_end(as_create_cont_t *cont, int err) {
     /* Clean up as needed */
     if (cont->as) {
         if (cont->as->as_pd_caps != NULL) {
-            //frame_free((seL4_Word)(cont->as->as_pd_caps));
+            frame_free((seL4_Word)(cont->as->as_pd_caps));
         }
         if (cont->as->as_pd_regs != NULL) {
-            //frame_free((seL4_Word)(cont->as->as_pd_regs));
+            frame_free((seL4_Word)(cont->as->as_pd_regs));
         }
     }
     cont->callback(cont->token, NULL);
@@ -142,25 +146,58 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
 void
 as_destroy(addrspace_t *as) {
     //TODO: clean up page table and also seL4's caps related to this as
-    (void)as;
     if(as == NULL){
         return;
     }
 
-//    //Free page directory
-//    if(as->as_pd_regs != NULL){
-//        //TODO actually free them
-//        for(int i = 0; i < N_PAGETABLES; i++){
-//            if(as->as_pd_regs[i] != NULL){
-//                frame_free((seL4_Word)as->as_pd_regs[i]);
-//            }
-//        }
-//    }
+    //Free page directory
+    if(as->as_pd_regs != NULL && as->as_pd_caps != NULL){
+        for(int i = 0; i < N_PAGETABLES; i++){
+            if(as->as_pd_regs[i] != NULL && as->as_pd_caps != NULL){
+                for(int j = 0; j < N_PAGETABLES_ENTRIES; j++){
+                        sos_page_free(as, PT_INDEX_TO_VPAGE(i,j));
+                }
+                frame_free((seL4_Word)as->as_pd_caps[i]);
+                frame_free((seL4_Word)as->as_pd_regs[i]);
+            }
+        }
+    }
+
+    frame_free((seL4_Word)as->as_pd_regs);
+    frame_free((seL4_Word)as->as_pd_caps);
 
     //Free heap
-    //Free stack
-    //Free regionhead
+    free(as->as_heap);
 
+    //Free stack
+    free(as->as_stack);
+
+    //Free regionhead
+    region_t* cur_r = as->as_rhead;
+    region_t* prev_r = cur_r;
+    while(cur_r != NULL){
+        cur_r = cur_r->next;
+        free(prev_r);
+        prev_r = cur_r;
+    }
+
+    //free sel4 page tabless
+    sel4_pt_node_t* cur_pt  = as->as_pt_head;
+    sel4_pt_node_t* prev_pt = cur_pt;
+    while(cur_pt != NULL){
+        cur_pt = cur_pt->next;
+        seL4_ARM_PageTable_Unmap(prev_pt->pt);
+        ut_free(prev_pt->pt_addr, seL4_PageTableBits);
+        cspace_delete_cap(cur_cspace, prev_pt->pt);
+        free(prev_pt);
+        prev_pt = cur_pt;
+    }
+
+    //free sel4 page dir
+    //this is deleted in proc?
+    //cspace_delete_cap(cur_cspace, as_sel4_pd);
+
+    free(as);
 }
 
 static int

@@ -32,4 +32,6 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
  */
 void swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token);
 
+void free_swapout_page(int slot);
+
 #endif /* _LIBOS_SWAP_H */

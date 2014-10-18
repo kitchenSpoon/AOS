@@ -330,7 +330,8 @@ proc_create_part2(void* token, addrspace_t *as){
     cont->proc->as = as;
 
     /* load the elf image */
-    elf_load(cont->proc->as, cont->elf_base, cont->proc, proc_create_part3, token);
+    //elf_load(cont->proc->as, cont->elf_base, cont->proc, proc_create_part3, token);
+    elf_load(cont->proc->as, cont->proc->name, cont->proc, proc_create_part3, token);
 }
 
 void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token) {

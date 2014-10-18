@@ -26,6 +26,8 @@
 #include <sys/debug.h>
 #include <sys/panic.h>
 
+extern fhandle_t mnt_point;
+
 static void load_segment_into_vspace2(void* token, int err);
 
 /*
@@ -83,8 +85,6 @@ load_segment_into_vspace3(void* token, int err){
     seL4_Word kdst;
     seL4_CPtr sos_cap;
 
-    //TODO: need to lock the page somehow or the page might be swapped out and
-    //sos_get_kvaddr won't work
     err = sos_get_kvaddr(cont->as, cont->dst, &kdst);
     if (err) {
         cont->callback(cont->token, err);
@@ -95,7 +95,6 @@ load_segment_into_vspace3(void* token, int err){
     /* Now copy our data into the destination vspace. */
     int nbytes = PAGESIZE - (cont->dst & PAGE_OFFSET_MASK);
     if (cont->pos < cont->file_size){
-        // This page might be swapped out before we do memcpy
         memcpy((void*)kdst, (void*)(cont->src), MIN(nbytes, cont->file_size - cont->pos));
     }
 
@@ -213,46 +212,64 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
 typedef struct {
     int i;
     addrspace_t* as;
-    char* elf_file;
-    int num_headers;
+    //char* elf_file;
+    char* file_name;
     process_t* proc;
+    filehandle_t *fh;
+    Elf32_Phdr_t *prog_hdrs;
+    int ph_num;     /* Program header number */
+    int ph_size;    /* Program header size */
     elf_load_cb_t callback;
     void* token;
 } elf_load_cont_t;
 
-static
-void elf_load_part2(void* token, int err){
+static void
+elf_load_end(void *token, int err) {
+    elf_load_cont_t *cont = (elf_load_cont_t*)token;
+
+    if (err) {
+        //TODO:
+
+        return;
+    }
+}
+
+static void
+elf_load_part2(void* token, int err){
     printf("elf_load... part 2\n");
 
     elf_load_cont_t* cont = (elf_load_cont_t*)token;
     if (err) {
-        printf("elf_load... part 2 err\n");
-        cont->callback(cont->token, err);
-        free(cont);
+        elf_load_end((void*)cont, err);
         return;
     }
 
-    if(cont->i < cont->num_headers) {
+    if(cont->i < cont->ph_num) {
         printf("cont->i = %d, cont->num_headers = %d\n", cont->i,cont->num_headers);
-        char *source_addr;
+        char *source_offset;
         unsigned long flags, file_size, segment_size, vaddr, rights;
 
         /* Skip non-loadable segments (such as debugging data). */
         if (elf_getProgramHeaderType(cont->elf_file, cont->i) != PT_LOAD){
-            //this simulates a continue
             cont->i++;
             elf_load_part2(token, 0);
             return;
         }
 
         /* Fetch information about this segment. */
-        source_addr = cont->elf_file + elf_getProgramHeaderOffset(cont->elf_file, cont->i);
-        file_size = elf_getProgramHeaderFileSize(cont->elf_file, cont->i);
-        segment_size = elf_getProgramHeaderMemorySize(cont->elf_file, cont->i);
-        vaddr = elf_getProgramHeaderVaddr(cont->elf_file, cont->i);
-        flags = elf_getProgramHeaderFlags(cont->elf_file, cont->i);
-        rights = get_sel4_rights_from_elf(flags) & seL4_AllRights;
+//        source_addr = cont->elf_file + elf_getProgramHeaderOffset(cont->elf_file, cont->i);
+//        file_size = elf_getProgramHeaderFileSize(cont->elf_file, cont->i);
+//        segment_size = elf_getProgramHeaderMemorySize(cont->elf_file, cont->i);
+//        vaddr = elf_getProgramHeaderVaddr(cont->elf_file, cont->i);
+//        flags = elf_getProgramHeaderFlags(cont->elf_file, cont->i);
+//        rights = get_sel4_rights_from_elf(flags) & seL4_AllRights;
 
+        source_offset   = cont->prog_hdrs[cont->i].p_offset;
+        file_size       = cont->prog_hdrs[cont->i].p_filesz;
+        segment_size    = cont->prog_hdrs[cont->i].p_memsz;
+        vaddr           = cont->prog_hdrs[cont->i].p_vaddr;
+        flags           = cont->prog_hdrs[cont->i].p_flags;
+        rights          = get_sel4_rights_from_elf(flags) & seL4_AllRights;
         /* Define the region */
         dprintf(1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
 
@@ -260,8 +277,7 @@ void elf_load_part2(void* token, int err){
         err = as_define_region(cont->as, vaddr, segment_size, rights);
         if (err) {
             printf("elf_load... part 2 err2 \n");
-            cont->callback(cont->token, err);
-            free(cont);
+            elf_load_end((void*)cont, err);
             return;
         }
         int i = cont->i;
@@ -269,13 +285,12 @@ void elf_load_part2(void* token, int err){
 
         printf("elf_load... part 2.3\n");
         /* Copy it across into the vspace. */
-        err = load_segment_into_vspace(cont->as, source_addr, segment_size, file_size,
+        err = load_segment_into_vspace(cont->as, source_offset, segment_size, file_size,
                                        vaddr, rights, cont->proc, elf_load_part2, (void*)cont);
         printf("elf_load... part 2.4, i = %d, ori i = %d\n\n\n\n",cont->i, i);
         if (err) {
             printf("elf_load... part 2 err load segment\n");
-            cont->callback(cont->token, err);
-            free(cont);
+            elf_load_end((void*)cont, err);
             return;
         }
 
@@ -283,23 +298,89 @@ void elf_load_part2(void* token, int err){
     }
 
     printf("elf_load... calling back up\n");
-    cont->callback(cont->token, 0);
-    free(cont);
+    elf_load_end((void*)cont, 0);
 }
 
-void elf_load(addrspace_t* as, char *elf_file, process_t* proc, elf_load_cb_t callback, void* token) {
+static void
+elf_load_read_progheaders_cb(uintptr_t token, enum nfs_stat status,
+                              fattr_t *fattr, int count, void* data) {
+    elf_load_cont_t* cont = (elf_load_cont_t*)token;
+
+    if (status != NFS_OK || count != sizeof(Elf32_Header_t)) {
+        elf_load_end((void*)cont, EFAULT);
+        return;
+    }
+
+    cont->prog_hdrs = malloc(cont->ph_num * cont->ph_size);
+    if (cont->prog_hdrs == NULL) {
+        elf_load_end((void*)cont, ENOMEM);
+        return;
+    }
+    memcpy(cont->prog_hdrs, data, cont->ph_num * cont->ph_size);
+
+    elf_load_part2((void*)cont, 0);
+}
+
+static void
+elf_load_read_elfheader_cb(uintptr_t token, enum nfs_stat status,
+                              fattr_t *fattr, int count, void* data) {
+    elf_load_cont_t* cont = (elf_load_cont_t*)token;
+
+    if (status != NFS_OK || count != sizeof(Elf32_Header_t)) {
+        elf_load_end((void*)cont, EFAULT);
+        return;
+    }
+
+    Elf32_Header_t *elf_hdr = (Elf32_Header_t*)data;
+    int ph_off      = elf_hdr.e_phoff;
+    cont->ph_num    = elf_hdr.ephnum;
+    cont->ph_size   = elf_hdr.e_phentsize;
+
+    int wanna_read = cont->ph_size * cont->ph_num;
+    enum rpc_stat status = nfs_read(cont->fh, ph_off,
+            wanna_read, elf_load_read_progheaders_cb, (uintptr_t)cont);
+    if (status != RPC_OK) {
+        elf_load_end((void*)cont, EFAULT);
+    }
+}
+
+static void
+elf_load_lookup_cb(uintptr_t token, enum nfs_stat status, fhandle_t* fh, fattr_t* fattr) {
+    elf_load_cont_t* cont = (elf_load_cont_t*)token;
+
+    if (status != NFS_OK) {
+        elf_load_end((void*)cont, EFAULT);
+        return;
+    }
+
+    cont->fh = malloc(sizeof(fhandle_t));
+    if(cont->fh == NULL){
+        elf_load_end((void*)cont, ENOMEM);
+        return;
+    }
+    memcpy(cont->fh->data, fh->data, sizeof(fh->data));
+
+    enum rpc_stat status = nfs_read(cont->fh, 0, sizeof(Elf32_Header_t),
+            elf_load_read_elfheader_cb, (uintptr_t)cont);
+    if (status != RPC_OK) {
+        elf_load_end((void*)cont, EFAULT);
+    }
+}
+
+void elf_load(addrspace_t* as, char *file_name, process_t* proc, elf_load_cb_t callback, void* token) {
 
     int num_headers;
 
     /* Ensure that the ELF file looks sane. */
-    if (elf_checkFile(elf_file)){
-        //callback(token, seL4_InvalidArgument);
-        callback(token, EINVAL);
-        return;
-    }
+    //TODO: check header instead
+//    if (elf_checkFile(elf_file)){
+//        //callback(token, seL4_InvalidArgument);
+//        callback(token, EINVAL);
+//        return;
+//    }
 
     printf("Starting elf_load...\n");
-    num_headers = elf_getNumProgramHeaders(elf_file);
+//    num_headers = elf_getNumProgramHeaders(elf_file);
 
     elf_load_cont_t* cont = malloc(sizeof(elf_load_cont_t));
     if (cont == NULL) {
@@ -309,11 +390,19 @@ void elf_load(addrspace_t* as, char *elf_file, process_t* proc, elf_load_cb_t ca
 
     cont->i = 0;
     cont->as = as;
-    cont->elf_file = elf_file;
-    cont->num_headers = num_headers;
+    //cont->elf_file = elf_file;
+    cont->file_name = file_name;
+    cont->num_headers = 0;
+    //cont->num_headers = num_headers;
     cont->proc = proc;
     cont->callback = callback;
     cont->token = token;
+    //TODO: init everything
 
-    elf_load_part2((void*)cont, 0);
+    enum rpc_stat status = nfs_lookup(&mnt_point, file_name, elf_load_lookup_cb, (uintptr_t)cont);
+    if (status != RPC_OK) {
+        elf_load_end((void*)cont, EFAULT);
+        return;
+    }
+
 }

@@ -85,7 +85,7 @@ con_init(struct vnode *con_vn) {
 static void
 read_handler(struct serial * serial , char c){
     printf("con_read handler called by %d\n", proc_get_id());
-    //set_cur_proc(console.cur_proc_pid);
+    //set_cur_proc(con_read_state.cur_proc_pid);
     //printf("read_handler called, c = %d\n", (int)c);
     if(console.buf_size < MAX_IO_BUF){
         console.buf[console.end++] = c;
@@ -94,6 +94,7 @@ read_handler(struct serial * serial , char c){
     }
 
     if(con_read_state.is_blocked && c == '\n'){
+        set_cur_proc(con_read_state.cur_proc_pid);
         struct con_read_state *s = &con_read_state;
         con_read(s->file, s->buf, s->nbytes, s->offset, s->callback, s->token);
     }
@@ -259,7 +260,6 @@ con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
     if(console.buf_size > 0){
         size_t len = 0;
         printf("console start = %d, nbytes = %u, console.buf_size = %u \n",console.start, nbytes, console.buf_size);
-        set_cur_proc(con_read_state.cur_proc_pid);
 
         for(size_t cur = console.start; len < nbytes && len < console.buf_size; cur++, cur%=MAX_IO_BUF){
             printf("\n%c\n",console.buf[cur]);

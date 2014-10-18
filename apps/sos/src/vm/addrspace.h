@@ -10,6 +10,7 @@
 #define INDEX_2_MASK        (0x003ff000)
 #define PT_L1_INDEX(a)      (((a) & INDEX_1_MASK) >> 22)
 #define PT_L2_INDEX(a)      (((a) & INDEX_2_MASK) >> 12)
+#define PT_INDEX_TO_VPAGE(id1, id2)   (((id1) << 22) | ((id2) << 12))
 
 #define PTE_IN_USE_BIT          (1)
 #define PTE_SWAPPED             (1<<1)
@@ -33,6 +34,7 @@ struct region {
 typedef struct sel4_pt_node sel4_pt_node_t;
 struct sel4_pt_node {
     seL4_ARM_PageTable pt;
+    seL4_Word pt_addr;
     sel4_pt_node_t *next;
 };
 

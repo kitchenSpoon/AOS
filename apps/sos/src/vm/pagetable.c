@@ -7,6 +7,7 @@
 #include <ut_manager/ut.h>
 
 #include "vm/vm.h"
+#include "vm/swap.h"
 #include "vm/addrspace.h"
 #include "vm/mapping.h"
 #include "tool/utility.h"
@@ -19,9 +20,10 @@
 #define PAGETABLE_PAGES     (PAGE_SIZE >> 2)
 
 static void
-_insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap) {
+_insert_pt(addrspace_t *as, seL4_ARM_PageTable pt_cap, seL4_Word pt_addr) {
     sel4_pt_node_t* node = malloc(sizeof(sel4_pt_node_t));
     node->pt = pt_cap;
+    node->pt_addr = pt_addr;
     node->next = as->as_pt_head;
     as->as_pt_head = node;
 }
@@ -57,7 +59,7 @@ _map_page_table(addrspace_t *as, seL4_ARM_PageDirectory pd, seL4_Word vpage){
         return EFAULT;
     }
 
-    _insert_pt(as, pt_cap);
+    _insert_pt(as, pt_cap, pt_addr);
     return 0;
 }
 
@@ -306,18 +308,20 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
         return;
     }
 
-    int err;
-    err = sos_page_unmap(as, vaddr);
-    if (err) {
-        return;
-    }
+    if(!(as->as_pd_regs[x][y] & PTE_IN_USE_BIT)) return;
 
     if (as->as_pd_regs[x][y] & PTE_SWAPPED) {
-        //TODO: free the slot in the swap file
+        free_swapout_page((as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET);
     } else {
+        int err;
+        err = sos_page_unmap(as, vaddr);
+        if (err) {
+            return;
+        }
+
         frame_free(as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
-        as->as_pd_regs[x][y] = 0;
     }
+    as->as_pd_regs[x][y] = 0;
 }
 
 

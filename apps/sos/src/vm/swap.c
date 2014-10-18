@@ -57,6 +57,10 @@ swap_find_free_slot(void){
     return -1;
 }
 
+void free_swapout_page(int slot){
+    _unset_slot(slot);
+}
+
 typedef void (*swap_init_cb_t)(void *token, int err);
 typedef struct {
     swap_init_cb_t callback;

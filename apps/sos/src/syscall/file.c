@@ -254,9 +254,10 @@ filetable_destroy(struct filetable *ft)
 
     assert(ft != NULL);
 
-    for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
+    //TODO: hack because filetable_init is not opening stdout & stderr properly
+    for (fd = 3; fd < PROCESS_MAX_FILES; fd++) {
         struct openfile *file = ft->ft_openfiles[fd];
-        if (file) {
+        if (file != NULL) {
             result = file_doclose(file, file->of_accmode);
             assert(result == 0);
         }

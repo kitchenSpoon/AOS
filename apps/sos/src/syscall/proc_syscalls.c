@@ -92,19 +92,15 @@ typedef struct{
 } serv_proc_destroy_cont_t;
 
 void serv_proc_destroy(pid_t pid, seL4_CPtr reply_cap){
-    //serv_proc_destroy_cont_t* cont = malloc(sizeof(serv_proc_destroy_cont_t));
-    /*if(cont == NULL){
-        printf("serv_proc_destroy, no memory\n");
-        return;
-    }*/
     int err = proc_destroy(pid);
 
-    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply;
-    reply = seL4_MessageInfo_new(err, 0, 0, 0);
-    //seL4_SetMR(0, 0);
+    reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)err);
     seL4_Send(reply_cap, reply);
     cspace_free_slot(cur_cspace, reply_cap);
+
+    set_cur_proc(PROC_NULL);
     return;
 }
 

@@ -145,6 +145,7 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
 
 void
 as_destroy(addrspace_t *as) {
+    printf("as destroy called\n");
     if(as == NULL){
         return;
     }
@@ -153,7 +154,7 @@ as_destroy(addrspace_t *as) {
     assert(as->as_pd_regs != NULL && as->as_pd_caps != NULL);
     for(int i = 0; i < N_PAGETABLES; i++){
         if (as->as_pd_regs[i] == NULL) {
-            assert(as->as_pd_caps == NULL);
+            assert(as->as_pd_caps[i] == NULL);
             continue;
         }
 

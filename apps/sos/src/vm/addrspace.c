@@ -145,6 +145,7 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
 
 void
 as_destroy(addrspace_t *as) {
+    printf("as destroy called\n");
     if(as == NULL){
         return;
     }

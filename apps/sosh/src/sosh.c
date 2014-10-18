@@ -170,6 +170,10 @@ static int exec(int argc, char **argv) {
         in = open("console", O_RDONLY);
         assert(in >= 0);
     }
+    //while(1){
+    //    printf("this is sosh!\n");
+    //    sleep(6);
+    //}
     return 0;
 }
 
@@ -606,6 +610,7 @@ int main(void) {
         while (!found && !done) {
             /* Make sure to flush so anything is visible while waiting for user input */
             fflush(stdout);
+            printf("sosh tries to read\n");
             r = read(in, bp, BUF_SIZ - 1 + buf - bp);
             if (r < 0) {
                 done = 1;

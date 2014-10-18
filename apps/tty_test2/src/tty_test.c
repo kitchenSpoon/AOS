@@ -113,7 +113,7 @@ int main(void){
     ttyout_init();
 
     do {
-        printf("task:\tHello world, I'm\ttty_test!\n");
+        printf("task:\tHello world, I'm\ttty_test2!\n");
         //pt_test();
         //readonly_test();
         //stack_overflow_test();

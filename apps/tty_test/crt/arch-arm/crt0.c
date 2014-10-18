@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include <syscall_stubs_sel4.h>
+#include <sos.h>
 
 MUSLC_SYSCALL_TABLE;
 
@@ -19,6 +20,7 @@ void exit(int code);
 void __attribute__((externally_visible)) _start(void) {
     SET_MUSLC_SYSCALL_TABLE;
     int ret = main();
+    sos_process_delete(sos_my_id());
     exit(ret);
     /* should not get here */
     while(1);

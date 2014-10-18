@@ -92,13 +92,16 @@ typedef struct{
 } serv_proc_destroy_cont_t;
 
 void serv_proc_destroy(pid_t pid, seL4_CPtr reply_cap){
+    pid_t cur_pid = proc_get_id();
     int err = proc_destroy(pid);
 
-    seL4_MessageInfo_t reply;
-    reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)err);
-    seL4_Send(reply_cap, reply);
-    cspace_free_slot(cur_cspace, reply_cap);
+    if (pid != cur_pid) {
+        seL4_MessageInfo_t reply;
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)err);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+    }
 
     set_cur_proc(PROC_NULL);
     return;
@@ -134,6 +137,7 @@ serv_proc_wait_cb(void *token, pid_t pid) {
     cspace_free_slot(cur_cspace, cont->reply_cap);
     free(cont);
 
+    printf("serv_proc_wait_cb ended\n");
     // we don't want to clear cur_proc because the caller is still in process
     // of destroying itself
     //set_cur_proc(PROC_NULL);

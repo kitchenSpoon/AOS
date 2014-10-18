@@ -252,7 +252,13 @@ proc_create_part3(void* token, int err){
 
     /* Initialise filetable for this process */
     printf("sos_process_create_part3, filetable initing...\n");
-    err = filetable_init(NULL, NULL, NULL, cont->proc);
+    cont->proc->p_filetable = malloc(sizeof(struct filetable));
+    if (cont->proc->p_filetable == NULL) {
+        printf("sos_process_create_part3, No memory for filetable\n");
+        proc_create_end((void*)cont, ENOMEM);
+        return;
+    }
+    err = filetable_init(cont->proc->p_filetable, NULL, NULL, NULL);
     if(err){
         printf("sos_process_create_part3, Unable to initialise filetable for user app\n");
         proc_create_end((void*)cont, err);

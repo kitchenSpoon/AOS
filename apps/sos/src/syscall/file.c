@@ -170,36 +170,27 @@ file_close(int fd)
  * pretty straightforward -- allocate the space, initialize to NULL.
  */
 int
-filetable_init(const char *inpath, const char *outpath,
-               const char *errpath, process_t* proc) {
+filetable_init(struct filetable *filetable, const char *inpath, const char *outpath, const char *errpath) {
     printf("in file table init\n");
     /* the filenames come from the kernel; assume reasonable length */
     int fd;
 
-    /* catch memory leaks, repeated calls */
-    if(proc == NULL){
-        printf("filetable init, proc is NULL \n");
+    if (filetable == NULL) {
         return EINVAL;
-    }
-
-    printf("filetable malloc \n");
-    proc->p_filetable = malloc(sizeof(struct filetable));
-    if (proc->p_filetable == NULL) {
-        return ENOMEM;
     }
 
     /* NULL-out the table */
     printf("filetable nullout something \n");
     for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
-        proc->p_filetable->ft_openfiles[fd] = NULL;
+        filetable->ft_openfiles[fd] = NULL;
     }
 
     /* Initialise stdin, stdout & stderr */
     //TODO: Change these numbers to use constants
     printf("filetable open something \n");
-    proc->p_filetable->ft_openfiles[0] = (struct openfile *)1;
-    proc->p_filetable->ft_openfiles[1] = (struct openfile *)1;
-    proc->p_filetable->ft_openfiles[2] = (struct openfile *)1;
+    filetable->ft_openfiles[0] = (struct openfile *)1;
+    filetable->ft_openfiles[1] = (struct openfile *)1;
+    filetable->ft_openfiles[2] = (struct openfile *)1;
 
     printf("filetable done \n");
 

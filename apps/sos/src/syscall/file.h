@@ -42,7 +42,7 @@ struct filetable {
 };
 
 /* these all have an implicit arg of the curthread's filetable */
-int filetable_init(const char *inpath, const char *outpath, const char *errpath, process_t* proc);
+int filetable_init(struct filetable *filetable, const char *inpath, const char *outpath, const char *errpath);
 void filetable_destroy(struct filetable *ft);
 int filetable_findfile(int fd, struct openfile **file);
 int filetable_placefile(struct openfile *file, int *fd);

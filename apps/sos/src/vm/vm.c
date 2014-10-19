@@ -40,6 +40,7 @@ sos_VMFaultHandler_reply(void* token, int err){
 
     /* Flush the i-cache if this is an instruction fault */
     //if (state->is_code) {
+    if (!err) {
         seL4_Word vpage = PAGE_ALIGN(state->vaddr);
         int x = PT_L1_INDEX(vpage);
         int y = PT_L2_INDEX(vpage);
@@ -50,6 +51,7 @@ sos_VMFaultHandler_reply(void* token, int err){
         err = frame_get_cap(kvaddr, &kframe_cap);
         assert(!err); // This kvaddr is ready to use, there should be no error
         seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+    }
     //}
     /* If there is an err here, it is not the process's fault
      * It is either the kernel running out of memory or swapping doesn't work
@@ -71,7 +73,7 @@ static bool
 _check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t **reg_ret) {
     if (fault_addr == 0) {
         /* Derefenrecing NULL? Segfault */
-        printf("App tried to derefence NULL, kill it\n");
+        printf("App tried to derefence NULL\n");
         return true;
     }
 
@@ -177,6 +179,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
     /* Is this a segfault? */
     if (_check_segfault(as, fault_addr, fsr, &reg)) {
         printf("vmf: segfault\n");
+        proc_destroy(proc_get_id());
         set_cur_proc(PROC_NULL);
         cspace_free_slot(cur_cspace, reply_cap);
         return;
@@ -218,6 +221,12 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
             }
             return;
         } else {
+            if (sos_page_is_locked(as, fault_addr)) {
+                printf("vmf page is locked\n");
+                sos_VMFaultHandler_reply((void*)cont, EFAULT);
+                return;
+            }
+
             printf("vmf second chance mapping page back in\n");
             err = _set_page_reference(cont);
             sos_VMFaultHandler_reply((void*)cont, err);
@@ -227,7 +236,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
         /* This page has never been mapped, so do that and return */
         printf("vmf tries to map a page\n");
         inc_cur_proc_size();
-        err = sos_page_map(as, fault_addr, reg->rights,sos_VMFaultHandler_reply, (void*)cont, false);
+        err = sos_page_map(as, fault_addr, reg->rights, sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
             dec_cur_proc_size();
             sos_VMFaultHandler_reply((void*)cont, err);

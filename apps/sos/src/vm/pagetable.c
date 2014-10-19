@@ -355,6 +355,25 @@ sos_page_is_inuse(addrspace_t *as, seL4_Word vaddr) {
     return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_IN_USE_BIT));
 }
 
+bool
+sos_page_is_locked(addrspace_t *as, seL4_Word vaddr) {
+    printf("sos_page_is_locked called, vaddr = 0x%08x\n", vaddr);
+    if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
+        return false;
+    }
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
+    int x = PT_L1_INDEX(vpage);
+    int y = PT_L2_INDEX(vpage);
+
+    if (as->as_pd_regs[x] != NULL) {
+        seL4_Word kvaddr = as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
+        bool is_locked;
+        frame_is_locked(kvaddr, &is_locked);
+        return is_locked;
+    }
+    return false;
+}
+
 int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap) {
     *kframe_cap = 0;
     if (as == NULL) {

@@ -126,7 +126,7 @@ static void
 swap_in_end(void* token, int err){
     printf("swap in end entered\n");
     swap_in_cont_t *state = (swap_in_cont_t*)token;
-    printf("swap_slot = %d\n", state->swap_slot);
+    printf("swap_slot = %d, pid = %d\n", state->swap_slot, state->pid);
 
     if(err){
         if (state->kvaddr) {
@@ -256,6 +256,7 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
     swap_cont->bytes_read = 0;
     swap_cont->pid        = proc_get_id();
 
+    printf("swap_in: swap_slot = %d, pid = %d\n", swap_slot, swap_cont->pid);
     int err;
     err = sos_page_map(as, vpage, rights, swap_in_page_map_cb, (void*)swap_cont, false);
     if (err) {
@@ -279,7 +280,7 @@ typedef struct {
 
 static void
 swap_out_end(swap_out_cont_t *cont, int err) {
-    printf("swap out end: free_slot = %d\n", cont->free_slot);
+    printf("swap out end: free_slot = %d, pid = %d\n", cont->free_slot, cont->pid);
     if (err) {
         printf("swap_out_end err\n");
         _unset_slot(cont->free_slot);
@@ -351,7 +352,7 @@ swap_out_3(swap_out_cont_t *cont) {
     assert(cont != NULL); //Kernel code is buggy if this happens
 
     int free_slot = swap_find_free_slot();
-    printf("swap_out free slot = %d, bits = 0x%08x\n", free_slot, free_slots[0]);
+    printf("swap_out free slot = %d, pid = %d, kvaddr = 0x%08x \n", free_slot, cont->pid, cont->kvaddr);
     if(free_slot < 0){
         swap_out_end(cont, EFAULT);
         return;
@@ -390,8 +391,6 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
 
     seL4_Word vaddr = frame_get_vaddr(kvaddr);
     assert(vaddr != 0);
-    printf("swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x\n",kvaddr,vaddr);
-
     /* Create the continuation here to be used in subsequent functions */
     swap_out_cont_t *cont = malloc(sizeof(swap_out_cont_t));
     if (cont == NULL) {
@@ -403,6 +402,8 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     cont->kvaddr    = kvaddr;
     cont->written   = 0;
     cont->pid       = proc_get_id();
+
+    printf("swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x, pid = %d\n",kvaddr,vaddr, cont->pid);
 
     frame_lock_frame(kvaddr);
 

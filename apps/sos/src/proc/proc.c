@@ -112,7 +112,7 @@ void proc_list_init(void){
 
 void inc_proc_size_proc(process_t* proc){
     if(proc != NULL){
-        printf("incr_proc_size_proc pid = %d\n",proc->pid);
+        //printf("incr_proc_size_proc pid = %d\n",proc->pid);
         proc->size++;
     } else {
         printf("incr_proc_size_proc NULL\n");
@@ -120,7 +120,7 @@ void inc_proc_size_proc(process_t* proc){
 }
 
 void inc_proc_size(int pid){
-    printf("incr_proc_size pid = %d\n",pid);
+    //printf("incr_proc_size pid = %d\n",pid);
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] != NULL && processes[i]->pid == pid){
             processes[i]->size++;
@@ -130,9 +130,9 @@ void inc_proc_size(int pid){
 }
 
 void inc_cur_proc_size(void){
-    printf("inc_cur_proc_size\n");
+    //printf("inc_cur_proc_size\n");
     if(_cur_proc != NULL){
-        printf("inc_cur_proc_size sucess\n");
+        //printf("inc_cur_proc_size sucess\n");
         inc_proc_size(_cur_proc->pid);
     }
 }
@@ -147,9 +147,9 @@ void dec_proc_size(int pid){
 }
 
 void dec_cur_proc_size(void){
-    printf("dec_cur_proc_size\n");
+    //printf("dec_cur_proc_size\n");
     if(_cur_proc != NULL){
-        printf("dec_cur_proc_size sucess\n");
+        //printf("dec_cur_proc_size sucess\n");
         dec_proc_size(_cur_proc->pid);
     }
 }

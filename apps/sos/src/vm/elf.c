@@ -197,51 +197,6 @@ static int load_segment_into_vspace(addrspace_t *as,
 
     return 0;
 }
-//static int load_segment_into_vspace(addrspace_t *as, char *src,
-//                                    unsigned long segment_size,
-//                                    unsigned long file_size, unsigned long dst,
-//                                    unsigned long permissions) {
-//    assert(file_size <= segment_size);
-//    unsigned long pos;
-//
-//    /* We work a page at a time in the destination vspace. */
-//    pos = 0;
-//    while(pos < segment_size) {
-//        seL4_Word vpage;
-//        seL4_Word kdst;
-//        seL4_CPtr sos_cap;
-//        int nbytes;
-//        int err;
-//
-//        vpage = PAGE_ALIGN(dst);
-//        err = sos_page_map(as, vpage, permissions);
-//        if (err) {
-//            return err;
-//        }
-//        err = sos_get_kvaddr(as, dst, &kdst);
-//        if (err) {
-//            return err;
-//        }
-//
-//        /* Now copy our data into the destination vspace. */
-//        nbytes = PAGESIZE - (dst & PAGE_OFFSET_MASK);
-//        if (pos < file_size){
-//            memcpy((void*)kdst, (void*)src, MIN(nbytes, file_size - pos));
-//        }
-//
-//        err = sos_get_kframe_cap(as, vpage, &sos_cap);
-//        if (err) {
-//            return err;
-//        }
-//        /* Not observable to I-cache yet so flush the frame */
-//        seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
-//
-//        pos += nbytes;
-//        dst += nbytes;
-//        src += nbytes;
-//    }
-//    return 0;
-//}
 
 
 typedef struct {
@@ -296,39 +251,28 @@ elf_load_part2(void* token, int err){
         }
 
         /* Fetch information about this segment. */
-//        source_addr = cont->elf_file + elf_getProgramHeaderOffset(cont->elf_file, cont->i);
-//        file_size = elf_getProgramHeaderFileSize(cont->elf_file, cont->i);
-//        segment_size = elf_getProgramHeaderMemorySize(cont->elf_file, cont->i);
-//        vaddr = elf_getProgramHeaderVaddr(cont->elf_file, cont->i);
-//        flags = elf_getProgramHeaderFlags(cont->elf_file, cont->i);
-//        rights = get_sel4_rights_from_elf(flags) & seL4_AllRights;
-
         file_offset     = cont->prog_hdrs[cont->i].p_offset;
         file_size       = cont->prog_hdrs[cont->i].p_filesz;
         segment_size    = cont->prog_hdrs[cont->i].p_memsz;
         vaddr           = cont->prog_hdrs[cont->i].p_vaddr;
         flags           = cont->prog_hdrs[cont->i].p_flags;
         rights          = get_sel4_rights_from_elf(flags) & seL4_AllRights;
+
         /* Define the region */
         dprintf(1, " * Loading segment %08x-->%08x\n", (int)vaddr, (int)(vaddr + segment_size));
 
-        printf("elf_load... part 2.2\n");
         err = as_define_region(cont->as, vaddr, segment_size, rights);
         if (err) {
-            printf("elf_load... part 2 err2 \n");
             elf_load_end((void*)cont, err);
             return;
         }
         int i = cont->i;
         cont->i++;
 
-        printf("elf_load... part 2.3\n");
         /* Copy it across into the vspace. */
         err = load_segment_into_vspace(cont->as, file_offset, segment_size, file_size,
                                        vaddr, rights, cont->proc, cont->fh, elf_load_part2, (void*)cont);
-        printf("elf_load... part 2.4, i = %d, ori i = %d\n\n\n\n",cont->i, i);
         if (err) {
-            printf("elf_load... part 2 err load segment\n");
             elf_load_end((void*)cont, err);
             return;
         }
@@ -336,7 +280,6 @@ elf_load_part2(void* token, int err){
         return;
     }
 
-    printf("elf_load... calling back up\n");
     elf_load_end((void*)cont, 0);
 }
 
@@ -376,6 +319,11 @@ elf_load_read_elfheader_cb(uintptr_t token, enum nfs_stat status,
     }
 
     struct Elf32_Header *elf_hdr = (struct Elf32_Header*)data;
+    if (elf_checkFile(elf_hdr)) {
+        printf("elf_load_read_elfheader_cb: elf_check failed\n");
+        elf_load_end((void*)cont, EINVAL);
+        return;
+    }
     int ph_off      = elf_hdr->e_phoff;
     cont->ph_num    = elf_hdr->e_phnum;
     cont->ph_size   = elf_hdr->e_phentsize;
@@ -384,8 +332,6 @@ elf_load_read_elfheader_cb(uintptr_t token, enum nfs_stat status,
     printf("ph_num = %d\n", cont->ph_num);
     printf("ph_size = %d\n", cont->ph_size);
     printf("elf_entry = %d\n", cont->elf_entry);
-    //TODO: tmp sanity check
-    assert(cont->ph_size == sizeof(struct Elf32_Phdr));
 
     int wanna_read = cont->ph_size * cont->ph_num;
     enum rpc_stat rpc_status = nfs_read(cont->fh, ph_off,
@@ -425,16 +371,7 @@ elf_load_lookup_cb(uintptr_t token, enum nfs_stat status, fhandle_t* fh, fattr_t
 
 void elf_load(addrspace_t* as, char *file_name, process_t* proc, elf_load_cb_t callback, void* token) {
 
-    /* Ensure that the ELF file looks sane. */
-    //TODO: check header instead
-//    if (elf_checkFile(elf_file)){
-//        //callback(token, seL4_InvalidArgument);
-//        callback(token, EINVAL);
-//        return;
-//    }
-
     printf("Starting elf_load...\n");
-//    num_headers = elf_getNumProgramHeaders(elf_file);
 
     elf_load_cont_t* cont = malloc(sizeof(elf_load_cont_t));
     if (cont == NULL) {
@@ -442,20 +379,17 @@ void elf_load(addrspace_t* as, char *file_name, process_t* proc, elf_load_cb_t c
         return;
     }
 
-    printf("elf_load 1\n");
-    cont->i = 0;
-    cont->as = as;
-    //cont->elf_file = elf_file;
-    cont->file_name = file_name;
-    cont->proc = proc;
-    //cont->num_headers = num_headers;
-    cont->fh = NULL;
-    cont->elf_entry = 0;
-    cont->prog_hdrs = NULL;
-    cont->ph_num = 0;
-    cont->ph_size = 0;
-    cont->callback = callback;
-    cont->token = token;
+    cont->i             = 0;
+    cont->as            = as;
+    cont->file_name     = file_name;
+    cont->proc          = proc;
+    cont->fh            = NULL;
+    cont->elf_entry     = 0;
+    cont->prog_hdrs     = NULL;
+    cont->ph_num        = 0;
+    cont->ph_size       = 0;
+    cont->callback      = callback;
+    cont->token         = token;
 
     enum rpc_stat status = nfs_lookup(&mnt_point, file_name, elf_load_lookup_cb, (uintptr_t)cont);
     if (status != RPC_OK) {

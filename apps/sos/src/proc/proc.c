@@ -194,7 +194,6 @@ cspace_t* proc_getcroot(void) {
 }
 
 typedef struct{
-    char* elf_base;
     seL4_Word elf_entry;
     process_t* proc;
     proc_create_cb_t callback;
@@ -333,7 +332,6 @@ proc_create_part2(void* token, addrspace_t *as){
     cont->proc->as = as;
 
     /* load the elf image */
-    //elf_load(cont->proc->as, cont->elf_base, cont->proc, proc_create_part3, token);
     elf_load(cont->proc->as, cont->proc->name, cont->proc, proc_create_part3, token);
 }
 
@@ -345,7 +343,6 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     seL4_CPtr user_ep_cap;
 
     /* These required for loading program sections */
-    char* elf_base;
     unsigned long elf_size;
 
     printf("creating process cont\n");
@@ -354,7 +351,6 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
         callback(token, ENOMEM, -1);
         return;
     }
-    cont->elf_base  = NULL;
     cont->elf_entry = 0;
     cont->proc      = NULL;
     cont->callback  = callback;
@@ -488,16 +484,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
         return;
     }
 
-    /* parse the cpio image */
     printf("\nStarting \"%s\"...\n", path);
-    //TODO: remove this
-    elf_base = cpio_get_file(_cpio_archive, path, &elf_size);
-    if(!elf_base){
-        printf("sos_process_create, Unable to locate cpio header\n");
-        proc_create_end((void*)cont, EFAULT);
-        return;
-    }
-    cont->elf_base = elf_base;
 
     /* initialise address space */
     as_create(new_proc->vroot, proc_create_part2, (void*)cont);

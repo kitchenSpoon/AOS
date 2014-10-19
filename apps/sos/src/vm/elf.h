@@ -23,7 +23,7 @@
  *    elf_load - load an ELF user program executable into the current
  *               address space. (i.e. the only one address space )
  */
-typedef void (*elf_load_cb_t)(void *token, int err);
+typedef void (*elf_load_cb_t)(void *token, int err, seL4_Word elf_entry);
 void elf_load(addrspace_t *as, char* elf_file, process_t* proc, elf_load_cb_t callback, void* token);
 
 #endif /* _LIBOS_ELF_H_ */

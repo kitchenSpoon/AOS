@@ -195,6 +195,7 @@ cspace_t* proc_getcroot(void) {
 
 typedef struct{
     char* elf_base;
+    seL4_Word elf_entry;
     process_t* proc;
     proc_create_cb_t callback;
     void* token;
@@ -253,15 +254,15 @@ proc_create_part4(void* token, int err) {
     seL4_UserContext context;
 
     memset(&context, 0, sizeof(context));
-    context.pc = elf_getEntryPoint(cont->elf_base);
+    context.pc = cont->elf_entry;
     context.sp = PROCESS_STACK_TOP;
     seL4_TCB_WriteRegisters(cont->proc->tcb_cap, 1, 0, 2, &context);
 
-    proc_create_end(token, 0);
+    proc_create_end((void*)cont, 0);
 }
 
 static void
-proc_create_part3(void* token, int err){
+proc_create_part3(void* token, int err, seL4_Word elf_entry){
     printf("start process create part3\n");
     process_create_cont_t* cont = (process_create_cont_t*)token;
 
@@ -270,6 +271,8 @@ proc_create_part3(void* token, int err){
         proc_create_end(token, err);
         return;
     }
+
+    cont->elf_entry = elf_entry;
 
     /* set up the stack & the heap */
     as_define_stack(cont->proc->as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
@@ -352,6 +355,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
         return;
     }
     cont->elf_base  = NULL;
+    cont->elf_entry = 0;
     cont->proc      = NULL;
     cont->callback  = callback;
     cont->token     = token;
@@ -486,6 +490,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
 
     /* parse the cpio image */
     printf("\nStarting \"%s\"...\n", path);
+    //TODO: remove this
     elf_base = cpio_get_file(_cpio_archive, path, &elf_size);
     if(!elf_base){
         printf("sos_process_create, Unable to locate cpio header\n");

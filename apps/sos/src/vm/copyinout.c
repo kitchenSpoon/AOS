@@ -78,7 +78,7 @@ void copyin_do_copy(void* token, int err){
         }
 
         /* Copy maximum one page */
-        cpy_sz = PAGE_SIZE - (ksrc & PAGE_OFFSET_MASK);
+        cpy_sz = PAGE_SIZE - PAGE_OFFSET(ksrc);
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
         printf("cpy_sz = %u\n", cpy_sz);
 
@@ -235,7 +235,7 @@ void copyout_do_copy(void* token, int err){
         }
 
         /* Copy the data over */
-        cpy_sz = PAGE_SIZE - (kdst & PAGE_OFFSET_MASK);
+        cpy_sz = PAGE_SIZE - PAGE_OFFSET(kdst);
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
         printf("cpy_sz = %u\n", cpy_sz);
         memcpy((void*)kdst, (void*)cont->kbuf, cpy_sz);

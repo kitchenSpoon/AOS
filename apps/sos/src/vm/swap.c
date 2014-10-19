@@ -25,8 +25,6 @@
 #define NUM_CHUNKS (1<<10)
 #define NUM_BITS (32)
 
-#define NFS_SEND_SIZE   1024 //This needs to be less than UDP package size
-
 uint32_t free_slots[NUM_CHUNKS];
 
 fhandle_t *swap_fh;

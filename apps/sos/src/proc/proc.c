@@ -14,9 +14,14 @@
 #include "vm/elf.h"
 #include "dev/clock.h"
 
+#define MAX_PID (1<<27) //max badge value is 0xfffffff, do not go above 27
+#define RANGE_PER_SLOT ((int)MAX_PID/MAX_PROC)
+
 extern char _cpio_archive[];
 
 static process_t *_cur_proc = NULL;
+
+static int next_free_pid[MAX_PROC];
 static proc_wait_node_t _wait_queue = NULL;
 
 struct proc_wait_node {
@@ -102,11 +107,15 @@ _free_proc_data(process_t *proc) {
     }
 }
 
-void mod_free_pid(int pid, int slot){
-    //if(pid >= (MAX_PID/MAX_PROC)*(slot+1)){
-    //    pid = (MAX_PID/MAX_PROC)*slot;
-    //}
-    pid = (pid % (RANGE_PER_SLOT)) + (RANGE_PER_SLOT*slot);
+static pid_t
+_next_free_pid(pid_t pid, int slot){
+    pid = ((pid+1) % RANGE_PER_SLOT) + (RANGE_PER_SLOT*slot);
+    return pid;
+}
+
+static void
+_free_proc_slot(pid_t pid){
+    processes[pid/RANGE_PER_SLOT] = NULL;
 }
 
 void proc_list_init(void){
@@ -133,20 +142,15 @@ process_t *proc_getproc(pid_t pid) {
 
 void inc_proc_size_proc(process_t* proc){
     if(proc != NULL){
-        //printf("incr_proc_size_proc pid = %d\n",proc->pid);
         proc->size++;
-    } else {
-        printf("incr_proc_size_proc NULL\n");
     }
 }
 
-void inc_proc_size(int pid){
+void inc_proc_size(pid_t pid){
     //printf("incr_proc_size pid = %d\n",pid);
-    for(int i = 0; i < MAX_PROC; i++){
-        if(processes[i] != NULL && processes[i]->pid == pid){
-            processes[i]->size++;
-            return;
-        }
+    process_t *proc = proc_getproc(pid);
+    if (proc != NULL) {
+        proc->size++;
     }
 }
 
@@ -154,62 +158,28 @@ void dec_proc_size_proc(process_t* proc){
     if(proc != NULL){
         printf("decr_proc_size_proc pid = %d\n",proc->pid);
         proc->size--;
-    } else {
-        printf("dec_proc_size_proc NULL\n");
     }
 }
 
-void dec_proc_size(int pid){
-    for(int i = 0; i < MAX_PROC; i++){
-        if(processes[i] != NULL && processes[i]->pid == pid){
-            processes[i]->size--;
-            return;
-        }
+void dec_proc_size(pid_t pid){
+    process_t *proc = proc_getproc(pid);
+    if (proc != NULL) {
+        proc->size--;
     }
 }
 
 bool is_proc_alive(pid_t pid) {
     printf("is proc alive? pid = %d\n", pid);
-    if (pid == PROC_NULL) {
-        return false;
-    }
-
-    uint32_t slot = pid/RANGE_PER_SLOT;
-    if(processes[slot] != NULL && processes[slot]->pid == pid){
-        return true;
-    } else {
-        return false;
-    }
-}
-
-void free_proc_slot(pid_t pid){
-    processes[pid/RANGE_PER_SLOT] = NULL;
+    process_t *proc = proc_getproc(pid);
+    return (proc != NULL);
 }
 
 void set_cur_proc(pid_t pid) {
     printf("set_cur_proc pid = %d\n", pid);
-    if (pid == PROC_NULL) {
-        _cur_proc = NULL;
-        return;
-    }
-
     _cur_proc = proc_getproc(pid);
     if(_cur_proc == NULL){
         printf("cur proc is NULL = %d\n",pid);
     }
-    //for(int i = 0; i < MAX_PROC; i++){
-    //    //if(processes[i] != NULL) printf("searching for cur_proc, we are at proc = %u\n",processes[i]->pid);
-    //    if(processes[i] != NULL && processes[i]->pid == pid){
-    //        _cur_proc = processes[i];
-    //        printf("set_cur_proc_success\n");
-    //        return;
-    //    }
-    //}
-
-    ///* Do this so that we can catch bug quickly */
-    //printf("set_cur_proc: Could not find process with pid in process list\n");
-    //printf("              Setting cur_proc to NULL\n");
-    //_cur_proc = NULL;
 }
 
 process_t* cur_proc(void) {
@@ -244,7 +214,7 @@ proc_create_end(void* token, int err){
 
     if (err) {
         if (cont->proc != NULL) {
-            free_proc_slot(cont->proc->pid);
+            _free_proc_slot(cont->proc->pid);
             _free_proc_data(cont->proc);
             free(cont->proc);
         }
@@ -253,6 +223,7 @@ proc_create_end(void* token, int err){
         return;
     }
 
+    cont->proc->p_initialised = true;
     cont->callback(cont->token, err, cont->proc->pid);
     free(cont);
 }
@@ -376,7 +347,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     cont->callback  = callback;
     cont->token     = token;
 
-    printf("creating process\n"); // somewhere before this we have to add \0 add the end or get the length of the name
+    printf("creating process\n");
     process_t* new_proc = malloc(sizeof(process_t));
     if(new_proc == NULL){
         printf("No memory to create new process\n");
@@ -399,6 +370,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->size              = 0;
     new_proc->stime             = (unsigned)time_stamp()/1000; //microsec to millsec
     new_proc->p_wait_queue      = NULL;
+    new_proc->p_initialised     = false;
 
     cont->proc = new_proc;
     //try to insert new proc into list
@@ -406,20 +378,18 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
         if(processes[i] == NULL){
             processes[i] = new_proc;
             new_proc->pid = next_free_pid[i];
-            next_free_pid[i]++;
-            mod_free_pid(next_free_pid[i], i);
+            next_free_pid[i] = _next_free_pid(next_free_pid[i], i);
             break;
         }
     }
     if(new_proc->pid == -1){
-        //Cant find free process slot
+        // Can't find free process slot
         printf("sos_process_create, No free slot for new active process\n");
         proc_create_end((void*)cont, EFAULT);
         return;
     }
 
-
-    new_proc->name              = malloc(len+1);
+    new_proc->name = malloc(len+1);
     if (new_proc->name == NULL) {
         printf("sos_process_create, No memory for name\n");
         proc_create_end((void*)cont, ENOMEM);
@@ -541,8 +511,12 @@ int proc_destroy(pid_t pid) {
         return EINVAL;
     }
 
+    if (!proc->p_initialised) {
+        // Cannot kill a process that has not been initialised
+        return EFAULT;
+    }
     printf("proc_destroy: freeing proc in processes list\n");
-    free_proc_slot(proc->pid);
+    _free_proc_slot(proc->pid);
 
     printf("proc_destroy: freeing proc\n");
     _free_proc_data(proc);

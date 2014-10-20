@@ -24,7 +24,6 @@ typedef struct proc_wait_node* proc_wait_node_t;
 
 typedef struct process process_t;
 struct process {
-
     seL4_Word tcb_addr;
     seL4_TCB tcb_cap;
 
@@ -46,11 +45,10 @@ struct process {
 
     struct filetable* p_filetable;
     proc_wait_node_t p_wait_queue;
+
+    bool p_initialised;
 };
 
-#define MAX_PID (1<<27) //max badge value is 0xfffffff, do not go above 27
-#define RANGE_PER_SLOT (int)(MAX_PID/MAX_PROC)
-int next_free_pid[MAX_PROC];
 process_t* processes[MAX_PROC];
 
 /* These are callback functions corresponding to the proc_* functions below */
@@ -59,6 +57,16 @@ typedef void (*proc_wait_cb_t)(void *token, pid_t pid);
 
 /* This function should be called before any process is created */
 void proc_list_init(void);
+
+process_t* cur_proc(void);
+addrspace_t* proc_getas(void);
+cspace_t* proc_getcroot(void);
+
+void inc_proc_size_proc(process_t* proc);
+void inc_proc_size(pid_t pid);
+
+void dec_proc_size_proc(process_t* proc);
+void dec_proc_size(pid_t pid);
 
 /* Kernel can use this function to set the current process
  * If the pid is PROC_NULL then the current process will be NULL */
@@ -82,14 +90,4 @@ pid_t proc_get_id(void);
  * if pid == -1, wait for any process to exit
  * "callback" will be called whenever the specified process finished */
 int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token);
-
-process_t* cur_proc(void);
-addrspace_t* proc_getas(void);
-cspace_t* proc_getcroot(void);
-
-void inc_proc_size_proc(process_t* proc);
-void inc_proc_size(int pid);
-
-void dec_proc_size_proc(process_t* proc);
-void dec_proc_size(int pid);
 #endif /* _LIBOS_PROCESS_H_ */

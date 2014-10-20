@@ -132,7 +132,7 @@ serv_proc_wait_cb(void *token, pid_t pid) {
     assert(cont != NULL);
 
     /* Check if the waiting process is still active */
-    if (proc_getproc(cont->pid) != NULL) {
+    if (is_proc_alive(cont->pid)) {
         seL4_MessageInfo_t reply;
         reply = seL4_MessageInfo_new(0, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)pid);
@@ -176,11 +176,16 @@ typedef struct {
     sos_process_t *kbuf;
     unsigned num;
     seL4_CPtr reply_cap;
+    pid_t pid;
 } serv_proc_status_cont_t ;
 
 void serv_proc_status_end(void* token, int err){
     printf("serv_proc_status end\n");
     serv_proc_status_cont_t* cont = (serv_proc_status_cont_t*)token;
+
+    if (!is_proc_alive(cont->pid)) {
+        err = EFAULT;
+    }
 
     if (cont->kbuf) {
         free(cont->kbuf);
@@ -211,6 +216,7 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
     cont->reply_cap = reply_cap;
     cont->kbuf = NULL;
     cont->num = 0;
+    cont->pid = proc_get_id();
 
 
     printf("serv_proc_status\n");

@@ -64,6 +64,7 @@ const seL4_BootInfo* _boot_info;
 
 seL4_CPtr _sos_ipc_ep_cap;
 seL4_CPtr _sos_interrupt_ep_cap;
+bool starting_first_process;
 
 /**
  * NFS mount point
@@ -535,6 +536,7 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
 void main2(void* token, int err, pid_t id){
     //dprintf(0, "\nSOS entering syscall loop\n");
     //syscall_loop(_sos_ipc_ep_cap);
+    starting_first_process = false;
 }
 
 int main(void) {
@@ -559,6 +561,7 @@ int main(void) {
     /* Start the user application */
     //start_first_process(TTY_NAME, _sos_ipc_ep_cap);
 
+    starting_first_process = true;
     proc_list_init();
     proc_create(TTY_NAME, strlen(TTY_NAME), _sos_ipc_ep_cap, main2, NULL);
 

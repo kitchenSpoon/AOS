@@ -27,6 +27,7 @@
 
 #define NFS_SEND_SIZE   1024 //This needs to be less than UDP package size
 
+extern bool starting_first_process;
 uint32_t free_slots[NUM_CHUNKS];
 
 fhandle_t *swap_fh;
@@ -166,7 +167,7 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
         swap_in_end((void*)token, EFAULT);
         return;
     }
-    if (!is_proc_alive(frame_get_pid(state->kvaddr))) {
+    if (!starting_first_process && !is_proc_alive(frame_get_pid(state->kvaddr))) {
         printf("swap_in_nfs_read_handler: process is killed\n");
         frame_unlock_frame(state->kvaddr);
         //sos_page_free(state->as, state->vpage);
@@ -336,13 +337,12 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
     assert(cont != NULL);
 
-    set_cur_proc(cont->pid);
     if (status != NFS_OK || fattr == NULL || count < 0) {
         swap_out_end(cont, EFAULT);
         return;
     }
 
-    if (!is_proc_alive(frame_get_pid(cont->kvaddr))) {
+    if (!starting_first_process && !is_proc_alive(frame_get_pid(cont->kvaddr))) {
         printf("swap_out_4_nfs_write_cb: process is killed\n");
         _unset_slot(cont->free_slot);
         frame_unlock_frame(cont->kvaddr);
@@ -351,6 +351,7 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
         free(cont);
         return;
     }
+    set_cur_proc(cont->pid);
 
     cont->written += (size_t)count;
     //printf("swap out 4 written = %u, free_slot = %d\n", cont->written, cont->free_slot);

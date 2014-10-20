@@ -33,6 +33,7 @@ static int nfs_dev_stat(struct vnode *file, sos_stat_t *buf, vop_stat_cb_t callb
 #define MAX_SERIAL_SEND 100
 
 extern fhandle_t mnt_point;
+extern bool starting_first_process;
 
 struct nfs_data{
     fhandle_t *fh;
@@ -150,6 +151,12 @@ nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
     nfs_init_state_t *state = (nfs_init_state_t*)token;
     assert(state != NULL);
 
+    if (!starting_first_process && !is_proc_alive(state->pid)) {
+        state->callback(state->token, EFAULT);
+        free(state);
+        return;
+    }
+
     set_cur_proc(state->pid);
     printf("nfs_dev_create handler called, proc = %d\n", proc_get_id());
     if(status == NFS_OK){
@@ -194,14 +201,22 @@ nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
     nfs_init_state_t *state = (nfs_init_state_t*)token;
     assert(state != NULL);
 
-    set_cur_proc(state->pid);
-
-    if(status == NFS_OK){
-        err = init_helper(state->file, fh, fattr);
-        state->callback(state->token, err);
+    if (!starting_first_process && !is_proc_alive(state->pid)) {
+        state->callback(state->token, EFAULT);
         free(state);
         return;
     }
+    set_cur_proc(state->pid);
+
+    if(status != NFS_OK){
+        state->callback(state->token, EFAULT);
+        free(state);
+        return;
+    }
+    err = init_helper(state->file, fh, fattr);
+    state->callback(state->token, err);
+    free(state);
+    return;
 
     nfs_dev_create(state);
 }
@@ -270,21 +285,25 @@ static void nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_t
     nfs_write_state *state = (nfs_write_state*)token;
     assert(state != NULL);
 
-    set_cur_proc(state->pid);
-    printf("nfs_dev_write_handler count = %d, proc = %d\n", count, proc_get_id());
+    if (starting_first_process || is_proc_alive(state->pid)) {
+        set_cur_proc(state->pid);
+        printf("nfs_dev_write_handler count = %d, proc = %d\n", count, proc_get_id());
 
-    struct nfs_data *data = (struct nfs_data*)state->file->vn_data;
-    assert(data != NULL);
-    *(data->fattr) = *fattr;
+        struct nfs_data *data = (struct nfs_data*)state->file->vn_data;
+        assert(data != NULL);
+        *(data->fattr) = *fattr;
 
-    if(status == NFS_OK){
-        // can we write more data than the file can hold?
-        /* Update openfile */
-        //state->openfile->offset += count;
+        if(status == NFS_OK){
+            // can we write more data than the file can hold?
+            /* Update openfile */
+            //state->openfile->offset += count;
 
+        } else {
+            //error
+            err = EFAULT;
+        }
     } else {
-        //error
-        err = 1;
+        err = EFAULT;
     }
 
     state->callback(state->token, err, count);
@@ -337,6 +356,11 @@ static void nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t 
     nfs_read_state *state = (nfs_read_state*)token;
     assert(state != NULL);
 
+    if (!starting_first_process && !is_proc_alive(state->pid)) {
+        nfs_dev_read_end((void*)token, EFAULT);
+        return;
+    }
+
     set_cur_proc(state->pid);
     printf("nfs_dev_read_handler called, proc = %d\n", proc_get_id());
     //printf("nfs read status = %d\n", status);
@@ -388,8 +412,6 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
     if (status != RPC_OK) {
         free(state);
         callback(token, EFAULT, 0, false);
-    } else {
-        //set_cur_proc(PROC_NULL);
     }
     return;
 
@@ -399,7 +421,11 @@ static void nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t of
 static void nfs_dev_getdirent_done_copyout(void* token, int err){
     nfs_getdirent_state_t *state = (nfs_getdirent_state_t*) token;
     assert(state != NULL);
-    set_cur_proc(state->pid);
+    if (starting_first_process || is_proc_alive(state->pid)) {
+        set_cur_proc(state->pid);
+    } else {
+        err = EFAULT;
+    }
 
     free(state->name);
     if(err){
@@ -420,6 +446,11 @@ nfs_dev_getdirent_handler(uintptr_t token, enum nfs_stat status, int num_files,
     bool finish = false;
     nfs_getdirent_state_t *state = (nfs_getdirent_state_t*) token;
     assert(state != NULL);
+    if (!starting_first_process && !is_proc_alive(state->pid)) {
+        state->callback(state->token, EFAULT, 0);
+        free(state);
+        return;
+    }
     set_cur_proc(state->pid);
 
     if(status == NFS_OK){
@@ -492,7 +523,11 @@ static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int po
     state->callback  = callback;
     state->token     = token;
     state->pid       = proc_get_id();
-    nfs_readdir(&mnt_point, 0, nfs_dev_getdirent_handler, (uintptr_t)state);
+    enum rpc_stat status = nfs_readdir(&mnt_point, 0, nfs_dev_getdirent_handler, (uintptr_t)state);
+    if (status != RPC_OK) {
+        state->callback(state->token, EFAULT, 0);
+        free(state);
+    }
 }
 
 static void nfs_dev_stat_copyout_cb(void *token, int err) {
@@ -500,7 +535,11 @@ static void nfs_dev_stat_copyout_cb(void *token, int err) {
     nfs_stat_state_t *state = (nfs_stat_state_t*)token;
     assert(state != NULL);
 
-    set_cur_proc(state->pid);
+    if (starting_first_process || is_proc_alive(state->pid)) {
+        set_cur_proc(state->pid);
+    } else {
+        err = EFAULT;
+    }
     free(state->stat);
     state->callback(state->token, err);
     free(state);
@@ -551,7 +590,11 @@ nfs_dev_getstat_lookup_end(void* token, int err){
     nfs_dev_getstat_state_t *state = (nfs_dev_getstat_state_t*)token;
     assert(state != NULL);
 
-    set_cur_proc(state->pid);
+    if (starting_first_process || is_proc_alive(state->pid)) {
+        set_cur_proc(state->pid);
+    } else {
+        err = EFAULT;
+    }
 
     if (state->stat != NULL) {
         free(state->stat);
@@ -566,6 +609,10 @@ nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
     nfs_dev_getstat_state_t *state = (nfs_dev_getstat_state_t*)token;
     assert(state != NULL);
 
+    if (!starting_first_process && !is_proc_alive(state->pid)) {
+        nfs_dev_getstat_lookup_end((void*)state, EFAULT);
+        return;
+    }
     set_cur_proc(state->pid);
     printf("nfs_dev_getstat_lookup_cb called, proc = %d\n", proc_get_id());
 

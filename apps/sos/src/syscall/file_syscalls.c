@@ -42,6 +42,7 @@ typedef struct {
     char *kbuf;
     size_t nbyte;
     uint32_t flags;
+    pid_t pid;
 } cont_open_t;
 
 static void
@@ -50,12 +51,17 @@ serv_sys_open_end(void *token, int err, int fd) {
     cont_open_t *cont = (cont_open_t*)token;
     assert(cont != NULL);
 
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_open_end: proc is killed\n");
+        free(cont);
+        return;
+    }
+    set_cur_proc(PROC_NULL);
     if (cont->kbuf == NULL) {
         free(cont->kbuf);
     }
     printf("serv_sys_open err = %d\n", err);
 
-    set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(err, 0, 0, 1);
     seL4_SetMR(0, (seL4_Word)fd);
@@ -100,6 +106,7 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
     cont->kbuf      = NULL;
     cont->nbyte     = nbyte;
     cont->flags     = flags;
+    cont->pid       = proc_get_id();
 
     addrspace_t *as = proc_getas();
     if ((nbyte > MAX_NAME_LEN) || (!as_is_valid_memory(as, path, nbyte, NULL))){
@@ -145,12 +152,20 @@ typedef struct {
     size_t bytes_read;
     size_t bytes_wanted;
     char* buf;
+    pid_t pid;
 } cont_read_t;
 
 void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
     //printf("serv_read_end called\n");
     //printf("serv_read_end size = %u\n", size);
     cont_read_t *cont = (cont_read_t*)token;
+
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_read_end: proc is killed\n");
+        set_cur_proc(PROC_NULL);
+        free(cont);
+        return;
+    }
 
     /* Update file offset */
     if(!err){
@@ -194,6 +209,7 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     cont->buf = (char*)buf;
     cont->bytes_read = 0;
     cont->bytes_wanted = nbyte;
+    cont->pid = proc_get_id();
 
     //have to read multiple times if nbyte >= MAX_IO_BUF
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);// || (nbyte >= MAX_IO_BUF);
@@ -234,6 +250,7 @@ typedef struct {
     size_t nbyte;
     size_t byte_written;
     size_t wanna_send;
+    pid_t pid;
 } cont_write_t;
 
 static void serv_sys_write_get_kbuf(void *token, seL4_Word kvaddr);
@@ -262,6 +279,7 @@ void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
     cont->nbyte      = nbyte;
     cont->byte_written  = 0;
     cont->wanna_send = 0;
+    cont->pid        = proc_get_id();
 
     addrspace_t *as = proc_getas();
     bool is_inval = (fd < 0) || (fd >= PROCESS_MAX_FILES);
@@ -361,6 +379,12 @@ static
 void serv_sys_write_end(cont_write_t* cont, int err) {
     printf("serv_write_end\n");
 
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_write_end: proc is killed\n");
+        free(cont);
+        return;
+    }
+
     set_cur_proc(PROC_NULL);
 
     /* Reply app*/
@@ -378,10 +402,17 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
 
 typedef struct {
     seL4_CPtr reply_cap;
+    pid_t pid;
 } cont_getdirent_t;
 
 static void serv_sys_getdirent_end(void *token, int err, size_t size) {
     cont_getdirent_t *cont = (cont_getdirent_t*)token;
+
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_getdirent_end: proc is killed\n");
+        free(cont);
+        return;
+    }
 
     set_cur_proc(PROC_NULL);
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
@@ -405,6 +436,7 @@ void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
         return;
     }
     cont->reply_cap = reply_cap;
+    cont->pid       = proc_get_id();
 
     bool is_inval = !as_is_valid_memory(proc_getas(), (seL4_Word)name, sizeof(sos_stat_t), &permissions);
     is_inval = is_inval || !(permissions & seL4_CanWrite);
@@ -428,12 +460,20 @@ typedef struct {
     char *kbuf;
     sos_stat_t *buf;
     size_t path_len;
+    pid_t pid;
 } cont_stat_t;
 
 static void serv_sys_stat_end(void *token, int err){
     printf("serv_sys_stat_end\n");
     cont_stat_t *cont = (cont_stat_t*)token;
     assert(cont != NULL);
+
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_stat_end: proc is killed\n");
+        free(cont);
+        return;
+    }
+    set_cur_proc(PROC_NULL);
 
     if (cont->kbuf != NULL) {
         free(cont->kbuf);
@@ -483,6 +523,7 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
     cont->buf       = buf;
     cont->path_len  = path_len;
     cont->kbuf      = NULL;
+    cont->pid       = proc_get_id();
 
     uint32_t permissions = 0;
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_stat_t), &permissions) ||

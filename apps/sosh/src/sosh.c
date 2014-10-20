@@ -126,10 +126,10 @@ static int ps(int argc, char **argv) {
 
     processes = sos_process_status(process, MAX_PROCESSES);
 
-    printf("TID SIZE   STIME   CTIME COMMAND\n");
+    printf("      TID SIZE   STIME   CTIME COMMAND\n");
 
     for (i = 0; i < processes; i++) {
-        printf("%3x %4x %7d   %s\n", process[i].pid, process[i].size,
+        printf("%8d %4x %7d   %s\n", process[i].pid, process[i].size,
                 process[i].stime, process[i].command);
     }
 

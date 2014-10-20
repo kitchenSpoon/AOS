@@ -110,6 +110,15 @@ void proc_list_init(void){
     }
 }
 
+process_t *proc_getproc(pid_t pid) {
+    for(int i = 0; i < MAX_PROC; i++){
+        if (processes[i] != NULL && processes[i]->pid == pid) {
+            return processes[i];
+        }
+    }
+    return NULL;
+}
+
 void inc_proc_size_proc(process_t* proc){
     if(proc != NULL){
         //printf("incr_proc_size_proc pid = %d\n",proc->pid);

@@ -122,6 +122,7 @@ void serv_proc_get_id(seL4_CPtr reply_cap){
 
 typedef struct {
     seL4_CPtr reply_cap;
+    pid_t pid;
 } serv_proc_wait_cont_t;
 
 static void
@@ -130,11 +131,14 @@ serv_proc_wait_cb(void *token, pid_t pid) {
     serv_proc_wait_cont_t *cont = (serv_proc_wait_cont_t*)token;
     assert(cont != NULL);
 
-    seL4_MessageInfo_t reply;
-    reply = seL4_MessageInfo_new(0, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)pid);
-    seL4_Send(cont->reply_cap, reply);
-    cspace_free_slot(cur_cspace, cont->reply_cap);
+    /* Check if the waiting process is still active */
+    if (proc_getproc(cont->pid) != NULL) {
+        seL4_MessageInfo_t reply;
+        reply = seL4_MessageInfo_new(0, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)pid);
+        seL4_Send(cont->reply_cap, reply);
+        cspace_free_slot(cur_cspace, cont->reply_cap);
+    }
     free(cont);
 
     printf("serv_proc_wait_cb ended\n");
@@ -144,7 +148,8 @@ serv_proc_wait_cb(void *token, pid_t pid) {
 }
 
 void serv_proc_wait(pid_t pid, seL4_CPtr reply_cap){
-    printf("serv_proc_wait, proc = %d\n", proc_get_id());
+    pid_t cur_pid = proc_get_id();
+    printf("serv_proc_wait, proc = %d\n", cur_pid);
     serv_proc_wait_cont_t *cont = malloc(sizeof(serv_proc_wait_cont_t));
     if (cont == NULL) {
         // No memory, reply to user with pid -1
@@ -154,18 +159,17 @@ void serv_proc_wait(pid_t pid, seL4_CPtr reply_cap){
         seL4_Send(reply_cap, reply);
         cspace_free_slot(cur_cspace, reply_cap);
 
-        //set_cur_proc(PROC_NULL);
+        set_cur_proc(PROC_NULL);
         return;
     }
     cont->reply_cap = reply_cap;
-    printf("serv_proc_wait 2\n");
+    cont->pid = cur_pid;
 
     int err = proc_wait(pid, serv_proc_wait_cb, (void*)cont);
     if (err) {
         printf("serv_proc_wait: proc_wait failed\n");
         serv_proc_wait_cb((void*)cont, -1);
     }
-    printf("serv_proc_wait 3\n");
 }
 
 typedef struct {

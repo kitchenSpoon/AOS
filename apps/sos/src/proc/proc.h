@@ -61,6 +61,9 @@ void proc_list_init(void);
  * If the pid is PROC_NULL then the current process will be NULL */
 void set_cur_proc(pid_t pid);
 
+/* Get the process with this pid */
+process_t *proc_getproc(pid_t pid);
+
 /* Create a process from the executable at *path*, this process shall
  * communicate with sos through the *fault_ep* */
 void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token);

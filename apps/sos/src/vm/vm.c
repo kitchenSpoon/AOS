@@ -27,6 +27,7 @@ typedef struct {
     seL4_Word vaddr;
     bool is_code;
     region_t* reg;
+    pid_t pid;
 } VMF_cont_t;
 
 static void
@@ -36,6 +37,11 @@ sos_VMFaultHandler_reply(void* token, int err){
     VMF_cont_t *state = (VMF_cont_t*)token;
     if(err){
         printf("sos_vmf received an error\n");
+    }
+    if (!is_proc_alive(state->pid)) {
+        cspace_free_slot(cur_cspace, state->reply_cap);
+        free(state);
+        return;
     }
 
     /* Flush the i-cache if this is an instruction fault */
@@ -207,6 +213,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
     cont->vaddr     = fault_addr;
     cont->is_code   = is_code;
     cont->reg       = reg;
+    cont->pid       = proc_get_id();
 
     /* Check if this page is an new, unmaped page or is it just swapped out */
     if (sos_page_is_inuse(as, fault_addr)) {

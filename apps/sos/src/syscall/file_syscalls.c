@@ -53,6 +53,7 @@ serv_sys_open_end(void *token, int err, int fd) {
 
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_open_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
     }
@@ -162,7 +163,7 @@ void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
 
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_read_end: proc is killed\n");
-        set_cur_proc(PROC_NULL);
+        cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
     }
@@ -381,6 +382,7 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
 
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_write_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
     }
@@ -410,6 +412,7 @@ static void serv_sys_getdirent_end(void *token, int err, size_t size) {
 
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_getdirent_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
     }
@@ -470,6 +473,7 @@ static void serv_sys_stat_end(void *token, int err){
 
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_stat_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
     }

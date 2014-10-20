@@ -94,9 +94,14 @@ read_handler(struct serial * serial , char c){
     }
 
     if(con_read_state.is_blocked && c == '\n'){
-        set_cur_proc(con_read_state.cur_proc_pid);
-        struct con_read_state *s = &con_read_state;
-        con_read(s->file, s->buf, s->nbytes, s->offset, s->callback, s->token);
+        if (is_proc_alive(con_read_state.cur_proc_pid)) {
+            set_cur_proc(con_read_state.cur_proc_pid);
+            struct con_read_state *s = &con_read_state;
+            con_read(s->file, s->buf, s->nbytes, s->offset, s->callback, s->token);
+        } else {
+            con_read_state.cur_proc_pid = PROC_NULL;
+            con_read_state.is_blocked = false;
+        }
     }
 }
 

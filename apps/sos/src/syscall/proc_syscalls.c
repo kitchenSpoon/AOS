@@ -133,12 +133,13 @@ serv_proc_wait_cb(void *token, pid_t pid) {
 
     /* Check if the waiting process is still active */
     if (is_proc_alive(cont->pid)) {
+        set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply;
         reply = seL4_MessageInfo_new(0, 0, 0, 1);
         seL4_SetMR(0, (seL4_Word)pid);
         seL4_Send(cont->reply_cap, reply);
-        cspace_free_slot(cur_cspace, cont->reply_cap);
     }
+    cspace_free_slot(cur_cspace, cont->reply_cap);
     free(cont);
 
     printf("serv_proc_wait_cb ended\n");
@@ -183,21 +184,18 @@ void serv_proc_status_end(void* token, int err){
     printf("serv_proc_status end\n");
     serv_proc_status_cont_t* cont = (serv_proc_status_cont_t*)token;
 
-    if (!is_proc_alive(cont->pid)) {
-        err = EFAULT;
-    }
-
     if (cont->kbuf) {
         free(cont->kbuf);
     }
-    seL4_MessageInfo_t reply;
-    reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, cont->num);
-    seL4_Send(cont->reply_cap, reply);
+    if (is_proc_alive(cont->pid)) {
+        set_cur_proc(PROC_NULL);
+        seL4_MessageInfo_t reply;
+        reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, cont->num);
+        seL4_Send(cont->reply_cap, reply);
+    }
     cspace_free_slot(cur_cspace, cont->reply_cap);
-
     free(cont);
-    set_cur_proc(PROC_NULL);
 }
 
 void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){

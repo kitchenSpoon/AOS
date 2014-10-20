@@ -13,6 +13,7 @@
 
 struct sleep_state{
     seL4_CPtr reply_cap;
+    pid_t pid;
 };
 
 void
@@ -37,6 +38,11 @@ sleep_callback(uint32_t id, void *data) {
 
     state = (struct sleep_state*)data;
 
+    if (!is_proc_alive(state->pid)) {
+        cspace_free_slot(cur_cspace, state->reply_cap);
+        free(state);
+        return;
+    }
     set_cur_proc(PROC_NULL);
     reply = seL4_MessageInfo_new(0, 0, 0, 0);
     seL4_Send(state->reply_cap, reply);
@@ -53,6 +59,7 @@ _sys_sleep(seL4_CPtr reply_cap, const int msec) {
         return ENOMEM;
     }
     state->reply_cap = reply_cap;
+    state->pid       = proc_get_id();
     register_timer(delay, sleep_callback, (void*)state);
     return 0;
 }

@@ -106,7 +106,7 @@ load_segment3(uintptr_t token, enum nfs_stat status,
     }
 
     /* Check if this is the last copy in this frame */
-    if (PAGE_ALIGN(kdst) != PAGE_ALIGN(kdst + count)) {
+    if (PAGE_ALIGN(kdst) != PAGE_ALIGN(kdst + count) || cont->dst + cont->pos >= cont->file_size) {
         frame_unlock_frame(kdst);
 
         /* Not observable to I-cache yet so flush the frame */

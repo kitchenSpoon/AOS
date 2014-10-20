@@ -16,7 +16,6 @@
 
 extern char _cpio_archive[];
 
-static uint32_t next_free_pid;
 static process_t *_cur_proc = NULL;
 static proc_wait_node_t _wait_queue = NULL;
 
@@ -103,20 +102,33 @@ _free_proc_data(process_t *proc) {
     }
 }
 
+void mod_free_pid(int pid, int slot){
+    //if(pid >= (MAX_PID/MAX_PROC)*(slot+1)){
+    //    pid = (MAX_PID/MAX_PROC)*slot;
+    //}
+    pid = (pid % (MAX_PID/MAX_PROC)) + ((MAX_PID/MAX_PROC)*slot);
+}
+
 void proc_list_init(void){
-    next_free_pid = 1;
     for(int i = 0; i < MAX_PROC; i++){
         processes[i] = NULL;
+        next_free_pid[i] = (int)RANGE_PER_SLOT * i;
+        printf("nextfreepid[%d] = %d\n",i,next_free_pid[i]);
     }
 }
 
 process_t *proc_getproc(pid_t pid) {
-    for(int i = 0; i < MAX_PROC; i++){
-        if (processes[i] != NULL && processes[i]->pid == pid) {
-            return processes[i];
-        }
+    printf("Get proc pid = %d\n", pid);
+    if (pid == PROC_NULL) {
+        return NULL;
     }
-    return NULL;
+
+    int slot = pid/RANGE_PER_SLOT;
+    if(processes[slot] != NULL && processes[slot]->pid == pid){
+        return processes[slot];
+    } else {
+        return NULL;
+    }
 }
 
 void inc_proc_size_proc(process_t* proc){
@@ -156,6 +168,24 @@ void dec_proc_size(int pid){
     }
 }
 
+bool is_proc_alive(pid_t pid) {
+    printf("is proc alive? pid = %d\n", pid);
+    if (pid == PROC_NULL) {
+        return false;
+    }
+
+    uint32_t slot = pid/RANGE_PER_SLOT;
+    if(processes[slot] != NULL && processes[slot]->pid == pid){
+        return true;
+    } else {
+        return false;
+    }
+}
+
+void free_proc_slot(pid_t pid){
+    processes[pid/RANGE_PER_SLOT] = NULL;
+}
+
 void set_cur_proc(pid_t pid) {
     printf("set_cur_proc pid = %d\n", pid);
     if (pid == PROC_NULL) {
@@ -163,19 +193,23 @@ void set_cur_proc(pid_t pid) {
         return;
     }
 
-    for(int i = 0; i < MAX_PROC; i++){
-        //if(processes[i] != NULL) printf("searching for cur_proc, we are at proc = %u\n",processes[i]->pid);
-        if(processes[i] != NULL && processes[i]->pid == pid){
-            _cur_proc = processes[i];
-            printf("set_cur_proc_success\n");
-            return;
-        }
+    _cur_proc = proc_getproc(pid);
+    if(_cur_proc == NULL){
+        printf("cur proc is NULL = %d\n",pid);
     }
+    //for(int i = 0; i < MAX_PROC; i++){
+    //    //if(processes[i] != NULL) printf("searching for cur_proc, we are at proc = %u\n",processes[i]->pid);
+    //    if(processes[i] != NULL && processes[i]->pid == pid){
+    //        _cur_proc = processes[i];
+    //        printf("set_cur_proc_success\n");
+    //        return;
+    //    }
+    //}
 
-    /* Do this so that we can catch bug quickly */
-    printf("set_cur_proc: Could not find process with pid in process list\n");
-    printf("              Setting cur_proc to NULL\n");
-    _cur_proc = NULL;
+    ///* Do this so that we can catch bug quickly */
+    //printf("set_cur_proc: Could not find process with pid in process list\n");
+    //printf("              Setting cur_proc to NULL\n");
+    //_cur_proc = NULL;
 }
 
 process_t* cur_proc(void) {
@@ -210,6 +244,7 @@ proc_create_end(void* token, int err){
 
     if (err) {
         if (cont->proc != NULL) {
+            free_proc_slot(cont->proc->pid);
             _free_proc_data(cont->proc);
             free(cont->proc);
         }
@@ -230,22 +265,6 @@ proc_create_part4(void* token, int err) {
     if (err) {
         printf("failed initialising filetable\n");
         proc_create_end((void*)cont, err);
-        return;
-    }
-    // Add new process to our process list
-    // This should be the last call before calling proc_create_end()
-    // as proc_create_end() doesn't clear the processes array on error
-    bool found = false;
-    for(int i = 0; i < MAX_PROC; i++){
-        if(processes[i] == NULL){
-            processes[i] = cont->proc;
-            found = true;
-            break;
-        }
-    }
-    if(!found){
-        printf("sos_process_create_part3, can't find a slot in our process list, too many process\n");
-        proc_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -364,6 +383,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
         proc_create_end((void*)cont, ENOMEM);
         return;
     }
+
     new_proc->tcb_addr          = 0;
     new_proc->tcb_cap           = 0;
     new_proc->vroot_addr        = 0;
@@ -373,6 +393,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->croot             = NULL;
     new_proc->as                = NULL;
     new_proc->p_filetable       = NULL;
+    new_proc->pid               = -1;
     new_proc->name              = NULL;
     new_proc->name_len          = len;
     new_proc->size              = 0;
@@ -380,6 +401,23 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->p_wait_queue      = NULL;
 
     cont->proc = new_proc;
+    //try to insert new proc into list
+    for(int i = 0; i < MAX_PROC; i++){
+        if(processes[i] == NULL){
+            processes[i] = new_proc;
+            new_proc->pid = next_free_pid[i];
+            next_free_pid[i]++;
+            mod_free_pid(next_free_pid[i], i);
+            break;
+        }
+    }
+    if(new_proc->pid == -1){
+        //Cant find free process slot
+        printf("sos_process_create, No free slot for new active process\n");
+        proc_create_end((void*)cont, EFAULT);
+        return;
+    }
+
 
     new_proc->name              = malloc(len+1);
     if (new_proc->name == NULL) {
@@ -436,25 +474,18 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
         return;
     }
 
-    if (next_free_pid & USER_EP_BADGE) {
-        printf("sos_process_create: SOS ran out of pid\n");
-        proc_create_end((void*)cont, EFAULT);
-        return;
-    }
+
+    printf("new proc pid = %d\n",new_proc->pid);
     /* Copy the fault endpoint to the user app to enable IPC */
     user_ep_cap = cspace_mint_cap(new_proc->croot,
                                   cur_cspace,
                                   fault_ep,
                                   seL4_AllRights,
-                                  seL4_CapData_Badge_new(USER_EP_BADGE | next_free_pid));
+                                  seL4_CapData_Badge_new(USER_EP_BADGE | new_proc->pid));
 
     /* should be the first slot in the space, hack I know */
     assert(user_ep_cap == 1);
     assert(user_ep_cap == USER_EP_CAP);
-
-    new_proc->pid = next_free_pid;
-    next_free_pid++;
-
 
     /* Create a new TCB object */
     new_proc->tcb_addr = ut_alloc(seL4_TCBBits);
@@ -503,21 +534,15 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
 int proc_destroy(pid_t pid) {
     printf("proc_destroyed called, pid = %d, proc = %d\n", pid, proc_get_id());
 
-    int i = 0;
     process_t *proc = NULL;
     proc_wait_node_t node = NULL;
-    for (i = 0; i < MAX_PROC; i++) {
-        if (processes[i] != NULL && processes[i]->pid == pid) {
-            proc = processes[i];
-            break;
-        }
-    }
+    proc = proc_getproc(pid);
     if (proc == NULL) {
         return EINVAL;
     }
 
     printf("proc_destroy: freeing proc in processes list\n");
-    processes[i] = NULL;
+    free_proc_slot(proc->pid);
 
     printf("proc_destroy: freeing proc\n");
     _free_proc_data(proc);

@@ -7,7 +7,7 @@
 #include "vm/vmem_layout.h"
 
 //sosh also defines this for themselves
-#define MAX_PROC 100
+#define MAX_PROC 64
 
 /* This is the index where a clients syscall enpoint will
  * be stored in the clients cspace. */
@@ -48,6 +48,9 @@ struct process {
     proc_wait_node_t p_wait_queue;
 };
 
+#define MAX_PID (1<<27) //max badge value is 0xfffffff, do not go above 27
+#define RANGE_PER_SLOT (int)(MAX_PID/MAX_PROC)
+int next_free_pid[MAX_PROC];
 process_t* processes[MAX_PROC];
 
 /* These are callback functions corresponding to the proc_* functions below */

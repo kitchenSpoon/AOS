@@ -17,11 +17,12 @@
 #include <ut_manager/ut.h>
 #include <nfs/nfs.h>
 
+#include "tool/utility.h"
 #include "vm/mapping.h"
 #include "vm/addrspace.h"
 #include "vm/elf.h"
 #include "vm/vmem_layout.h"
-#include "tool/utility.h"
+#include "vm/vm.h"
 
 #define verbose 2
 #include <sys/debug.h>
@@ -52,7 +53,7 @@ static inline unsigned long get_sel4_rights_from_elf(unsigned long permissions) 
 
 typedef void (*load_segment_cb_t)(void *token, int err);
 
-static void load_segment_into_vspace2(void* token, int err);
+static void load_segment2(void* token, int err);
 
 typedef struct {
     addrspace_t* as;
@@ -70,7 +71,7 @@ typedef struct {
 } load_segment_cont_t;
 
 static void
-load_segment_into_vspace_end(load_segment_cont_t *cont, int err) {
+load_segment_end(load_segment_cont_t *cont, int err) {
     // We don't need to free anything, including as mapped page as they'll be
     // cleaned up by the caller (proc_create)
     cont->callback(cont->token, err);
@@ -79,13 +80,13 @@ load_segment_into_vspace_end(load_segment_cont_t *cont, int err) {
 
 /* This function actually copy data into the user vspace */
 static void
-load_segment_into_vspace4(uintptr_t token, enum nfs_stat status,
+load_segment3(uintptr_t token, enum nfs_stat status,
                           fattr_t *fattr, int count, void* data) {
-    printf("load_segment_into_vspace4 called\n");
+    printf("load_segment3 called\n");
     load_segment_cont_t* cont = (load_segment_cont_t*)token;
 
     if (status != NFS_OK) {
-        load_segment_into_vspace_end(cont, EFAULT);
+        load_segment_end(cont, EFAULT);
         return;
     }
 
@@ -95,58 +96,44 @@ load_segment_into_vspace4(uintptr_t token, enum nfs_stat status,
 
     err = sos_get_kvaddr(cont->as, cont->dst, &kdst);
     if (err) {
-        load_segment_into_vspace_end(cont, err);
+        load_segment_end(cont, err);
         return;
     }
 
     /* Now copy our data into the destination vspace. */
-    //int nbytes = PAGESIZE - PAGE_OFFSET(cont->dst);
     if (cont->pos < cont->file_size){
         memcpy((void*)kdst, (void*)data, count);
     }
 
-    err = sos_get_kframe_cap(cont->as, PAGE_ALIGN(cont->dst), &sos_cap);
-    if (err) {
-        load_segment_into_vspace_end(cont, err);
-        return;
-    }
+    /* Check if this is the last copy in this frame */
+    if (PAGE_ALIGN(kdst) != PAGE_ALIGN(kdst + count)) {
+        frame_unlock_frame(kdst);
 
-    /* Not observable to I-cache yet so flush the frame */
-    seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
+        /* Not observable to I-cache yet so flush the frame */
+        err = sos_get_kframe_cap(cont->as, PAGE_ALIGN(cont->dst), &sos_cap);
+        if (err) {
+            load_segment_end(cont, err);
+            return;
+        }
+
+        seL4_ARM_Page_Unify_Instruction(sos_cap, 0, PAGESIZE);
+    }
 
     cont->pos += count;
     cont->dst += count;
 
-    load_segment_into_vspace2((void*)cont, err);
+    load_segment2((void*)cont, err);
 }
 
-static void
-load_segment_into_vspace3(void* token, int err){
-    printf("load segment into vspace3\n");
-    load_segment_cont_t* cont = (load_segment_cont_t*)token;
-    if (err) {
-        load_segment_into_vspace_end(cont, err);
-        return;
-    }
-
-    /* Reset the wanna_read and read from nfs */
-    cont->wanna_read = MIN(NFS_SEND_SIZE, cont->file_size - cont->pos);
-    cont->wanna_read = MIN(cont->wanna_read, PAGE_SIZE - PAGE_OFFSET(cont->dst));
-    printf("load_segment_into_vspace3: wanna_read = %lu\n", cont->wanna_read);
-
-    /* Attemp to read from nfs */
-    enum rpc_stat rpc_status = nfs_read(cont->fh, cont->file_offset + cont->pos,
-            cont->wanna_read, load_segment_into_vspace4, (uintptr_t)cont);
-    if (rpc_status != RPC_OK) {
-        load_segment_into_vspace_end(cont, EFAULT);
-    }
-}
-
-static void load_segment_into_vspace2(void* token, int err){
+static void load_segment2(void* token, int err){
     printf("load segment into vspace2\n");
 
     load_segment_cont_t* cont = (load_segment_cont_t*)token;
 
+    if (err) {
+        load_segment_end(cont, err);
+        return;
+    }
     /* We copy chunk by chunk to the destination vspace. */
     if(cont->pos < cont->file_size){
         seL4_Word vpage;
@@ -154,19 +141,37 @@ static void load_segment_into_vspace2(void* token, int err){
 
         //printf("load segment into vspace2 page map\n");
         if (!sos_page_is_inuse(cont->as, vpage)) {
-            sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token, false);
             inc_proc_size_proc(cont->proc);
+            sos_page_map(cont->as, vpage, cont->permissions, load_segment2, token, false);
         } else {
-            load_segment_into_vspace3(token, 0);
+            seL4_Word kdst;
+            err = sos_get_kvaddr(cont->as, cont->dst, &kdst);
+            if (err) {
+                load_segment_end(cont, err);
+                return;
+            }
+            frame_lock_frame(kdst);
+
+            /* Reset the wanna_read and read from nfs */
+            cont->wanna_read = MIN(NFS_SEND_SIZE, cont->file_size - cont->pos);
+            cont->wanna_read = MIN(cont->wanna_read, PAGE_SIZE - PAGE_OFFSET(cont->dst));
+            printf("load_segment2: wanna_read = %lu\n", cont->wanna_read);
+
+            /* Attemp to read from nfs */
+            enum rpc_stat rpc_status = nfs_read(cont->fh, cont->file_offset + cont->pos,
+                    cont->wanna_read, load_segment3, (uintptr_t)cont);
+            if (rpc_status != RPC_OK) {
+                load_segment_end(cont, EFAULT);
+            }
         }
         return;
     }
 
     //printf("load segment into vspace2 out\n");
-    load_segment_into_vspace_end(cont, 0);
+    load_segment_end(cont, 0);
 }
 
-static int load_segment_into_vspace(addrspace_t *as,
+static int load_segment(addrspace_t *as,
                                     unsigned long file_offset,
                                     unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
@@ -193,7 +198,7 @@ static int load_segment_into_vspace(addrspace_t *as,
     cont->callback = callback;
     cont->token = token;
 
-    load_segment_into_vspace2((void*)cont, 0);
+    load_segment2((void*)cont, 0);
 
     return 0;
 }
@@ -266,11 +271,10 @@ elf_load_part2(void* token, int err){
             elf_load_end((void*)cont, err);
             return;
         }
-        int i = cont->i;
         cont->i++;
 
         /* Copy it across into the vspace. */
-        err = load_segment_into_vspace(cont->as, file_offset, segment_size, file_size,
+        err = load_segment(cont->as, file_offset, segment_size, file_size,
                                        vaddr, rights, cont->proc, cont->fh, elf_load_part2, (void*)cont);
         if (err) {
             elf_load_end((void*)cont, err);

@@ -106,7 +106,7 @@ void mod_free_pid(int pid, int slot){
     //if(pid >= (MAX_PID/MAX_PROC)*(slot+1)){
     //    pid = (MAX_PID/MAX_PROC)*slot;
     //}
-    pid = (pid % (MAX_PID/MAX_PROC)) + ((MAX_PID/MAX_PROC)*slot);
+    pid = (pid % (RANGE_PER_SLOT)) + (RANGE_PER_SLOT*slot);
 }
 
 void proc_list_init(void){

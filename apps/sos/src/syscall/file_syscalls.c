@@ -431,6 +431,7 @@ typedef struct {
 } cont_stat_t;
 
 static void serv_sys_stat_end(void *token, int err){
+    printf("serv_sys_stat_end\n");
     cont_stat_t *cont = (cont_stat_t*)token;
     assert(cont != NULL);
 
@@ -438,7 +439,7 @@ static void serv_sys_stat_end(void *token, int err){
         free(cont->kbuf);
     }
 
-    set_cur_proc(PROC_NULL);
+    //set_cur_proc(PROC_NULL);
 
     /* reply sosh*/
     seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
@@ -450,13 +451,17 @@ static void serv_sys_stat_end(void *token, int err){
 
 static void
 serv_sys_stat_copyin_cb(void *token, int err) {
+    printf("serv_sys_stat_cb\n");
     if (err) {
         serv_sys_stat_end(token, err);
         return;
     }
+    printf("serv_sys_stat_cb\n");
     cont_stat_t *cont = (cont_stat_t*)token;
+    printf("serv_sys_stat_cb\n");
 
     cont->kbuf[cont->path_len] = '\0';
+    printf("serv_sys_stat_cb\n");
 
     vfs_stat(cont->kbuf, cont->path_len, cont->buf, serv_sys_stat_end, (void*)cont);
 }
@@ -465,7 +470,7 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
     /* Read doesn't check buffer if mapped like open & write,
      * just check if the memory is valid. It will map page when copyout */
     int err = 0;
-
+    printf("serv_sys_stat called\n");
     cont_stat_t *cont = malloc(sizeof(cont_stat_t));
     if(cont == NULL){
         set_cur_proc(PROC_NULL);

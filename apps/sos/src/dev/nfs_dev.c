@@ -496,6 +496,7 @@ static void nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int po
 }
 
 static void nfs_dev_stat_copyout_cb(void *token, int err) {
+    printf("nfs_dev_stat_copyout_cb\n");
     nfs_stat_state_t *state = (nfs_stat_state_t*)token;
     assert(state != NULL);
 

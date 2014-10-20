@@ -134,17 +134,25 @@ typedef struct {
 } cont_vfs_stat_t;
 
 static void vfs_stat_end(void *token, int err) {
-    //printf("vfs_stat_end called\n");
+    printf("vfs_stat_end called\n");
     cont_vfs_stat_t *cont = (cont_vfs_stat_t*)token;
+    printf("vfs_stat_end called 2\n");
     assert(cont != NULL);
-
+    
+    printf("vfs_stat_end called 3\n");
+    if(cont->token == NULL || cont->callback == NULL){
+        printf("vfs_stat_end called 3.25\n");
+    }
+    printf("vfs_stat_end called 3.5\n");
     cont->callback(cont->token, err);
+    printf("vfs_stat_end called 4\n");
     free(cont);
+    printf("vfs_stat_end called 5\n");
 }
 
 void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callback, void *token){
-    //printf("vfs_stat called\n");
-    int err;
+    printf("vfs_stat called\n");
+    int err = 0;
 
     cont_vfs_stat_t *cont = malloc(sizeof(cont_vfs_stat_t));
     if (cont == NULL) {
@@ -156,10 +164,14 @@ void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callba
 
     struct vnode *vn = vfs_vnt_lookup(path);
     if (vn != NULL) {
+    printf("Going to call nfs_dev_getstat 1\n");
         err = VOP_STAT(vn, buf, vfs_stat_end, (void*)cont);
-        vfs_stat_end((void*)cont, err);
+        if(err){
+            vfs_stat_end((void*)cont, err);
+        }
         return;
     }
+    printf("Going to call nfs_dev_getstat 2\n");
     nfs_dev_getstat(path, path_len, buf, vfs_stat_end, (void*)cont);
 }
 

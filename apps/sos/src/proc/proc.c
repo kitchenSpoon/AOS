@@ -142,7 +142,7 @@ void inc_cur_proc_size(void){
     //printf("inc_cur_proc_size\n");
     if(_cur_proc != NULL){
         //printf("inc_cur_proc_size sucess\n");
-        inc_proc_size(_cur_proc->pid);
+        _cur_proc->size++;
     }
 }
 
@@ -159,7 +159,7 @@ void dec_cur_proc_size(void){
     //printf("dec_cur_proc_size\n");
     if(_cur_proc != NULL){
         //printf("dec_cur_proc_size sucess\n");
-        dec_proc_size(_cur_proc->pid);
+        _cur_proc->size--;
     }
 }
 

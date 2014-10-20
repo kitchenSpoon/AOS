@@ -86,8 +86,7 @@ cspace_t* proc_getcroot(void);
 
 void inc_proc_size_proc(process_t* proc);
 void inc_proc_size(int pid);
-void inc_cur_proc_size();
 
+void dec_proc_size_proc(process_t* proc);
 void dec_proc_size(int pid);
-void dec_cur_proc_size();
 #endif /* _LIBOS_PROCESS_H_ */

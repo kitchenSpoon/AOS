@@ -138,11 +138,12 @@ void inc_proc_size(int pid){
     }
 }
 
-void inc_cur_proc_size(void){
-    //printf("inc_cur_proc_size\n");
-    if(_cur_proc != NULL){
-        //printf("inc_cur_proc_size sucess\n");
-        _cur_proc->size++;
+void dec_proc_size_proc(process_t* proc){
+    if(proc != NULL){
+        printf("decr_proc_size_proc pid = %d\n",proc->pid);
+        proc->size--;
+    } else {
+        printf("dec_proc_size_proc NULL\n");
     }
 }
 
@@ -152,14 +153,6 @@ void dec_proc_size(int pid){
             processes[i]->size--;
             return;
         }
-    }
-}
-
-void dec_cur_proc_size(void){
-    //printf("dec_cur_proc_size\n");
-    if(_cur_proc != NULL){
-        //printf("dec_cur_proc_size sucess\n");
-        _cur_proc->size--;
     }
 }
 

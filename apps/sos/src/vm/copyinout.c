@@ -45,7 +45,7 @@ void copyin_do_copy(void* token, int err){
     seL4_Word vpage = PAGE_ALIGN(cont->buf);
     if (!sos_page_is_inuse(cont->as, vpage)) {
         printf("copyin_do_copy: mapping page in\n");
-        err = sos_page_map(cont->as, vpage, cont->reg->rights, copyin_do_copy, (void*)cont, false);
+        err = sos_page_map(proc_get_id(), cont->as, vpage, cont->reg->rights, copyin_do_copy, (void*)cont, false);
         if (err) {
             copyin_end(cont, err);
             return;
@@ -202,7 +202,7 @@ void copyout_do_copy(void* token, int err){
     seL4_Word vpage = PAGE_ALIGN(cont->buf);
     if (!sos_page_is_inuse(cont->as, vpage)) {
         printf("copyout_do_copy: mapping page in\n");
-        err = sos_page_map(cont->as, vpage, cont->reg->rights, copyout_do_copy, (void*)cont, false);
+        err = sos_page_map(proc_get_id(), cont->as, vpage, cont->reg->rights, copyout_do_copy, (void*)cont, false);
         if (err) {
             copyout_end(token, err);
             return;

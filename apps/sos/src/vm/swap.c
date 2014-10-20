@@ -129,10 +129,10 @@ swap_in_end(void* token, int err){
     printf("swap_slot = %d, pid = %d\n", state->swap_slot, state->pid);
 
     if(err){
+        frame_unlock_frame(state->kvaddr);
         if (state->kvaddr) {
             sos_page_free(state->as, state->vpage);
         }
-        frame_unlock_frame(state->kvaddr);
         state->callback((void*)state->token, err);
         free(state);
         return;
@@ -162,11 +162,22 @@ void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
     printf("swap in handler entered\n");
     swap_in_cont_t *state = (swap_in_cont_t*)token;
 
-    set_cur_proc(state->pid);
     if(status != NFS_OK || count < 0){
         swap_in_end((void*)token, EFAULT);
         return;
     }
+    if (!is_proc_alive(frame_get_pid(state->kvaddr))) {
+        printf("swap_in_nfs_read_handler: process is killed\n");
+        frame_unlock_frame(state->kvaddr);
+        //sos_page_free(state->as, state->vpage);
+        frame_free(state->kvaddr);
+        _unset_slot(state->swap_slot);
+        state->callback((void*)state->token, EFAULT);
+        free(state);
+        return;
+    }
+    set_cur_proc(state->pid);
+
 
     /* Copy data in */
     memcpy((void*)(state->kvaddr) + state->bytes_read, data, count);
@@ -258,7 +269,7 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
 
     printf("swap_in: swap_slot = %d, pid = %d\n", swap_slot, swap_cont->pid);
     int err;
-    err = sos_page_map(as, vpage, rights, swap_in_page_map_cb, (void*)swap_cont, false);
+    err = sos_page_map(proc_get_id(), as, vpage, rights, swap_in_page_map_cb, (void*)swap_cont, false);
     if (err) {
         free(swap_cont);
         return err;
@@ -298,6 +309,9 @@ swap_out_end(swap_out_cont_t *cont, int err) {
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
+    printf("assssssssssssssssssss as->as_pd_regs = %p, as->as_pd_regs[x] = %p\n", as->as_pd_regs, as->as_pd_regs[x]);
+    printf("conttttttttttttttttttt = %p\n", cont);
+
     as->as_pd_regs[x][y] = ((cont->free_slot)<<PTE_SWAP_OFFSET) | PTE_IN_USE_BIT | PTE_SWAPPED;
 
     /* Update frametable data */
@@ -323,9 +337,18 @@ swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, i
     assert(cont != NULL);
 
     set_cur_proc(cont->pid);
-
     if (status != NFS_OK || fattr == NULL || count < 0) {
         swap_out_end(cont, EFAULT);
+        return;
+    }
+
+    if (!is_proc_alive(frame_get_pid(cont->kvaddr))) {
+        printf("swap_out_4_nfs_write_cb: process is killed\n");
+        _unset_slot(cont->free_slot);
+        frame_unlock_frame(cont->kvaddr);
+        frame_free(cont->kvaddr);
+        cont->callback(cont->token, EFAULT);
+        free(cont);
         return;
     }
 

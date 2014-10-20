@@ -420,7 +420,7 @@ ft_test_1(void* token, seL4_Word kvaddr) {
     assert(*(int*)kvaddr == 0x37);
 
     if (ftc1 < TEST_N_FRAMES) {
-        err = frame_alloc(0, NULL, true, ft_test_1, NULL);
+        err = frame_alloc(0, NULL, PROC_NULL, true, ft_test_1, NULL);
         assert(!err);
     } else {
         printf("ft_test_1: Done!!!\n");
@@ -440,7 +440,7 @@ ft_test_2(void* token, seL4_Word kvaddr) {
     *(int*)kvaddr = val;
     assert(*(int*)kvaddr == val);
 
-    err = frame_alloc(0,NULL,true,ft_test_2, NULL);
+    err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_2, NULL);
     assert(!err);
 }
 
@@ -457,7 +457,7 @@ ft_test_3(void* token, seL4_Word kvaddr) {
     assert(*(int*)kvaddr == val);
     frame_free(kvaddr);
 
-    err = frame_alloc(0,NULL,true,ft_test_3, NULL);
+    err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_3, NULL);
     assert(!err);
 }
 
@@ -472,21 +472,21 @@ frametable_test(uint32_t test_mask) {
         printf("Starting test 1...\n");
         printf("Allocate %d frames and touch them\n", TEST_N_FRAMES);
         ftc1 = 0;
-        err = frame_alloc(0,NULL,true,ft_test_1, NULL);
+        err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_1, NULL);
         assert(!err);
     }
     if (test_mask & TEST_2) {
         printf("Starting test 2...\n");
         printf("Test that frame_alloc runs out of memory after a while\n");
         ftc2 = 0;
-        err = frame_alloc(0,NULL,true,ft_test_2, NULL);
+        err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_2, NULL);
         assert(!err);
     }
     if (test_mask & TEST_3) {
         printf("Starting test 3...\n");
         printf("Test that you never run out of memory if you always free frames.\n");
         ftc3 = 0;
-        err = frame_alloc(0,NULL,true,ft_test_3, NULL);
+        err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_3, NULL);
         assert(!err);
     }
 }

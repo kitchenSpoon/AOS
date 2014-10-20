@@ -87,6 +87,7 @@ _map_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_Word vpage,
 typedef struct {
     sos_page_map_cb_t callback;
     void *token;
+    pid_t pid;
     addrspace_t* as;
     seL4_Word vpage;
     uint32_t permissions;
@@ -165,7 +166,7 @@ sos_page_map_part4(void* token){
     }
 
     /* Allocate memory for the frame */
-    int err = frame_alloc(cont->vpage, cont->as, cont->noswap, sos_page_map_part5, token);
+    int err = frame_alloc(cont->vpage, cont->as, cont->pid, cont->noswap, sos_page_map_part5, token);
     if (err) {
         printf("sos_page_map_part4: failed to allocate frame\n");
         cont->callback(cont->token, EINVAL);
@@ -210,7 +211,7 @@ sos_page_map_part2(void* token, seL4_Word kvaddr){
     cont->as->as_pd_regs[x] = (pagetable_t)kvaddr;
 
     /* Allocate memory for the 2nd level pagetable for caps */
-    int err = frame_alloc(0, NULL, true, sos_page_map_part3, token);
+    int err = frame_alloc(0, NULL, PROC_NULL, true, sos_page_map_part3, token);
     if (err) {
         frame_free(kvaddr);
         cont->callback(cont->token, EFAULT);
@@ -220,7 +221,7 @@ sos_page_map_part2(void* token, seL4_Word kvaddr){
 }
 
 int
-sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
+sos_page_map(pid_t pid, addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         sos_page_map_cb_t callback, void* token, bool noswap) {
     printf("sos_page_map\n");
     if (as == NULL) {
@@ -241,6 +242,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         printf("sos_page_map err nomem\n");
         return ENOMEM;
     }
+    cont->pid = pid;
     cont->as = as;
     cont->vpage = vpage;
     cont->permissions = permissions;
@@ -258,7 +260,7 @@ sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         assert(as->as_pd_caps[x] == NULL);
 
         /* Allocate memory for the 2nd level pagetable for regs */
-        err = frame_alloc(0, NULL, true, sos_page_map_part2, (void*)cont);
+        err = frame_alloc(0, NULL, PROC_NULL, true, sos_page_map_part2, (void*)cont);
         if (err) {
             free(cont);
             return EFAULT;
@@ -318,8 +320,14 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
         if (err) {
             return;
         }
-
-        frame_free(as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+        seL4_Word kvaddr = as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
+        bool is_locked;
+        frame_is_locked(kvaddr, &is_locked);
+        if (is_locked) {
+            // The frame is being swapped, don't do anything
+        } else {
+            frame_free(as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+        }
     }
     as->as_pd_regs[x][y] = 0;
 }

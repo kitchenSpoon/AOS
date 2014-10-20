@@ -24,6 +24,6 @@
  *               address space. (i.e. the only one address space )
  */
 typedef void (*elf_load_cb_t)(void *token, int err);
-void elf_load(addrspace_t *as, char* elf_file, process_t* proc, elf_load_cb_t callback, void* token);
+void elf_load(pid_t pid, addrspace_t *as, char* elf_file, process_t* proc, elf_load_cb_t callback, void* token);
 
 #endif /* _LIBOS_ELF_H_ */

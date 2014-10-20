@@ -236,7 +236,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
         /* This page has never been mapped, so do that and return */
         printf("vmf tries to map a page\n");
         inc_proc_size_proc(cur_proc());
-        err = sos_page_map(as, fault_addr, reg->rights, sos_VMFaultHandler_reply, (void*)cont, false);
+        err = sos_page_map(proc_get_id(), as, fault_addr, reg->rights, sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
             dec_proc_size_proc(cur_proc());
             sos_VMFaultHandler_reply((void*)cont, err);

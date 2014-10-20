@@ -32,6 +32,7 @@ typedef struct {
     seL4_Word fte_kvaddr;
     seL4_Word fte_vaddr;
     addrspace_t *fte_as;  //Addrspace, we may change this to use ASID instead
+    pid_t fte_pid;
     //TODO: fuse all these fields into 1 var
     int fte_next_free;
     bool fte_locked;
@@ -105,6 +106,7 @@ frame_init(void){
         frametable[i].fte_kvaddr        = kvaddr;
         frametable[i].fte_vaddr         = 0;
         frametable[i].fte_as            = NULL;
+        frametable[i].fte_pid           = PROC_NULL;
         frametable[i].fte_next_free     = FRAME_INVALID;
         frametable[i].fte_locked        = false;
         frametable[i].fte_noswap        = true;
@@ -169,6 +171,7 @@ second_chance_swap_victim(){
             victim = victim % NFRAMES;
         } else if(frametable[victim].fte_referenced){
             addrspace_t* as = frametable[victim].fte_as;
+    printf("assssssssssssssssssss2 as->as_pd_regs = %p\n", as->as_pd_regs);
             seL4_Word vaddr = frametable[victim].fte_vaddr;
             int err = sos_page_unmap(as, vaddr);
             if (err) {
@@ -202,6 +205,7 @@ typedef struct {
    void* token;
    addrspace_t* as;
    seL4_Word vaddr;
+   pid_t pid;
    bool noswap;
 } frame_alloc_cont_t;
 
@@ -246,6 +250,7 @@ frame_alloc_end(void* token, int err){
     frametable[ind].fte_kvaddr     = kvaddr;
     frametable[ind].fte_vaddr      = cont->vaddr;
     frametable[ind].fte_as         = cont->as;
+    frametable[ind].fte_pid        = cont->pid;
     frametable[ind].fte_noswap     = cont->noswap;
     frametable[ind].fte_referenced = true;
     frametable[ind].fte_locked     = false;
@@ -263,7 +268,7 @@ frame_alloc_end(void* token, int err){
 }
 
 int
-frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
+frame_alloc(seL4_Word vaddr, addrspace_t* as, pid_t pid, bool noswap,
                 frame_alloc_cb_t callback, void* token){
     printf("frame_alloc called, noswap = %d\n", (int)noswap);
 
@@ -284,6 +289,7 @@ frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap,
     cont->token = token;
     cont->vaddr = PAGE_ALIGN(vaddr);
     cont->as = as;
+    cont->pid = pid;
     cont->noswap = noswap;
 
     /* If we do not have enough memory, start swapping frames out */
@@ -463,6 +469,17 @@ addrspace_t* frame_get_as(seL4_Word kvaddr){
         return NULL;
     }
     return frametable[id].fte_as;
+}
+
+pid_t frame_get_pid(seL4_Word kvaddr) {
+    int id = (int)KVADDR_TO_ID(kvaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return PROC_NULL;
+    }
+    if(frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
+        return PROC_NULL;
+    }
+    return frametable[id].fte_pid;
 }
 
 seL4_Word frame_get_vaddr(seL4_Word kvaddr){

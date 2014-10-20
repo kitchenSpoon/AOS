@@ -113,7 +113,7 @@ bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
  * @Returns 0 if succesful
  */
 typedef void (*sos_page_map_cb_t)(void *token, int err);
-int sos_page_map(addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
+int sos_page_map(int pid, addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
         sos_page_map_cb_t callback, void* token, bool noswap);
 
 /*

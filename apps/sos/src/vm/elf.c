@@ -52,6 +52,7 @@ static inline unsigned long get_sel4_rights_from_elf(unsigned long permissions) 
 typedef void (*load_segment_cb_t)(void *token, int err);
 
 typedef struct {
+    pid_t pid;
     addrspace_t* as;
     char* src;
     unsigned long segment_size;
@@ -125,7 +126,7 @@ static void load_segment_into_vspace2(void* token, int err){
         vpage = PAGE_ALIGN(cont->dst);
 
         //printf("load segment into vspace2 page map\n");
-        sos_page_map(cont->as, vpage, cont->permissions, load_segment_into_vspace3, token, false);
+        sos_page_map(cont->pid, cont->as, vpage, cont->permissions, load_segment_into_vspace3, token, false);
         return;
     }
 
@@ -135,7 +136,7 @@ static void load_segment_into_vspace2(void* token, int err){
 }
 
 
-static int load_segment_into_vspace(addrspace_t *as, char *src,
+static int load_segment_into_vspace(pid_t pid, addrspace_t *as, char *src,
                                     unsigned long segment_size,
                                     unsigned long file_size, unsigned long dst,
                                     unsigned long permissions, process_t* proc, load_segment_cb_t callback, void* token) {
@@ -146,6 +147,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
     if(cont == NULL){
         return ENOMEM;
     }
+    cont->pid = pid;
     cont->as = as;
     cont->src = src;
     cont->segment_size = segment_size;
@@ -210,6 +212,7 @@ static int load_segment_into_vspace(addrspace_t *as, char *src,
 
 typedef struct {
     int i;
+    pid_t pid;
     addrspace_t* as;
     char* elf_file;
     int num_headers;
@@ -267,7 +270,7 @@ void elf_load_part2(void* token, int err){
 
         printf("elf_load... part 2.3\n");
         /* Copy it across into the vspace. */
-        err = load_segment_into_vspace(cont->as, source_addr, segment_size, file_size,
+        err = load_segment_into_vspace(cont->pid, cont->as, source_addr, segment_size, file_size,
                                        vaddr, rights, cont->proc, elf_load_part2, (void*)cont);
         printf("elf_load... part 2.4, i = %d, ori i = %d\n\n\n\n",cont->i, i);
         if (err) {
@@ -285,7 +288,7 @@ void elf_load_part2(void* token, int err){
     free(cont);
 }
 
-void elf_load(addrspace_t* as, char *elf_file, process_t* proc, elf_load_cb_t callback, void* token) {
+void elf_load(pid_t pid, addrspace_t* as, char *elf_file, process_t* proc, elf_load_cb_t callback, void* token) {
 
     int num_headers;
 
@@ -306,6 +309,7 @@ void elf_load(addrspace_t* as, char *elf_file, process_t* proc, elf_load_cb_t ca
     }
 
     cont->i = 0;
+    cont->pid = pid;
     cont->as = as;
     cont->elf_file = elf_file;
     cont->num_headers = num_headers;

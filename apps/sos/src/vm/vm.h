@@ -5,6 +5,7 @@
 #include <errno.h>
 
 #include "vm/addrspace.h"
+#include "proc/proc.h"
 
 /*
  * Initialise frame table. Reserve memory and initialise values for frame table
@@ -32,7 +33,7 @@ typedef void (*frame_alloc_cb_t)(void *token, seL4_Word kvaddr);
  * This is an asynchronous function, when it finishes,
  * it will call the *callback* function with *token* passed in unchanged
  */
-int frame_alloc(seL4_Word vaddr, addrspace_t* as, bool noswap, frame_alloc_cb_t callback, void *token);
+int frame_alloc(seL4_Word vaddr, addrspace_t* as, pid_t pid, bool noswap, frame_alloc_cb_t callback, void *token);
 
 /*
  * Free the frame with this SOS's vaddr
@@ -62,6 +63,7 @@ int frame_unlock_frame(seL4_Word vaddr);
 int frame_is_locked(seL4_Word vaddr, bool *is_locked);
 
 addrspace_t* frame_get_as(seL4_Word kvaddr);
+pid_t frame_get_pid(seL4_Word kvaddr);
 
 seL4_Word frame_get_vaddr(seL4_Word kvaddr);
 

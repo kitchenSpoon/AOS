@@ -61,10 +61,11 @@ void proc_list_init(void);
 process_t* cur_proc(void);
 addrspace_t* proc_getas(void);
 cspace_t* proc_getcroot(void);
+pid_t proc_get_id(void);
 
+bool is_proc_alive(pid_t pid);
 void inc_proc_size_proc(process_t* proc);
 void inc_proc_size(pid_t pid);
-
 void dec_proc_size_proc(process_t* proc);
 void dec_proc_size(pid_t pid);
 
@@ -82,9 +83,6 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
 /* Destroy a process with this pid, clean up process data and return the back
  * to seL4*/
 int proc_destroy(pid_t pid);
-
-/* Get PID of the current process */
-pid_t proc_get_id(void);
 
 /* Wait for a certain process to exit
  * if pid == -1, wait for any process to exit

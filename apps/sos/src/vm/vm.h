@@ -68,6 +68,7 @@ pid_t frame_get_pid(seL4_Word kvaddr);
 seL4_Word frame_get_vaddr(seL4_Word kvaddr);
 
 int set_frame_referenced(seL4_Word kvaddr);
+bool is_frame_referenced(seL4_Word kvaddr);
 
 seL4_Word get_magic_kvaddr(void);
 

@@ -14,8 +14,8 @@ sos-components-$(CONFIG_APP_SOSH) += sosh
 sos-components-$(CONFIG_APP_TTY_TEST) += tty_test
 sos-components-$(CONFIG_APP_TTY_TEST2) += tty_test2
 sos-components-$(CONFIG_APP_PRINT5) += print5
-sos-components-$(CONFIG_APP_BENCHMARK) += benchmark
 sos-components-$(CONFIG_APP_PRINT5_LOOP) += print5_loop
+sos-components-$(CONFIG_APP_BENCHMARK) += benchmark
 sos-components=$(addprefix $(STAGE_BASE)/bin/, $(sos-components-y))
 
 sos: export COMPONENTS=${sos-components}

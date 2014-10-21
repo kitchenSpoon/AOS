@@ -9,9 +9,8 @@
 #
 
 config APP_PRINT5_LOOP
-    bool "PRINT5_LOOP"
+    bool "Print5 loop"
     depends on LIB_SEL4 && HAVE_LIBC && LIB_SOS
-    default y
     select HAVE_SEL4_APPS
     help
-        Print5 loop
+        Wooo new app

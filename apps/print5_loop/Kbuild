@@ -10,5 +10,4 @@
 
 components-$(CONFIG_APP_PRINT5_LOOP) += print5_loop
 
-print5_loop: $(libc) libsel4 libsos
-
+print5_loop: $(libc) libsel4 libsos libclock

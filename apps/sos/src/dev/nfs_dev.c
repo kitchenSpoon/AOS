@@ -197,6 +197,7 @@ nfs_dev_create(nfs_init_state_t *state){
 static void
 nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
     int err;
+    printf("nfs_dev_lookup_handler called\n");
 
     nfs_init_state_t *state = (nfs_init_state_t*)token;
     assert(state != NULL);
@@ -208,22 +209,19 @@ nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
     }
     set_cur_proc(state->pid);
 
-    if(status != NFS_OK){
-        state->callback(state->token, EFAULT);
+    if(status == NFS_OK){
+        err = init_helper(state->file, fh, fattr);
+        state->callback(state->token, err);
         free(state);
         return;
     }
-    err = init_helper(state->file, fh, fattr);
-    state->callback(state->token, err);
-    free(state);
-    return;
 
     nfs_dev_create(state);
 }
 
 void
 nfs_dev_init(struct vnode* vn, nfs_dev_init_cb_t callback, void *token) {
-    printf("nfs_dev_init called\n, proc = %d", proc_get_id());
+    printf("nfs_dev_init called, proc = %d", proc_get_id());
     nfs_init_state_t *state = malloc(sizeof(nfs_init_state_t));
     if (state == NULL) {
         callback(token, ENOMEM);

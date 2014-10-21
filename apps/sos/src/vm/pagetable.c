@@ -300,7 +300,7 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
 
 void
 sos_page_free(addrspace_t *as, seL4_Word vaddr) {
-    printf("sos_page_free\n");
+    //printf("sos_page_free\n");
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);

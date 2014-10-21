@@ -502,3 +502,12 @@ int set_frame_referenced(seL4_Word kvaddr){
     frametable[id].fte_referenced = true;
     return 0;
 }
+
+bool is_frame_referenced(seL4_Word kvaddr){
+    int id = (int)KVADDR_TO_ID(kvaddr);
+    if (id < frametable_reserved || id >= NFRAMES) {
+        return EINVAL;
+    }
+
+    return frametable[id].fte_referenced;
+}

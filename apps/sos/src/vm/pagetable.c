@@ -300,6 +300,7 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
 
 void
 sos_page_free(addrspace_t *as, seL4_Word vaddr) {
+    printf("sos_page_free\n");
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
@@ -316,11 +317,14 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
         free_swapout_page((as->as_pd_regs[x][y] & PTE_SWAP_MASK)>>PTE_SWAP_OFFSET);
     } else {
         int err;
-        err = sos_page_unmap(as, vpage);
-        if (err) {
-            return;
-        }
         seL4_Word kvaddr = as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
+        //check if page to be destroy is second map paged out
+        if(is_frame_referenced(kvaddr)){
+            err = sos_page_unmap(as, vpage);
+            if (err) {
+                return;
+            }
+        }
         bool is_locked;
         frame_is_locked(kvaddr, &is_locked);
         if (is_locked) {

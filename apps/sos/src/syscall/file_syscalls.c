@@ -382,6 +382,11 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
 
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_write_end: proc is killed\n");
+        if (cont->kbuf != NULL) {
+            err = frame_free((seL4_Word)cont->kbuf);
+            assert(!err);
+        }
+
         cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;

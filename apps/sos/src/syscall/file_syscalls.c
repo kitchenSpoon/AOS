@@ -61,7 +61,10 @@ serv_sys_open_end(void *token, int err, int fd) {
     if (cont->kbuf == NULL) {
         free(cont->kbuf);
     }
-    printf("serv_sys_open err = %d\n", err);
+
+    if(err){
+        printf("serv_sys_open err = %d\n", err);
+    }
 
     seL4_MessageInfo_t reply;
     reply = seL4_MessageInfo_new(err, 0, 0, 1);
@@ -383,7 +386,7 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_write_end: proc is killed\n");
         if (cont->kbuf != NULL) {
-            err = frame_free((seL4_Word)cont->kbuf);
+        cspace_free_slot(cur_cspace, cont->reply_cap);
             assert(!err);
         }
 

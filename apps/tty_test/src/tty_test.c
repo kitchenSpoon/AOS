@@ -22,12 +22,24 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+
 
 #include <sel4/sel4.h>
+#include <unistd.h>
 
 
 #include "ttyout.h"
+
+#include <assert.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+#include <sys/time.h>
+#include <utils/time.h>
 
 #define verbose 5
 // Block a thread forever
@@ -109,17 +121,134 @@ stack_overflow_test(void) {
     printf("NOOOO, test failed\n");
 }
 
+
+static int micro_time(int argc, char *argv[]) {
+    struct timeval time;
+    gettimeofday(&time, NULL);
+    uint64_t micros = (uint64_t)time.tv_sec * US_IN_S + (uint64_t)time.tv_usec;
+    printf("%llu microseconds since boot\n", micros);
+    return 0;
+}
+
+static uint64_t getmicro_time() {
+    struct timeval time;
+    gettimeofday(&time, NULL);
+    uint64_t micros = (uint64_t)time.tv_sec * US_IN_S + (uint64_t)time.tv_usec;
+    return micros;
+}
+
+
+static void bm_read(char* filename, char* buf, size_t buf_size){
+    printf("Reading with IO buf request %u\n", buf_size);
+
+    int fd = open(filename, O_RDONLY);
+    assert(fd >= 0);
+    uint64_t start_time = getmicro_time();
+
+    read(fd, buf, buf_size);
+
+    uint64_t end_time = getmicro_time();
+    printf("time taken: %lu\n", (long unsigned)(end_time - start_time));
+    close(fd);
+}
+
+static void bm_write(char* filename, char* buf, size_t buf_size){
+    printf("Writing with IO buf request %u\n", buf_size);
+
+    int fd = open(filename, O_WRONLY);
+    assert(fd >= 0);
+    uint64_t start_time = getmicro_time();
+
+    size_t written = 0;
+    while (written < buf_size){
+        written += write(fd, buf+written, buf_size-written);
+    }
+
+    uint64_t end_time = getmicro_time();
+    printf("time taken: %lu\n", (long unsigned)(end_time - start_time));
+    close(fd);
+}
+
+static int
+benchmark(){
+    /* Reads */
+    printf("Reading\n");
+    /* Reading with IO request changing*/
+    printf("Reading with IO request changing\n");
+    char buf1000[1001];
+    char buf5000[5001];
+    char buf10000[10000];
+    char buf50000[50000];
+    char buf100000[100000];
+    char buf200000[200000];
+    char buf400000[400000];
+    char buf800000[800000];
+    char buf1600000[1600000];
+    char buf3200000[3200000];
+    char buf100000_2[100000];
+    char buf200000_2[200000];
+    char buf400000_2[400000];
+    bm_read("read_test_1000", (char*)buf1000,1000);
+    bm_write("write_test_1000", (char*)buf1000,1000);
+
+    bm_read("read_test_5000", (char*)buf5000,5000);
+    bm_write("write_test_5000", (char*)buf5000,5000);
+
+    bm_read("read_test_10000", (char*)buf10000,10000);
+    bm_write("write_test_10000", (char*)buf10000,10000);
+
+    bm_read("read_test_50000", (char*)buf50000,50000);
+    bm_write("write_test_50000", (char*)buf50000,50000);
+
+    bm_read("read_test_100000", (char*)buf100000,100000);
+    bm_write("write_test_100000", (char*)buf100000,100000);
+
+    bm_read("read_test_200000", (char*)buf200000,200000);
+    bm_write("write_test_200000", (char*)buf200000,200000);
+
+    bm_read("read_test_400000", (char*)buf400000,400000);
+    bm_write("write_test_400000", (char*)buf400000,400000);
+
+    bm_read("read_test_800000", (char*)buf800000,800000);
+    bm_write("write_test_800000", (char*)buf800000,800000);
+
+    bm_read("read_test_1600000", (char*)buf1600000,1600000);
+    bm_write("write_test_1600000", (char*)buf1600000, 1600000);
+
+    bm_read("read_test_3200000", (char*)buf3200000,3200000);
+    bm_write("write_test_3200000", (char*)buf3200000, 3200000);
+
+    bm_read("read_test_100000", (char*)buf100000_2,100000);
+    bm_write("write_test_100000_2", (char*)buf100000_2,100000);
+
+    bm_read("read_test_200000", (char*)buf200000_2,200000);
+    bm_write("write_test_200000_2", (char*)buf200000_2,200000);
+
+    bm_read("read_test_400000", (char*)buf400000_2,400000);
+    bm_write("write_test_400000_2", (char*)buf400000_2,400000);
+
+    /* Reading with packet changing */
+
+    /* Writes */
+    printf("Writing\n");
+    /* Writing with IO request changing*/
+    /* Writing with packet changing */
+    return 0;
+}
+
+
 int main(void){
     /* initialise communication */
     ttyout_init();
 
     do {
         printf("task:\tHello world, I'm\ttty_test!\n");
+        benchmark();
         //pt_test();
         //readonly_test();
         //stack_overflow_test();
         //thread_block();
-        sleep(8);	// Implement this as a syscall
+        //sleep(8);	// Implement this as a syscall
     } while(1);
 
     return 0;

@@ -36,7 +36,7 @@ sos_VMFaultHandler_reply(void* token, int err){
 
     VMF_cont_t *state = (VMF_cont_t*)token;
     if(err){
-        printf("sos_vmf received an error\n");
+        printf("sos_vmf received an non_resolve problem\n"); //TODO change the debug message to say that vmf recevied an err
     }
     if (!is_proc_alive(state->pid)) {
         cspace_free_slot(cur_cspace, state->reply_cap);

@@ -30,6 +30,17 @@
 
 #include "ttyout.h"
 
+#include <assert.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+#include <sys/time.h>
+#include <utils/time.h>
+
 #define verbose 5
 // Block a thread forever
 // we do this by making an unimplemented system call.
@@ -109,21 +120,29 @@ stack_overflow_test(void) {
 
     printf("NOOOO, test failed\n");
 }
+static int exec2(void) {
+    pid_t pid;
+    pid = sos_process_create("print5");
+    printf("Child pid=%d\n", pid);
+    sos_process_wait(pid);
 
+    return 0;
+}
 int main(void){
     /* initialise communication */
     ttyout_init();
 
     do {
         printf("task:\tHello world, I'm\ttty_test2!\n");
-        char *str = "tty_test2\n";
-        write(1, str, sizeof(str));
-        write(2, str, sizeof(str));
+        //char *str = "tty_test2\n";
+        //write(1, str, 10);
+        //write(2, str, 10);
+        exec2();
         //pt_test();
         //readonly_test();
         //stack_overflow_test();
         //thread_block();
-        sleep(8);	// Implement this as a syscall
+        //sleep(8);	// Implement this as a syscall
     } while(1);
 
     return 0;

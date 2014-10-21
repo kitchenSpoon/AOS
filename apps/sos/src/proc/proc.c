@@ -115,15 +115,27 @@ _next_free_pid(pid_t pid, int slot){
 
 static void
 _free_proc_slot(pid_t pid){
-    processes[pid/RANGE_PER_SLOT] = NULL;
+    int slot = (int)(pid/RANGE_PER_SLOT);
+    processes[slot]->proc = NULL;
+    processes[slot]->next_free = next_free_proc_slot;
+    next_free_proc_slot = slot;
 }
 
 void proc_list_init(void){
+    next_free_proc_slot = 0;
     for(int i = 0; i < MAX_PROC; i++){
-        processes[i] = NULL;
+        processes[i] = malloc(sizeof(free_proc_slot_t));
+        if(processes[i] == NULL){
+            printf("Error no memory to initialize process management list\n");
+        }
+        processes[i]->proc = NULL;
+        processes[i]->next_free = i + 1;
         next_free_pid[i] = (int)RANGE_PER_SLOT * i;
         printf("nextfreepid[%d] = %d\n",i,next_free_pid[i]);
     }
+
+    //set the last processes to point to a invalid next_free slot
+    processes[MAX_PROC-1]->next_free = -1;
 }
 
 process_t *proc_getproc(pid_t pid) {
@@ -133,8 +145,8 @@ process_t *proc_getproc(pid_t pid) {
     }
 
     int slot = pid/RANGE_PER_SLOT;
-    if(processes[slot] != NULL && processes[slot]->pid == pid){
-        return processes[slot];
+    if(processes[slot] != NULL && processes[slot]->proc != NULL && processes[slot]->proc->pid == pid){
+        return processes[slot]->proc;
     } else {
         return NULL;
     }
@@ -374,20 +386,33 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
 
     cont->proc = new_proc;
     //try to insert new proc into list
-    for(int i = 0; i < MAX_PROC; i++){
-        if(processes[i] == NULL){
-            processes[i] = new_proc;
-            new_proc->pid = next_free_pid[i];
-            next_free_pid[i] = _next_free_pid(next_free_pid[i], i);
-            break;
-        }
-    }
-    if(new_proc->pid == -1){
+    if(next_free_proc_slot != -1){
+        int slot = next_free_proc_slot;
+        processes[slot]->proc = new_proc;
+        new_proc->pid = next_free_pid[slot];
+        next_free_pid[slot] = _next_free_pid(next_free_pid[slot], slot);
+        next_free_proc_slot = processes[slot]->next_free;
+    } else {
         // Can't find free process slot
         printf("sos_process_create, No free slot for new active process\n");
         proc_create_end((void*)cont, EFAULT);
         return;
     }
+    //for(int i = 0; i < MAX_PROC; i++){
+    //    if(processes[i]->proc == NULL){
+    //        processes[i]->proc = new_proc;
+    //        new_proc->pid = next_free_pid[i];
+    //        next_free_pid[i] = _next_free_pid(next_free_pid[i], i);
+    //        next_free_proc_slot = processes[i]->next_free;
+    //        break;
+    //    }
+    //}
+    //if(new_proc->pid == -1){
+    //    // Can't find free process slot
+    //    printf("sos_process_create, No free slot for new active process\n");
+    //    proc_create_end((void*)cont, EFAULT);
+    //    return;
+    //}
 
     new_proc->name = malloc(len+1);
     if (new_proc->name == NULL) {
@@ -564,14 +589,14 @@ int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token){
     }
 
     for (int i = 0; i < MAX_PROC; i++) {
-        if (processes[i] != NULL && processes[i]->pid == pid) {
+        if (processes[i] != NULL && processes[i]->proc != NULL && processes[i]->proc->pid == pid) {
 
             proc_wait_node_t node = _wait_node_create(callback, token);
             if (node == NULL) {
                 return ENOMEM;
             }
-            processes[i]->p_wait_queue =
-                _wait_node_add(processes[i]->p_wait_queue, node);
+            processes[i]->proc->p_wait_queue =
+                _wait_node_add(processes[i]->proc->p_wait_queue, node);
             return 0;
         }
     }

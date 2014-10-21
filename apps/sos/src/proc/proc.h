@@ -49,7 +49,13 @@ struct process {
     bool p_initialised;
 };
 
-process_t* processes[MAX_PROC];
+typedef struct {
+    process_t *proc;
+    int next_free;
+} free_proc_slot_t;
+
+int next_free_proc_slot;
+free_proc_slot_t* processes[MAX_PROC];
 
 /* These are callback functions corresponding to the proc_* functions below */
 typedef void (*proc_create_cb_t)(void *token, int err, pid_t pid);

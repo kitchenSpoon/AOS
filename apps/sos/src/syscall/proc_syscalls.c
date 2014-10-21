@@ -236,12 +236,12 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
     printf("serv_proc_status\n");
     cont->num = 0;
     for(int i = 0; i < MAX_PROC; i++){
-        if(processes[i] != NULL){
-            kbuf[cont->num].pid = processes[i]->pid;
-            kbuf[cont->num].size = processes[i]->size;
-            kbuf[cont->num].stime = (unsigned int)time_stamp()/1000 - processes[i]->stime;
-            memcpy(kbuf[cont->num].command, processes[i]->name, processes[i]->name_len);
-            kbuf[cont->num].command[processes[i]->name_len] = '\0';
+        if(processes[i] != NULL && processes[i]->proc){
+            kbuf[cont->num].pid = processes[i]->proc->pid;
+            kbuf[cont->num].size = processes[i]->proc->size;
+            kbuf[cont->num].stime = (unsigned int)time_stamp()/1000 - processes[i]->proc->stime;
+            memcpy(kbuf[cont->num].command, processes[i]->proc->name, processes[i]->proc->name_len);
+            kbuf[cont->num].command[processes[i]->proc->name_len] = '\0';
             printf("serv_proc_status, procing i = %d kbuf name = %s\n",i,kbuf[cont->num].command);
 
             cont->num++;

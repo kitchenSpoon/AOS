@@ -25,8 +25,6 @@
 #define NUM_CHUNKS (1<<10)
 #define NUM_BITS (32)
 
-#define NFS_SEND_SIZE   1024 //This needs to be less than UDP package size
-
 extern bool starting_first_process;
 uint32_t free_slots[NUM_CHUNKS];
 
@@ -270,11 +268,12 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
 
     printf("swap_in: swap_slot = %d, pid = %d\n", swap_slot, swap_cont->pid);
     int err;
-    err = sos_page_map(proc_get_id(), as, vpage, rights, swap_in_page_map_cb, (void*)swap_cont, false);
+    err = sos_page_map(swap_cont->pid, as, vpage, rights, swap_in_page_map_cb, (void*)swap_cont, false);
     if (err) {
         free(swap_cont);
         return err;
     }
+    inc_proc_size(swap_cont->pid);
     return 0;
 }
 

@@ -386,8 +386,7 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_write_end: proc is killed\n");
         if (cont->kbuf != NULL) {
-        cspace_free_slot(cur_cspace, cont->reply_cap);
-            assert(!err);
+            frame_free(cont->kbuf);
         }
 
         cspace_free_slot(cur_cspace, cont->reply_cap);

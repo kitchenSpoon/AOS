@@ -513,6 +513,8 @@ _filesystem_init(void) {
     err = nfs_dev_init_mntpoint_vnode(vn, &mnt_point);
     conditional_panic(err, "Failed to initialise mountpoint vnode\n");
 
+    printf("main mnt_poitn = %p\n", &mnt_point);
+
     vn->vn_opencount = 1;
 
     err = vfs_vnt_insert(vn);
@@ -532,8 +534,8 @@ static inline seL4_CPtr badge_irq_ep(seL4_CPtr ep, seL4_Word badge) {
 /*
  * Main entry point - called by crt.
  */
-
-void main2(void* token, int err, pid_t id){
+static void
+first_process_created(void* token, int err, pid_t id){
     //dprintf(0, "\nSOS entering syscall loop\n");
     //syscall_loop(_sos_ipc_ep_cap);
     starting_first_process = false;
@@ -563,7 +565,7 @@ int main(void) {
 
     starting_first_process = true;
     proc_list_init();
-    proc_create(TTY_NAME, strlen(TTY_NAME), _sos_ipc_ep_cap, main2, NULL);
+    proc_create(TTY_NAME, strlen(TTY_NAME), _sos_ipc_ep_cap, first_process_created, NULL);
 
     dprintf(0, "\nSOS entering syscall loop\n");
     syscall_loop(_sos_ipc_ep_cap);

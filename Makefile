@@ -1,6 +1,5 @@
 #
-# Copyright 2014, NICTA
-#
+# Copyright 2014, NICTA #
 # This software may be distributed and modified according to the terms of
 # the BSD 2-Clause license. Note that NO WARRANTY is provided.
 # See "LICENSE_BSD2.txt" for details.
@@ -12,6 +11,7 @@
 # Type "make <thing to build>" in this directory and it will be built.
 
 TFTPROOT = /var/tftpboot/$(USER)
+BINROOT = stage/arm/imx6/bin
 
 DEFINES += SOS_NFS_DIR='"$(TFTPROOT)"'
 
@@ -32,6 +32,7 @@ include tools/common/project.mk
 all: app-images
 	mkdir -p $(TFTPROOT)
 	cp -v $(IMAGE_ROOT)/sos-image-arm-imx6 $(TFTPROOT)/bootimg.elf
+	cp -v $(BINROOT)/* $(TFTPROOT)/
 	$(MAKE) reset
 
 .PHONY: reset

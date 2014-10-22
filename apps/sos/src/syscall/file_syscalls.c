@@ -403,8 +403,7 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
     cspace_free_slot(cur_cspace, cont->reply_cap);
 
     if (cont->kbuf != NULL) {
-        err = frame_free((seL4_Word)cont->kbuf);
-        assert(!err);
+        frame_free((seL4_Word)cont->kbuf);
     }
     free(cont);
 }

@@ -124,75 +124,75 @@ typedef struct {
 static void
 swap_in_end(void* token, int err){
     printf("swap in end entered\n");
-    swap_in_cont_t *state = (swap_in_cont_t*)token;
-    printf("swap_slot = %d, pid = %d\n", state->swap_slot, state->pid);
+    swap_in_cont_t *cont = (swap_in_cont_t*)token;
+    printf("swap_slot = %d, pid = %d\n", cont->swap_slot, cont->pid);
 
     if(err){
-        frame_unlock_frame(state->kvaddr);
-        if (state->kvaddr) {
-            sos_page_free(state->as, state->vpage);
+        frame_unlock_frame(cont->kvaddr);
+        if (cont->kvaddr) {
+            sos_page_free(cont->as, cont->vpage);
         }
-        state->callback((void*)state->token, err);
-        free(state);
+        cont->callback((void*)cont->token, err);
+        free(cont);
         return;
     }
 
     /* Flush I-cache if we just swapped in an instruction page */
     seL4_CPtr kframe_cap;
-    err = frame_get_cap(state->kvaddr, &kframe_cap);
+    err = frame_get_cap(cont->kvaddr, &kframe_cap);
     assert(!err); // frame is locked, there should be no error
 
-    if (state->is_code) {
+    if (cont->is_code) {
         seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
     }
 
-    frame_unlock_frame(state->kvaddr);
-    _unset_slot(state->swap_slot);
+    frame_unlock_frame(cont->kvaddr);
+    _unset_slot(cont->swap_slot);
 
     /* We don't need to reset PTE as sos_page_map already done that for us */
 
     printf("swap_in_end: calling back up\n");
-    state->callback((void*)state->token, 0);
-    free(state);
+    cont->callback((void*)cont->token, 0);
+    free(cont);
 }
 
 void swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
                                 fattr_t *fattr, int count, void* data){
     printf("swap in handler entered\n");
-    swap_in_cont_t *state = (swap_in_cont_t*)token;
+    swap_in_cont_t *cont = (swap_in_cont_t*)token;
 
     if(status != NFS_OK || count < 0){
         swap_in_end((void*)token, EFAULT);
         return;
     }
-    if (!starting_first_process && !is_proc_alive(frame_get_pid(state->kvaddr))) {
+    if (!starting_first_process && !is_proc_alive(frame_get_pid(cont->kvaddr))) {
         printf("swap_in_nfs_read_handler: process is killed\n");
-        frame_unlock_frame(state->kvaddr);
-        //sos_page_free(state->as, state->vpage);
-        frame_free(state->kvaddr);
-        _unset_slot(state->swap_slot);
-        state->callback((void*)state->token, EFAULT);
-        free(state);
+        frame_unlock_frame(cont->kvaddr);
+        //sos_page_free(cont->as, cont->vpage);
+        frame_free(cont->kvaddr);
+        _unset_slot(cont->swap_slot);
+        cont->callback((void*)cont->token, EFAULT);
+        free(cont);
         return;
     }
-    set_cur_proc(state->pid);
+    set_cur_proc(cont->pid);
 
 
     /* Copy data in */
-    memcpy((void*)(state->kvaddr) + state->bytes_read, data, count);
+    memcpy((void*)(cont->kvaddr) + cont->bytes_read, data, count);
 
-    state->bytes_read += (size_t)count;
+    cont->bytes_read += (size_t)count;
 
-    //printf("bytes read = %u, swap_slot = %d\n", state->bytes_read, state->swap_slot);
+    //printf("bytes read = %u, swap_slot = %d\n", cont->bytes_read, cont->swap_slot);
     /* Check if we need to read more */
-    if(state->bytes_read < PAGE_SIZE){
-        enum rpc_stat status = nfs_read(swap_fh, state->swap_slot * PAGE_SIZE + state->bytes_read,
-                                        MIN(NFS_SEND_SIZE, PAGE_SIZE - state->bytes_read),
-                                        swap_in_nfs_read_handler, (uintptr_t)state);
+    if(cont->bytes_read < PAGE_SIZE){
+        enum rpc_stat status = nfs_read(swap_fh, cont->swap_slot * PAGE_SIZE + cont->bytes_read,
+                                        MIN(NFS_SEND_SIZE, PAGE_SIZE - cont->bytes_read),
+                                        swap_in_nfs_read_handler, (uintptr_t)cont);
         if (status != RPC_OK) {
             swap_in_end((void*)token, EFAULT);
         } else {
-            //state->pid = proc_get_id(); // we don't need to do this
+            //cont->pid = proc_get_id(); // we don't need to do this
         }
         return;
     } else {
@@ -229,7 +229,7 @@ swap_in_page_map_cb(void *token, int err) {
     if(status != RPC_OK){
         swap_in_end(cont, EFAULT);
     } else {
-        //state->pid = proc_get_id(); //we don't need to set it here
+        //cont->pid = proc_get_id(); //we don't need to set it here
     }
     return;
 }

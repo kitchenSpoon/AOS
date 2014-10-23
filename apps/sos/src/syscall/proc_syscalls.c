@@ -8,6 +8,9 @@
 
 #include "vm/copyinout.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 /**********************************************************************
  * Server Process Create
  **********************************************************************/
@@ -24,10 +27,10 @@ static void serv_proc_create_end(void* token, int err, pid_t pid);
 
 void serv_proc_create(char* path, size_t len, seL4_CPtr fault_ep, seL4_CPtr reply_cap){
 
-    printf("serv_proc_create entered len = %d\n",len);
+    dprintf(3, "serv_proc_create entered len = %d\n",len);
     serv_proc_create_cont_t* cont = malloc(sizeof(serv_proc_create_cont_t));
     if(cont == NULL){
-        printf("serv_proc_create, err no mem for continuation\n");
+        dprintf(3, "serv_proc_create, err no mem for continuation\n");
         set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply;
         reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
@@ -44,16 +47,16 @@ void serv_proc_create(char* path, size_t len, seL4_CPtr fault_ep, seL4_CPtr repl
     uint32_t permissions = 0;
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)path, len, &permissions) ||
             !(permissions & seL4_CanRead)){
-        printf("serv_proc_create, no permission to read path\n");
+        dprintf(3, "serv_proc_create, no permission to read path\n");
         serv_proc_create_end((void*)cont, EINVAL, -1);
         return;
     }
 
     //copyin path;
     cont->kpath = malloc(len+1);
-    printf("serv_proc_create, kpath = 0x%08x\n",(seL4_Word)cont->kpath);
+    dprintf(3, "serv_proc_create, kpath = 0x%08x\n",(seL4_Word)cont->kpath);
     if(cont->kpath == NULL){
-        printf("serv_proc_create, no memory for path\n");
+        dprintf(3, "serv_proc_create, no memory for path\n");
         serv_proc_create_end((void*)cont, ENOMEM, -1);
         return;
     }
@@ -61,7 +64,7 @@ void serv_proc_create(char* path, size_t len, seL4_CPtr fault_ep, seL4_CPtr repl
     int err = copyin((seL4_Word)cont->kpath, (seL4_Word)path, len,
             serv_proc_create_part2, (void*)cont);
     if(err){
-        printf("serv_proc_create, copyin fails\n");
+        dprintf(3, "serv_proc_create, copyin fails\n");
         serv_proc_create_end((void*)cont, err, -1);
         return;
     }
@@ -80,7 +83,7 @@ serv_proc_create_part2(void* token, int err){
 
 static void
 serv_proc_create_end(void* token, int err, pid_t pid){
-    printf("serv_proc_create_end\n");
+    dprintf(3, "serv_proc_create_end\n");
     serv_proc_create_cont_t* cont = (serv_proc_create_cont_t*)token;
 
     set_cur_proc(PROC_NULL);
@@ -148,7 +151,7 @@ static void serv_proc_wait_cb(void *token, pid_t pid);
 
 void serv_proc_wait(pid_t pid, seL4_CPtr reply_cap){
     pid_t cur_pid = proc_get_id();
-    printf("serv_proc_wait, proc = %d\n", cur_pid);
+    dprintf(3, "serv_proc_wait, proc = %d\n", cur_pid);
     serv_proc_wait_cont_t *cont = malloc(sizeof(serv_proc_wait_cont_t));
     if (cont == NULL) {
         // No memory, reply to user with pid -1
@@ -166,14 +169,14 @@ void serv_proc_wait(pid_t pid, seL4_CPtr reply_cap){
 
     int err = proc_wait(pid, serv_proc_wait_cb, (void*)cont);
     if (err) {
-        printf("serv_proc_wait: proc_wait failed\n");
+        dprintf(3, "serv_proc_wait: proc_wait failed\n");
         serv_proc_wait_cb((void*)cont, -1);
     }
 }
 
 static void
 serv_proc_wait_cb(void *token, pid_t pid) {
-    printf("serv_proc_wait_cb called, proc = %d\n", proc_get_id());
+    dprintf(3, "serv_proc_wait_cb called, proc = %d\n", proc_get_id());
     serv_proc_wait_cont_t *cont = (serv_proc_wait_cont_t*)token;
     assert(cont != NULL);
 
@@ -188,7 +191,7 @@ serv_proc_wait_cb(void *token, pid_t pid) {
     cspace_free_slot(cur_cspace, cont->reply_cap);
     free(cont);
 
-    printf("serv_proc_wait_cb ended\n");
+    dprintf(3, "serv_proc_wait_cb ended\n");
     // we don't want to clear cur_proc because the caller is still in process
     // of destroying itself
     //set_cur_proc(PROC_NULL);
@@ -208,7 +211,7 @@ typedef struct {
 void serv_proc_status_end(void* token, int err);
 
 void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
-    printf("serv_proc_status\n");
+    dprintf(3, "serv_proc_status\n");
 
     serv_proc_status_cont_t* cont = malloc(sizeof(serv_proc_status_cont_t));
     if(cont == NULL){
@@ -226,7 +229,7 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
     cont->pid = proc_get_id();
 
 
-    printf("serv_proc_status\n");
+    dprintf(3, "serv_proc_status\n");
     uint32_t permissions = 0;
     if(!as_is_valid_memory(proc_getas(), (seL4_Word)buf, sizeof(sos_process_t) * MIN(MAX_PROC, max), &permissions) ||
             !(permissions & seL4_CanWrite)){
@@ -234,7 +237,7 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
         return;
     }
 
-    printf("serv_proc_status\n");
+    dprintf(3, "serv_proc_status\n");
     sos_process_t* kbuf = malloc(sizeof(sos_process_t) * MIN(MAX_PROC, max));
     if(kbuf == NULL){
         serv_proc_status_end((void*)cont, ENOMEM);
@@ -242,7 +245,7 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
     }
     cont->kbuf = kbuf;
 
-    printf("serv_proc_status\n");
+    dprintf(3, "serv_proc_status\n");
     cont->num = 0;
     for(int i = 0; i < MAX_PROC; i++){
         if(processes[i] != NULL){
@@ -251,14 +254,14 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
             kbuf[cont->num].stime = (unsigned int)time_stamp()/1000 - processes[i]->stime;
             memcpy(kbuf[cont->num].command, processes[i]->name, processes[i]->name_len);
             kbuf[cont->num].command[processes[i]->name_len] = '\0';
-            printf("serv_proc_status, procing i = %d kbuf name = %s\n",i,kbuf[cont->num].command);
+            dprintf(3, "serv_proc_status, procing i = %d kbuf name = %s\n",i,kbuf[cont->num].command);
 
             cont->num++;
             if(cont->num >= max) break;
         }
     }
 
-    printf("serv_proc_status\n");
+    dprintf(3, "serv_proc_status\n");
     int err = copyout((seL4_Word)buf, (seL4_Word)kbuf, sizeof(sos_process_t) * MIN(cont->num, max), serv_proc_status_end, (void*)cont);
     if(err){
         serv_proc_status_end((void*)cont, err);
@@ -267,7 +270,7 @@ void serv_proc_status(seL4_Word buf, unsigned max, seL4_CPtr reply_cap){
 }
 
 void serv_proc_status_end(void* token, int err){
-    printf("serv_proc_status end\n");
+    dprintf(3, "serv_proc_status end\n");
     serv_proc_status_cont_t* cont = (serv_proc_status_cont_t*)token;
 
     if (cont->kbuf) {

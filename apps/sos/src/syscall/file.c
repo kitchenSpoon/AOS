@@ -10,6 +10,9 @@
 #include "syscall/file.h"
 #include "dev/console.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 /**********************************************************************
  * File Open
  **********************************************************************/
@@ -27,7 +30,7 @@ static void file_open_end(void *token, int err, struct vnode *vn);
 void
 file_open(char *filename, int flags, file_open_cb_t callback, void *token)
 {
-    printf("file_open called\n");
+    dprintf(3, "file_open called\n");
     int accmode = flags & O_ACCMODE;
     if (!(accmode==O_RDONLY ||
           accmode==O_WRONLY ||
@@ -49,7 +52,7 @@ file_open(char *filename, int flags, file_open_cb_t callback, void *token)
 }
 
 static void file_open_end(void *token, int err, struct vnode *vn) {
-    printf("file_open_end called\n");
+    dprintf(3, "file_open_end called\n");
     assert(token != NULL);
 
     cont_file_open_t *cont = (cont_file_open_t*)token;
@@ -64,7 +67,7 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
     int accmode = cont->flags & O_ACCMODE;
     bool file_readable = vn->sattr.st_mode & S_IRUSR;
     bool file_writable = vn->sattr.st_mode & S_IWUSR;
-    printf("file_readable = %d, file_writable = %d\n", (int)file_readable, (int)file_writable);
+    dprintf(3, "file_readable = %d, file_writable = %d\n", (int)file_readable, (int)file_writable);
     if ((accmode == O_RDONLY && !file_readable) ||
         (accmode == O_WRONLY && !file_writable) ||
         (accmode == O_RDWR && !(file_readable && file_writable)))
@@ -78,7 +81,7 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
     int fd;
 
     file = malloc(sizeof(struct openfile));
-    printf("created an openfile at %p\n", file);
+    dprintf(3, "created an openfile at %p\n", file);
     if (file == NULL) {
         vfs_close(vn, cont->flags);
         cont->callback(cont->token, ENOMEM, -1);
@@ -117,7 +120,7 @@ static
 int
 file_doclose(struct openfile *file, uint32_t flags)
 {
-    printf("file_doclose\n");
+    dprintf(3, "file_doclose\n");
 
     if(file == NULL){
         return EINVAL;
@@ -126,10 +129,10 @@ file_doclose(struct openfile *file, uint32_t flags)
     /* if this is the last close of this file, free it up */
     if (file->of_refcount == 1) {
         vfs_close(file->of_vnode, flags);
-        //printf("vfs_close_out\n");
-        //printf("free openfile at %p\n", file);
+        //dprintf(3, "vfs_close_out\n");
+        //dprintf(3, "free openfile at %p\n", file);
         free(file);
-        //printf("free_file\n");
+        //dprintf(3, "free_file\n");
     } else {
         assert(file->of_refcount > 1);
         file->of_refcount--;
@@ -141,7 +144,7 @@ file_doclose(struct openfile *file, uint32_t flags)
 int
 file_close(int fd)
 {
-    printf("file_close\n");
+    dprintf(3, "file_close\n");
     struct openfile *file;
     int result;
 
@@ -157,7 +160,7 @@ file_close(int fd)
         return result;
     }
     CURPROC->p_filetable->ft_openfiles[fd] = NULL;
-    printf("file_close_out\n");
+    dprintf(3, "file_close_out\n");
 
     return 0;
 }
@@ -201,7 +204,7 @@ filetable_init_end(void *token, int err, struct vnode *vn) {
 
 int
 filetable_init(struct filetable *filetable, filetable_init_cb_t callback, void *token) {
-    printf("in file table init\n");
+    dprintf(3, "in file table init\n");
     /* the filenames come from the kernel; assume reasonable length */
     int fd;
 
@@ -210,13 +213,13 @@ filetable_init(struct filetable *filetable, filetable_init_cb_t callback, void *
     }
 
     /* NULL-out the table */
-    printf("filetable nullout something \n");
+    dprintf(3, "filetable nullout something \n");
     for (fd = 0; fd < PROCESS_MAX_FILES; fd++) {
         filetable->ft_openfiles[fd] = NULL;
     }
 
     /* Initialise stdin, stdout & stderr */
-    printf("filetable open something \n");
+    dprintf(3, "filetable open something \n");
     cont_filetable_init_t *cont = malloc(sizeof(cont_file_open_t));
     if (cont == NULL) {
         return ENOMEM;
@@ -250,7 +253,7 @@ filetable_findfile(int fd, struct openfile **file)
 int
 filetable_placefile(struct openfile *file, int *fd)
 {
-    printf("openfile1 still at %p\n", file);
+    dprintf(3, "openfile1 still at %p\n", file);
     struct filetable *ft = CURPROC->p_filetable;
     int i;
 
@@ -258,7 +261,7 @@ filetable_placefile(struct openfile *file, int *fd)
         if (ft->ft_openfiles[i] == NULL) {
             ft->ft_openfiles[i] = file;
             *fd = i;
-            printf("openfile1 still at %p\n", file);
+            dprintf(3, "openfile1 still at %p\n", file);
             return 0;
         }
     }

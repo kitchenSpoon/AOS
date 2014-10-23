@@ -14,6 +14,9 @@
 #define N_PAGETABLES_ENTRIES     (1024)
 #define DIVROUNDUP(a,b) (((a)+(b)-1)/(b))
 
+#define verbose 0
+#include <sys/debug.h>
+
 /***********************************************************************
  * as_create
  ***********************************************************************/
@@ -29,7 +32,7 @@ static void _as_create_end(as_create_cont_t *cont, int err);
 
 int
 as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) {
-    printf("as_create called\n");
+    dprintf(3, "as_create called\n");
     int err;
     addrspace_t* as = malloc(sizeof(addrspace_t));
     if (as == NULL) {
@@ -63,16 +66,16 @@ as_create(seL4_ARM_PageDirectory sel4_pd, as_create_cb_t callback, void *token) 
 
 static void
 _as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
-    printf("as create pagedir_cap_allocated\n");
+    dprintf(3, "as create pagedir_cap_allocated\n");
     int err;
     as_create_cont_t *cont = (as_create_cont_t*)token;
     if (cont == NULL) {
-        printf("_as_create_pagedir_caps_allocated: There is something wrong with the memory\n");
+        dprintf(3, "_as_create_pagedir_caps_allocated: There is something wrong with the memory\n");
         return;
     }
 
     if (kvaddr == 0) {
-        printf("as create err 1\n");
+        dprintf(3, "as create err 1\n");
         _as_create_end(cont, ENOMEM);
         return;
     }
@@ -81,7 +84,7 @@ _as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
 
     err = frame_alloc(0, NULL, PROC_NULL, true, _as_create_pagedir_regs_allocated, (void*)cont);
     if (err) {
-        printf("as create err 2\n");
+        dprintf(3, "as create err 2\n");
         _as_create_end(cont, err);
         return;
     }
@@ -89,10 +92,10 @@ _as_create_pagedir_caps_allocated(void *token, seL4_Word kvaddr) {
 
 static void
 _as_create_pagedir_regs_allocated(void *token, seL4_Word kvaddr) {
-    printf("as create pagedir_reg_allocated\n");
+    dprintf(3, "as create pagedir_reg_allocated\n");
     as_create_cont_t *cont = (as_create_cont_t*)token;
     if (cont == NULL) {
-        printf("_as_create_pagedir_regs_allocated: There is something wrong with the memory\n");
+        dprintf(3, "_as_create_pagedir_regs_allocated: There is something wrong with the memory\n");
         return;
     }
 
@@ -109,15 +112,15 @@ _as_create_pagedir_regs_allocated(void *token, seL4_Word kvaddr) {
 
 static void
 _as_create_end(as_create_cont_t *cont, int err) {
-    printf("as create end\n");
+    dprintf(3, "as create end\n");
     if (!err) {
-        printf("as create end success\n");
+        dprintf(3, "as create end success\n");
         cont->callback(cont->token, cont->as);
         free(cont);
         return;
     }
 
-    printf("as create end err = %d\n",err);
+    dprintf(3, "as create end err = %d\n",err);
     /* Clean up as needed */
     if (cont->as) {
         if (cont->as->as_pd_caps != NULL) {
@@ -136,7 +139,7 @@ _as_create_end(as_create_cont_t *cont, int err) {
  ***********************************************************************/
 void
 as_destroy(addrspace_t *as) {
-    printf("as destroy called\n");
+    dprintf(3, "as destroy called\n");
     if(as == NULL){
         return;
     }
@@ -220,7 +223,7 @@ static int
 _region_init(addrspace_t *as, seL4_Word vaddr, size_t sz,
         int rights, struct region* nregion)
 {
-    printf("as region init\n");
+    dprintf(3, "as region init\n");
     assert(as != NULL);
 
     nregion->vbase = vaddr;
@@ -237,7 +240,7 @@ _region_init(addrspace_t *as, seL4_Word vaddr, size_t sz,
     }
 
     for (region_t *r = as->as_rhead; r != NULL; r = r->next) {
-        printf("as region init loop, region base = 0x%08x, region top = 0x%08x\n", r->vbase,r->vtop);
+        dprintf(3, "as region init loop, region base = 0x%08x, region top = 0x%08x\n", r->vbase,r->vtop);
         if (_region_overlap(nregion, r)) {
             return EINVAL;
         }
@@ -266,12 +269,12 @@ region_probe(struct addrspace* as, seL4_Word addr) {
 
 int
 as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
-    printf("as define region\n");
+    dprintf(3, "as define region\n");
     assert(as != NULL);
 
     region_t* nregion = malloc(sizeof(region_t));
     if (nregion == NULL) {
-        printf("as define region no mem\n");
+        dprintf(3, "as define region no mem\n");
         return ENOMEM;
     }
 
@@ -282,7 +285,7 @@ as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
     /* Check region overlap */
     int err = _region_init(as, vaddr, sz, rights, nregion);
     if (err) {
-        printf("as define region init failed\n");
+        dprintf(3, "as define region init failed\n");
         return err;
     }
 
@@ -290,7 +293,7 @@ as_define_region(addrspace_t *as, seL4_Word vaddr, size_t sz, int32_t rights) {
     nregion->next = as->as_rhead;
     as->as_rhead = nregion;
 
-    printf("as define region end\n");
+    dprintf(3, "as define region end\n");
     return 0;
 }
 
@@ -378,7 +381,7 @@ seL4_Word
 sos_sys_brk(addrspace_t *as, seL4_Word vaddr){
     if(as == NULL || as->as_heap == NULL) return 0;
 
-    printf("sos_sysbrk, vaddr = %p\n", (void*)vaddr);
+    dprintf(3, "sos_sysbrk, vaddr = %p\n", (void*)vaddr);
     if(vaddr == 0){
         return as->as_heap->vtop;
     }
@@ -400,7 +403,7 @@ sos_sys_brk(addrspace_t *as, seL4_Word vaddr){
             return 0;
         }
     }
-    printf("sos_sysbrk ended, vaddr = %p\n", (void*)vaddr);
+    dprintf(3, "sos_sysbrk ended, vaddr = %p\n", (void*)vaddr);
     return vaddr;
 }
 

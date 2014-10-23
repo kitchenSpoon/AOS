@@ -16,6 +16,9 @@
 #include "vm/swap.h"
 #include "proc/proc.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 #define NFRAMES                  (FRAME_MEMORY / PAGE_SIZE)
 #define ID_TO_VADDR(id)     ((id)*PAGE_SIZE + FRAME_VSTART)
 
@@ -25,7 +28,7 @@ static bool
 _check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t **reg_ret) {
     if (fault_addr == 0) {
         /* Derefenrecing NULL? Segfault */
-        printf("App tried to derefence NULL\n");
+        dprintf(3, "App tried to derefence NULL\n");
         return true;
     }
 
@@ -33,7 +36,7 @@ _check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t *
     region_t* reg = region_probe(as, fault_addr);
     if (reg == NULL) {
         /* Invalid address, segfault */
-        printf("App tried to access a address without a region (invalid address), kill it\n");
+        dprintf(3, "App tried to access a address without a region (invalid address), kill it\n");
         return true;
     }
 
@@ -42,12 +45,12 @@ _check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t *
     bool fault_when_read = !fault_when_write;
 
     if (fault_when_write && !(reg->rights & seL4_CanWrite)) {
-        printf("write to read only\n");
+        dprintf(3, "write to read only\n");
         return true;
     }
 
     if (fault_when_read && !(reg->rights & seL4_CanRead)) {
-        printf("read from no-readble mem\n");
+        dprintf(3, "read from no-readble mem\n");
         return true;
     }
 
@@ -71,7 +74,7 @@ _set_page_reference(addrspace_t *as, seL4_Word vaddr, uint32_t rights) {
     }
 
     seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
-    printf("mapping back into kvaddr -> 0x%08x, vaddr = 0x%08x\n", kvaddr, vaddr);
+    dprintf(3, "mapping back into kvaddr -> 0x%08x, vaddr = 0x%08x\n", kvaddr, vaddr);
 
     err = frame_get_cap(kvaddr, &kframe_cap);
     //assert(!err); // This kvaddr is ready to use, there should be no error
@@ -79,14 +82,14 @@ _set_page_reference(addrspace_t *as, seL4_Word vaddr, uint32_t rights) {
     /* Copy the frame cap as we need to map it into 2 address spaces */
     frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, rights);
     if (frame_cap == CSPACE_NULL) {
-        printf("vmf: failed copying frame cap\n");
+        dprintf(3, "vmf: failed copying frame cap\n");
         return EFAULT;
     }
 
     err = seL4_ARM_Page_Map(frame_cap, as->as_sel4_pd, vpage,
             rights, seL4_ARM_Default_VMAttributes);
     if(err == seL4_FailedLookup){
-        printf("vmf: failed mapping application frame to sel4\n");
+        dprintf(3, "vmf: failed mapping application frame to sel4\n");
         return EFAULT;
     }
 
@@ -94,7 +97,7 @@ _set_page_reference(addrspace_t *as, seL4_Word vaddr, uint32_t rights) {
 
     err = frame_set_referenced(kvaddr);
     if(err){
-        printf("vmf: setting frame referenced error\n");
+        dprintf(3, "vmf: setting frame referenced error\n");
         return err;
     }
 
@@ -118,15 +121,15 @@ static void _sos_VMFaultHandler_reply(void* token, int err);
 
 void
 sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, bool is_code){
-    printf("sos vmfault handler \n");
+    dprintf(3, "sos vmfault handler \n");
 
     int err;
 
-    printf("sos vmfault handler, getting as \n");
+    dprintf(3, "sos vmfault handler, getting as \n");
     addrspace_t *as = proc_getas();
-    printf("sos vmfault handler, gotten as \n");
+    dprintf(3, "sos vmfault handler, gotten as \n");
     if (as == NULL) {
-        printf("app as is NULL\n");
+        dprintf(3, "app as is NULL\n");
         /* Kernel is probably failed when bootstraping */
         set_cur_proc(PROC_NULL);
         cspace_free_slot(cur_cspace, reply_cap);
@@ -137,7 +140,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
 
     /* Is this a segfault? */
     if (_check_segfault(as, fault_addr, fsr, &reg)) {
-        printf("vmf: segfault\n");
+        dprintf(3, "vmf: segfault\n");
         proc_destroy(proc_get_id());
         set_cur_proc(PROC_NULL);
         cspace_free_slot(cur_cspace, reply_cap);
@@ -151,7 +154,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
 
     VMF_cont_t *cont = malloc(sizeof(VMF_cont_t));
     if (cont == NULL) {
-        printf("vmfault out of mem\n");
+        dprintf(3, "vmfault out of mem\n");
         /* We cannot handle the fault but the process still can run
          * There will be more faults coming though */
         set_cur_proc(PROC_NULL);
@@ -171,7 +174,7 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
     /* Check if this page is an new, unmaped page or is it just swapped out */
     if (sos_page_is_inuse(as, fault_addr)) {
         if (sos_page_is_swapped(as, fault_addr)) {
-            printf("vmf tries to swapin\n");
+            dprintf(3, "vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
             err = swap_in(cont->as, cont->reg->rights, cont->vaddr,
                       cont->is_code, _sos_VMFaultHandler_reply, cont);
@@ -182,19 +185,19 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
             return;
         } else {
             if (sos_page_is_locked(as, fault_addr)) {
-                printf("vmf page is locked\n");
+                dprintf(3, "vmf page is locked\n");
                 _sos_VMFaultHandler_reply((void*)cont, EFAULT);
                 return;
             }
 
-            printf("vmf second chance mapping page back in\n");
+            dprintf(3, "vmf second chance mapping page back in\n");
             err = _set_page_reference(cont->as, cont->vaddr, cont->reg->rights);
             _sos_VMFaultHandler_reply((void*)cont, err);
             return;
         }
     } else {
         /* This page has never been mapped, so do that and return */
-        printf("vmf tries to map a page\n");
+        dprintf(3, "vmf tries to map a page\n");
         inc_proc_size_proc(cur_proc());
         err = sos_page_map(proc_get_id(), as, fault_addr, reg->rights, _sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
@@ -204,18 +207,18 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
         return;
     }
     /* Otherwise, this is not handled */
-    printf("vmf error at the end\n");
+    dprintf(3, "vmf error at the end\n");
     _sos_VMFaultHandler_reply((void*)cont, EFAULT);
     return;
 }
 
 static void
 _sos_VMFaultHandler_reply(void* token, int err){
-    printf("sos_vmf_reply called\n");
+    dprintf(3, "sos_vmf_reply called\n");
 
     VMF_cont_t *cont= (VMF_cont_t*)token;
     if(err){
-        printf("sos_vmf received an err\n");
+        dprintf(3, "sos_vmf received an err\n");
     }
     if (!is_proc_alive(cont->pid)) {
         cspace_free_slot(cur_cspace, cont->reply_cap);

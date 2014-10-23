@@ -238,7 +238,7 @@ pid_t sos_process_create(const char *path) {
     while(len < MAX_IO_BUF && path[len] != '\0') {
         len++;
     }
-    printf("sos_process_create len = %d\n",len);
+    //printf("sos_process_create len = %d\n",len);
 
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 3);
     seL4_SetTag(tag);
@@ -257,7 +257,7 @@ pid_t sos_process_create(const char *path) {
     return pid;
 }
 int sos_process_delete(pid_t pid) {
-    printf("sos_process_delete called\n");
+    //printf("sos_process_delete called\n");
 
     seL4_MessageInfo_t tag = seL4_MessageInfo_new(seL4_NoFault, 0, 0, 2);
     seL4_SetTag(tag);

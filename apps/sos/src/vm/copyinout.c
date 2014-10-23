@@ -9,6 +9,9 @@
 #include "vm/addrspace.h"
 #include "vm/swap.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 /***********************************************************************
  * Copyin
  **********************************************************************/
@@ -28,7 +31,7 @@ static void _copyin_end(copyin_cont_t *cont, int err);
 
 int
 copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, void *token) {
-    printf("copyin called, kbuf=0x%08x, buf=0x%08x, nbyte=%u\n", kbuf, buf, nbyte);
+    dprintf(3, "copyin called, kbuf=0x%08x, buf=0x%08x, nbyte=%u\n", kbuf, buf, nbyte);
     uint32_t permissions = 0;
 
     addrspace_t *as = proc_getas();
@@ -58,7 +61,7 @@ copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, void *
 
 static void
 _copyin_do_copy(void *token, int err){
-    printf("_copyin_do_copy\n");
+    dprintf(3, "_copyin_do_copy\n");
     copyin_cont_t *cont = (copyin_cont_t*)token;
 
     if (err) {
@@ -69,7 +72,7 @@ _copyin_do_copy(void *token, int err){
     /* Check if we need to either map the page or swap in */
     seL4_Word vpage = PAGE_ALIGN(cont->buf);
     if (!sos_page_is_inuse(cont->as, vpage)) {
-        printf("_copyin_do_copy: mapping page in\n");
+        dprintf(3, "_copyin_do_copy: mapping page in\n");
         err = sos_page_map(proc_get_id(), cont->as, vpage, cont->reg->rights, _copyin_do_copy, (void*)cont, false);
         if (err) {
             _copyin_end(cont, err);
@@ -78,7 +81,7 @@ _copyin_do_copy(void *token, int err){
         inc_proc_size_proc(cur_proc());
         return;
     } else if (sos_page_is_swapped(cont->as, vpage)) {
-        printf("_copyin_do_copy: swapping page in\n");
+        dprintf(3, "_copyin_do_copy: swapping page in\n");
         err = swap_in(cont->as, cont->reg->rights, vpage,
                 false, _copyin_do_copy, cont);
         if (err) {
@@ -105,11 +108,11 @@ _copyin_do_copy(void *token, int err){
         /* Copy maximum one page */
         cpy_sz = PAGE_SIZE - PAGE_OFFSET(ksrc);
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
-        printf("cpy_sz = %u\n", cpy_sz);
+        dprintf(3, "cpy_sz = %u\n", cpy_sz);
 
         memcpy((void*)cont->kbuf, (void*)ksrc, cpy_sz);
 
-        printf("copyin from (ubuf=0x%08x, ksrc=0x%08x) to (kbuf=0x%08x)\n", cont->buf, ksrc, cont->kbuf);
+        dprintf(3, "copyin from (ubuf=0x%08x, ksrc=0x%08x) to (kbuf=0x%08x)\n", cont->buf, ksrc, cont->kbuf);
         cont->pos  += cpy_sz;
         cont->buf  += cpy_sz;
         cont->kbuf += cpy_sz;
@@ -129,7 +132,7 @@ _copyin_end(copyin_cont_t *cont, int err) {
         free(cont);
         return;
     }
-    printf("copyin call back up\n");
+    dprintf(3, "copyin call back up\n");
     cont->callback(cont->token, 0);
     free(cont);
 }
@@ -155,9 +158,9 @@ static void _copyout_do_copy(void *token, int err);
 int
 copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte, copyout_cb_t callback, void *token) {
     uint32_t permissions = 0;
-    printf("copyout called, kbuf=0x%08x, buf=0x%08x, nbyte=%u\n", kbuf, buf, nbyte);
+    dprintf(3, "copyout called, kbuf=0x%08x, buf=0x%08x, nbyte=%u\n", kbuf, buf, nbyte);
 
-    //printf("copyout buf = 0x%08x\n", buf);
+    //dprintf(3, "copyout buf = 0x%08x\n", buf);
 
     addrspace_t *as = proc_getas();
     assert(as != NULL);
@@ -188,7 +191,7 @@ copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte, copyout_cb_t callback, void
 
 static void
 _copyout_do_copy(void *token, int err){
-    printf("_copyout_do_copy\n");
+    dprintf(3, "_copyout_do_copy\n");
     if (err) {
         _copyout_end(token, err);
         return;
@@ -200,7 +203,7 @@ _copyout_do_copy(void *token, int err){
     /* Check if we need to either map the page or swap in */
     seL4_Word vpage = PAGE_ALIGN(cont->buf);
     if (!sos_page_is_inuse(cont->as, vpage)) {
-        printf("_copyout_do_copy: mapping page in\n");
+        dprintf(3, "_copyout_do_copy: mapping page in\n");
         err = sos_page_map(proc_get_id(), cont->as, vpage, cont->reg->rights, _copyout_do_copy, (void*)cont, false);
         if (err) {
             _copyout_end(token, err);
@@ -209,7 +212,7 @@ _copyout_do_copy(void *token, int err){
         inc_proc_size_proc(cur_proc());
         return;
     } else if (sos_page_is_swapped(cont->as, vpage)) {
-        printf("_copyout_do_copy: swapping page in\n");
+        dprintf(3, "_copyout_do_copy: swapping page in\n");
         err = swap_in(cont->as, cont->reg->rights, vpage,
                 false, _copyout_do_copy, cont);
         if (err) {
@@ -236,9 +239,9 @@ _copyout_do_copy(void *token, int err){
         /* Copy the data over */
         cpy_sz = PAGE_SIZE - PAGE_OFFSET(kdst);
         cpy_sz = MIN(cpy_sz, cont->nbyte - cont->pos);
-        printf("cpy_sz = %u\n", cpy_sz);
+        dprintf(3, "cpy_sz = %u\n", cpy_sz);
         memcpy((void*)kdst, (void*)cont->kbuf, cpy_sz);
-        printf("copyout from kbuf=0x%08x to (ubuf=0x%08x, kdst=0x%08x)\n", cont->kbuf, cont->buf, kdst);
+        dprintf(3, "copyout from kbuf=0x%08x to (ubuf=0x%08x, kdst=0x%08x)\n", cont->kbuf, cont->buf, kdst);
 
         cont->pos  += cpy_sz;
         cont->buf  += cpy_sz;
@@ -262,7 +265,7 @@ _copyout_end(void *token, int err){
         return;
     }
 
-    printf("copyout calls back up\n");
+    dprintf(3, "copyout calls back up\n");
     cont->callback(cont->token, 0);
     free(cont);
     return;

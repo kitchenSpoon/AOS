@@ -184,16 +184,16 @@ network_init(seL4_CPtr interrupt_ep) {
     _irq_ep = interrupt_ep;
 
     /* Extract IP from .config */
-    printf("\nInitialising network...\n\n");
+    dprintf(3, "\nInitialising network...\n\n");
     err = 0;
     err |= !ipaddr_aton(CONFIG_SOS_GATEWAY,      &gw);
     err |= !ipaddr_aton(CONFIG_SOS_IP     ,  &ipaddr);
     err |= !ipaddr_aton(CONFIG_SOS_NETMASK, &netmask);
     conditional_panic(err, "Failed to parse IP address configuration");
-    printf("  Local IP Address: %s\n", ipaddr_ntoa( &ipaddr));
-    printf("Gateway IP Address: %s\n", ipaddr_ntoa(     &gw));
-    printf("      Network Mask: %s\n", ipaddr_ntoa(&netmask));
-    printf("\n");
+    dprintf(3, "  Local IP Address: %s\n", ipaddr_ntoa( &ipaddr));
+    dprintf(3, "Gateway IP Address: %s\n", ipaddr_ntoa(     &gw));
+    dprintf(3, "      Network Mask: %s\n", ipaddr_ntoa(&netmask));
+    dprintf(3, "\n");
 
     /* low level initialisation */
     eth_driver = ethif_imx6_init(0, io_ops);
@@ -229,14 +229,14 @@ network_init(seL4_CPtr interrupt_ep) {
     if(strlen(SOS_NFS_DIR)) {
         /* Initialise NFS */
         int err;
-        printf("\nMounting NFS\n");
+        dprintf(3, "\nMounting NFS\n");
         if(!(err = nfs_init(&gw))){
             /* Print out the exports on this server */
             nfs_print_exports();
             if ((err = nfs_mount(SOS_NFS_DIR, &mnt_point))){
-                printf("Error mounting path '%s'!\n", SOS_NFS_DIR);
+                dprintf(3, "Error mounting path '%s'!\n", SOS_NFS_DIR);
             }else{
-                printf("\nSuccessfully mounted '%s'\n", SOS_NFS_DIR);
+                dprintf(3, "\nSuccessfully mounted '%s'\n", SOS_NFS_DIR);
             }
         }
         if(err){

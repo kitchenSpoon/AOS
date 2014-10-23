@@ -610,7 +610,6 @@ int main(void) {
         while (!found && !done) {
             /* Make sure to flush so anything is visible while waiting for user input */
             fflush(stdout);
-            printf("sosh tries to read\n");
             r = read(in, bp, BUF_SIZ - 1 + buf - bp);
             if (r < 0) {
                 done = 1;

@@ -17,6 +17,9 @@
 #include "vm/vm.h"
 #include "proc/proc.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 /*
  * Bitmap use to track free slots in our swap file
  * 1 is used
@@ -47,7 +50,7 @@ _swap_find_free_slot(void){
     for(uint32_t i = 0; i < NUM_CHUNKS; i++){
         if (free_slots[i] == (uint32_t)(-1)) continue;
         for(uint32_t j = 0; j < NUM_BITS; j++) {
-            //printf("i = %d, j = %d, free_slots[i] in decimal = %u\n", i, j, free_slots[i]);
+            //dprintf(3, "i = %d, j = %d, free_slots[i] in decimal = %u\n", i, j, free_slots[i]);
             if(!(free_slots[i] & (1u<<j))){
                 return i*NUM_BITS + j;
             }
@@ -91,7 +94,7 @@ _swap_init(swap_init_cb_t callback, void *token){
 static void
 _swap_init_end(void *token, int err, struct vnode *vn) {
     if (token == NULL) {
-        printf("Error in _swap_init_end: data corrupted. This shouldn't happen, check it.\n");
+        dprintf(3, "Error in _swap_init_end: data corrupted. This shouldn't happen, check it.\n");
         return;
     }
 
@@ -105,7 +108,7 @@ _swap_init_end(void *token, int err, struct vnode *vn) {
 
     err = nfs_dev_get_fhandle(vn, &swap_fh);
     if (err) {
-        printf("Failed to get the swap file's fhandle, will fail when swapping is needed\n");
+        dprintf(3, "Failed to get the swap file's fhandle, will fail when swapping is needed\n");
         cont->callback(cont->token, EFAULT);
         free(cont);
         return;
@@ -139,7 +142,7 @@ static void _swap_in_end(void* token, int err);
 int
 swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
         bool is_code, swap_in_cb_t callback, void* token){
-    printf("swap in entered, vaddr = 0x%08x\n", vaddr);
+    dprintf(3, "swap in entered, vaddr = 0x%08x\n", vaddr);
 
     // If swap file is not created, how can we swap in? This is a bug
     assert(swap_fh != NULL);
@@ -169,7 +172,7 @@ swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
     swap_cont->bytes_read = 0;
     swap_cont->pid        = proc_get_id();
 
-    printf("swap_in: swap_slot = %d, pid = %d\n", swap_slot, swap_cont->pid);
+    dprintf(3, "swap_in: swap_slot = %d, pid = %d\n", swap_slot, swap_cont->pid);
     int err;
     err = sos_page_map(swap_cont->pid, as, vpage, rights, _swap_in_page_map_cb, (void*)swap_cont, false);
     if (err) {
@@ -183,7 +186,7 @@ static void
 _swap_in_page_map_cb(void *token, int err) {
     swap_in_cont_t *cont = (swap_in_cont_t*)token;
 
-    printf("_swap_in_page_map_cb called\n");
+    dprintf(3, "_swap_in_page_map_cb called\n");
     if (err) {
         _swap_in_end(cont, err);
         return;
@@ -193,15 +196,15 @@ _swap_in_page_map_cb(void *token, int err) {
     int y = PT_L2_INDEX(cont->vpage);
     cont->kvaddr = cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK;
 
-    printf("_swap_in_page_map_cb lockframe\n");
+    dprintf(3, "_swap_in_page_map_cb lockframe\n");
     err = frame_lock_frame(cont->kvaddr);
     if (err) {
-        printf("swap_in failed to lock frame\n");
+        dprintf(3, "swap_in failed to lock frame\n");
         _swap_in_end(cont, err);
         return;
     }
 
-    printf("swap in start reading\n");
+    dprintf(3, "swap in start reading\n");
     enum rpc_stat status = nfs_read(swap_fh, cont->swap_slot * PAGE_SIZE,
             MIN(PAGE_SIZE, NFS_SEND_SIZE), _swap_in_nfs_read_handler,
             (uintptr_t)cont);
@@ -216,7 +219,7 @@ _swap_in_page_map_cb(void *token, int err) {
 static void
 _swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
                           fattr_t *fattr, int count, void* data){
-    printf("swap in handler entered\n");
+    dprintf(3, "swap in handler entered\n");
     swap_in_cont_t *cont = (swap_in_cont_t*)token;
 
     if(status != NFS_OK || count < 0){
@@ -224,7 +227,7 @@ _swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
         return;
     }
     if (!starting_first_process && !is_proc_alive(frame_get_pid(cont->kvaddr))) {
-        printf("_swap_in_nfs_read_handler: process is killed\n");
+        dprintf(3, "_swap_in_nfs_read_handler: process is killed\n");
         frame_unlock_frame(cont->kvaddr);
         //sos_page_free(cont->as, cont->vpage);
         frame_free(cont->kvaddr);
@@ -241,7 +244,7 @@ _swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
 
     cont->bytes_read += (size_t)count;
 
-    //printf("bytes read = %u, swap_slot = %d\n", cont->bytes_read, cont->swap_slot);
+    //dprintf(3, "bytes read = %u, swap_slot = %d\n", cont->bytes_read, cont->swap_slot);
     /* Check if we need to read more */
     if(cont->bytes_read < PAGE_SIZE){
         enum rpc_stat status = nfs_read(swap_fh, cont->swap_slot * PAGE_SIZE + cont->bytes_read,
@@ -260,9 +263,9 @@ _swap_in_nfs_read_handler(uintptr_t token, enum nfs_stat status,
 
 static void
 _swap_in_end(void* token, int err){
-    printf("swap in end entered\n");
+    dprintf(3, "swap in end entered\n");
     swap_in_cont_t *cont = (swap_in_cont_t*)token;
-    printf("swap_slot = %d, pid = %d\n", cont->swap_slot, cont->pid);
+    dprintf(3, "swap_slot = %d, pid = %d\n", cont->swap_slot, cont->pid);
 
     if(err){
         frame_unlock_frame(cont->kvaddr);
@@ -288,7 +291,7 @@ _swap_in_end(void* token, int err){
 
     /* We don't need to reset PTE as sos_page_map already done that for us */
 
-    printf("_swap_in_end: calling back up\n");
+    dprintf(3, "_swap_in_end: calling back up\n");
     cont->callback((void*)cont->token, 0);
     free(cont);
 }
@@ -314,7 +317,7 @@ static void _swap_out_end(swap_out_cont_t *cont, int err);
 
 void
 swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
-    printf("swap_out entered, kvaddr = 0x%08x\n", kvaddr);
+    dprintf(3, "swap_out entered, kvaddr = 0x%08x\n", kvaddr);
     kvaddr = PAGE_ALIGN(kvaddr);
 
     seL4_Word vaddr = frame_get_vaddr(kvaddr);
@@ -331,7 +334,7 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
     cont->written   = 0;
     cont->pid       = proc_get_id();
 
-    printf("swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x, pid = %d\n",kvaddr,vaddr, cont->pid);
+    dprintf(3, "swap out this kvaddr -> 0x%08x, this vaddr -> 0x%08x, pid = %d\n",kvaddr,vaddr, cont->pid);
 
     frame_lock_frame(kvaddr);
 
@@ -346,7 +349,7 @@ swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token) {
 
 static void
 _swap_out_2_init_callback(void *token, int err) {
-    printf("swap out 2 init entered\n");
+    dprintf(3, "swap out 2 init entered\n");
     assert(token != NULL); // Should not happen
 
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
@@ -360,11 +363,11 @@ _swap_out_2_init_callback(void *token, int err) {
 
 static void
 _swap_out_3(swap_out_cont_t *cont) {
-    printf("swap out 3 entered\n");
+    dprintf(3, "swap out 3 entered\n");
     assert(cont != NULL); //Kernel code is buggy if this happens
 
     int free_slot = _swap_find_free_slot();
-    printf("swap_out free slot = %d, pid = %d, kvaddr = 0x%08x \n", free_slot, cont->pid, cont->kvaddr);
+    dprintf(3, "swap_out free slot = %d, pid = %d, kvaddr = 0x%08x \n", free_slot, cont->pid, cont->kvaddr);
     if(free_slot < 0){
         _swap_out_end(cont, EFAULT);
         return;
@@ -376,7 +379,7 @@ _swap_out_3(swap_out_cont_t *cont) {
                         MIN(NFS_SEND_SIZE, PAGE_SIZE), (void*)cont->kvaddr,
                         _swap_out_4_nfs_write_cb, (uintptr_t)cont);
     if (status != RPC_OK) {
-        printf("swapout 3 err\n");
+        dprintf(3, "swapout 3 err\n");
         _swap_out_end(cont, EFAULT);
         return;
     }
@@ -384,7 +387,7 @@ _swap_out_3(swap_out_cont_t *cont) {
 
 static void
 _swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count) {
-    printf("swap out 4 entered\n");
+    dprintf(3, "swap out 4 entered\n");
     swap_out_cont_t *cont = (swap_out_cont_t*)token;
     assert(cont != NULL);
 
@@ -394,7 +397,7 @@ _swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, 
     }
 
     if (!starting_first_process && !is_proc_alive(frame_get_pid(cont->kvaddr))) {
-        printf("_swap_out_4_nfs_write_cb: process is killed\n");
+        dprintf(3, "_swap_out_4_nfs_write_cb: process is killed\n");
         _unset_slot(cont->free_slot);
         frame_unlock_frame(cont->kvaddr);
         frame_free(cont->kvaddr);
@@ -405,7 +408,7 @@ _swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, 
     set_cur_proc(cont->pid);
 
     cont->written += (size_t)count;
-    //printf("swap out 4 written = %u, free_slot = %d\n", cont->written, cont->free_slot);
+    //dprintf(3, "swap out 4 written = %u, free_slot = %d\n", cont->written, cont->free_slot);
     /* Check if we have written the whole page */
     if (cont->written < PAGE_SIZE) {
         enum rpc_stat status = nfs_write(swap_fh, cont->free_slot * PAGE_SIZE + cont->written,
@@ -422,9 +425,9 @@ _swap_out_4_nfs_write_cb(uintptr_t token, enum nfs_stat status, fattr_t *fattr, 
 
 static void
 _swap_out_end(swap_out_cont_t *cont, int err) {
-    printf("swap out end: free_slot = %d, pid = %d\n", cont->free_slot, cont->pid);
+    dprintf(3, "swap out end: free_slot = %d, pid = %d\n", cont->free_slot, cont->pid);
     if (err) {
-        printf("_swap_out_end err\n");
+        dprintf(3, "_swap_out_end err\n");
         _unset_slot(cont->free_slot);
         frame_unlock_frame(cont->kvaddr);
         cont->callback(cont->token, EFAULT);
@@ -452,7 +455,7 @@ _swap_out_end(swap_out_cont_t *cont, int err) {
 
     err = frame_free(cont->kvaddr);
     if(err){
-        printf("frame free error in swap out\n");
+        dprintf(3, "frame free error in swap out\n");
     }
 
     cont->callback(cont->token, 0);

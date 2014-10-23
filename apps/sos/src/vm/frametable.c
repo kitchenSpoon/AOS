@@ -13,6 +13,9 @@
 #include "vm/swap.h"
 #include "tool/utility.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 #define NFRAMES                  ((FRAME_MEMORY) / (PAGE_SIZE))
 
 #define FRAME_STATUS_UNTYPED     (0)
@@ -150,7 +153,7 @@ _rand_swap_victim(){
         id = rand() % NFRAMES;
     }
 
-    printf("_rand_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(id));
+    dprintf(3, "_rand_swap_victim kvaddr = 0x%08x\n", ID_TO_KVADDR(id));
     return ID_TO_KVADDR(id);
 }
 
@@ -171,15 +174,15 @@ _second_chance_swap_victim(){
             victim = victim % NFRAMES;
         } else if(_frametable[victim].fte_referenced){
             addrspace_t* as = _frametable[victim].fte_as;
-    printf("assssssssssssssssssss2 as->as_pd_regs = %p\n", as->as_pd_regs);
+    dprintf(3, "assssssssssssssssssss2 as->as_pd_regs = %p\n", as->as_pd_regs);
             seL4_Word vaddr = _frametable[victim].fte_vaddr;
             int err = sos_page_unmap(as, vaddr);
             if (err) {
-                printf("second_chance_swap failed to unmap page\n");
+                dprintf(3, "second_chance_swap failed to unmap page\n");
             }
 
             _frametable[victim].fte_referenced = false;
-            printf("second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n",
+            dprintf(3, "second chance unmap this kvaddr -> 0x%08x, vaddr = 0x%08x\n",
                     _frametable[victim].fte_kvaddr, vaddr);
             victim++;
             victim = victim % NFRAMES;
@@ -191,12 +194,12 @@ _second_chance_swap_victim(){
             victim++;
             victim = victim % NFRAMES;
             seL4_Word vaddr = _frametable[id].fte_vaddr;
-            printf("_second_chance_swap_victim kvaddr = 0x%08x, vaddr = 0x%08x\n", ID_TO_KVADDR(id), vaddr);
+            dprintf(3, "_second_chance_swap_victim kvaddr = 0x%08x, vaddr = 0x%08x\n", ID_TO_KVADDR(id), vaddr);
             return ID_TO_KVADDR(id);
         }
     }
 
-    printf("second_chance_swap cannot find a victim to swap out\n");
+    dprintf(3, "second_chance_swap cannot find a victim to swap out\n");
     return 0;
 }
 
@@ -214,7 +217,7 @@ static void _frame_alloc_end(void* token, int err);
 int
 frame_alloc(seL4_Word vaddr, addrspace_t* as, pid_t pid, bool noswap,
                 frame_alloc_cb_t callback, void* token){
-    printf("frame_alloc called, noswap = %d\n", (int)noswap);
+    dprintf(3, "frame_alloc called, noswap = %d\n", (int)noswap);
 
     if (!_frame_initialised) {
         return EFAULT;
@@ -238,7 +241,7 @@ frame_alloc(seL4_Word vaddr, addrspace_t* as, pid_t pid, bool noswap,
 
     /* If we do not have enough memory, start swapping frames out */
     if(_first_free == FRAME_INVALID) {
-        printf("frame alloc no memory\n");
+        dprintf(3, "frame alloc no memory\n");
         //seL4_Word kvaddr = _rand_swap_victim();
         seL4_Word kvaddr = _second_chance_swap_victim();
         // the frame returned is not locked
@@ -258,7 +261,7 @@ frame_alloc(seL4_Word vaddr, addrspace_t* as, pid_t pid, bool noswap,
 
 static void
 _frame_alloc_end(void* token, int err){
-    printf("frame_alloc end\n");
+    dprintf(3, "frame_alloc end\n");
     assert(token != NULL);
     frame_alloc_cont_t* cont = (frame_alloc_cont_t*)token;
     if(err){
@@ -270,7 +273,7 @@ _frame_alloc_end(void* token, int err){
     /* Make sure that we have free frame */
     if (_first_free == FRAME_INVALID) {
         // This should not happen though because of swapping
-        printf("warning: _frame_alloc_end: failed in getting a free frame\n");
+        dprintf(3, "warning: _frame_alloc_end: failed in getting a free frame\n");
         cont->callback(cont->token, 0);
         free(cont);
         return;
@@ -278,7 +281,7 @@ _frame_alloc_end(void* token, int err){
 
     int ind = _first_free;
     seL4_Word kvaddr = (seL4_Word)ID_TO_KVADDR(ind);
-    printf("frame_alloc memory = 0x%08x\n", kvaddr);
+    dprintf(3, "frame_alloc memory = 0x%08x\n", kvaddr);
 
     //If this assert fails then our _first_free is buggy
     assert(_frametable[ind].fte_status != FRAME_STATUS_ALLOCATED);
@@ -305,7 +308,7 @@ _frame_alloc_end(void* token, int err){
     /* Zero fill memory */
     bzero((void *)(kvaddr), (size_t)PAGE_SIZE);
 
-    printf("_first_free = %d, new_first_free = %d\n", _first_free, _frametable[ind].fte_next_free);
+    dprintf(3, "_first_free = %d, new_first_free = %d\n", _first_free, _frametable[ind].fte_next_free);
 
     /* Update free frame list */
     _first_free = _frametable[ind].fte_next_free;
@@ -316,7 +319,7 @@ _frame_alloc_end(void* token, int err){
 
 int frame_free(seL4_Word kvaddr){
     /* May have concurency issues */
-    printf("frame_free\n");
+    dprintf(3, "frame_free\n");
 
     if (!_frame_initialised) {
         /* Why is frame uninitialised? */
@@ -325,17 +328,17 @@ int frame_free(seL4_Word kvaddr){
 
     int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < _frametable_reserved || id >= NFRAMES) {
-        printf("frame_free err1\n");
+        dprintf(3, "frame_free err1\n");
         return EINVAL;
     }
     if(_frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
-        printf("frame_free err2\n");
+        dprintf(3, "frame_free err2\n");
         return EINVAL;
     }
 
     //frame to be freed should not be locked
     if(_frametable[id].fte_locked) {
-        printf("frame_free err3\n");
+        dprintf(3, "frame_free err3\n");
         //dont crash sos
         return EFAULT;
     }
@@ -382,17 +385,17 @@ int
 frame_get_cap(seL4_Word kvaddr, seL4_CPtr *frame_cap) {
     *frame_cap = -1;
     if (!_frame_initialised) {
-        printf("frame get cap 1\n");
+        dprintf(3, "frame get cap 1\n");
         return EFAULT;
     }
 
     int id = (int)KVADDR_TO_ID(kvaddr);
     if (id < _frametable_reserved || id >= NFRAMES) {
-        printf("frame get cap 2\n");
+        dprintf(3, "frame get cap 2\n");
         return EINVAL;
     }
     if(_frametable[id].fte_status != FRAME_STATUS_ALLOCATED) {
-        printf("frame get cap 3\n");
+        dprintf(3, "frame get cap 3\n");
         return EINVAL;
     }
     *frame_cap = _frametable[id].fte_cap;

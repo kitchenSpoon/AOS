@@ -12,6 +12,9 @@
 #include "vm/mapping.h"
 #include "tool/utility.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 #define STATUS_USED     0
 #define STATUS_FREE     1
 
@@ -42,14 +45,14 @@ static int _map_sel4_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_Word vpage,
 int
 sos_page_map(pid_t pid, addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
              sos_page_map_cb_t callback, void* token, bool noswap) {
-    printf("sos_page_map\n");
+    dprintf(3, "sos_page_map\n");
     if (as == NULL) {
         return EINVAL;
     }
 
     if (as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         /* Did you even call as_create? */
-        printf("sos_page_map err einval 0\n");
+        dprintf(3, "sos_page_map err einval 0\n");
         return EFAULT;
     }
 
@@ -57,7 +60,7 @@ sos_page_map(pid_t pid, addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
 
     sos_page_map_cont_t* cont = malloc(sizeof(sos_page_map_cont_t));
     if(cont == NULL){
-        printf("sos_page_map err nomem\n");
+        dprintf(3, "sos_page_map err nomem\n");
         return ENOMEM;
     }
     cont->pid = pid;
@@ -92,11 +95,11 @@ sos_page_map(pid_t pid, addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
 
 static void
 _sos_page_map_2_alloc_cap_pt(void* token, seL4_Word kvaddr){
-    printf("sos_page_map 2\n");
+    dprintf(3, "sos_page_map 2\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     if (kvaddr == 0) {
-        printf("warning: _sos_page_map_2_alloc_cap_pt not enough memory for lvl2 pagetable\n");
+        dprintf(3, "warning: _sos_page_map_2_alloc_cap_pt not enough memory for lvl2 pagetable\n");
         cont->callback(cont->token, ENOMEM);
         free(cont);
         return;
@@ -118,12 +121,12 @@ _sos_page_map_2_alloc_cap_pt(void* token, seL4_Word kvaddr){
 
 static void
 _sos_page_map_3(void* token, seL4_Word kvaddr){
-    printf("sos_page_map 3\n");
+    dprintf(3, "sos_page_map 3\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     int x = PT_L1_INDEX(cont->vpage);
     if (kvaddr == 0) {
-        printf("warning: _sos_page_map_3 not enough memory for lvl2 pagetable\n");
+        dprintf(3, "warning: _sos_page_map_3 not enough memory for lvl2 pagetable\n");
         frame_free((seL4_Word)(cont->as->as_pd_regs[x]));
         cont->callback(cont->token, ENOMEM);
         free(cont);
@@ -137,7 +140,7 @@ _sos_page_map_3(void* token, seL4_Word kvaddr){
 
 static void
 _sos_page_map_4_alloc_frame(void* token){
-    printf("sos_page_map 4\n");
+    dprintf(3, "sos_page_map 4\n");
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     int x = PT_L1_INDEX(cont->vpage);
@@ -154,7 +157,7 @@ _sos_page_map_4_alloc_frame(void* token){
     /* Allocate memory for the frame */
     int err = frame_alloc(cont->vpage, cont->as, cont->pid, cont->noswap, _sos_page_map_5, token);
     if (err) {
-        printf("_sos_page_map_4_alloc_frame: failed to allocate frame\n");
+        dprintf(3, "_sos_page_map_4_alloc_frame: failed to allocate frame\n");
         cont->callback(cont->token, EINVAL);
         free(cont);
         return;
@@ -163,14 +166,14 @@ _sos_page_map_4_alloc_frame(void* token){
 
 static void
 _sos_page_map_5(void* token, seL4_Word kvaddr){
-    printf("sos_page_map 5\n");
+    dprintf(3, "sos_page_map 5\n");
 
     sos_page_map_cont_t* cont = (sos_page_map_cont_t*)token;
 
     seL4_CPtr kframe_cap, frame_cap;
 
     if (!kvaddr) {
-        printf("_sos_page_map_5 failed to allocate memory for frame\n");
+        dprintf(3, "_sos_page_map_5 failed to allocate memory for frame\n");
         cont->callback((void*)(cont->token), ENOMEM);
         free(cont);
         return;
@@ -208,7 +211,7 @@ _sos_page_map_5(void* token, seL4_Word kvaddr){
     cont->as->as_pd_regs[x][y] = (kvaddr | PTE_IN_USE_BIT) & (~PTE_SWAPPED);
     cont->as->as_pd_caps[x][y] = frame_cap;
 
-    printf("_sos_page_map_5 called back up\n");
+    dprintf(3, "_sos_page_map_5 called back up\n");
     /* Calling back up */
     cont->callback((void*)(cont->token), 0);
     free(cont);
@@ -285,7 +288,7 @@ _map_sel4_page(addrspace_t *as, seL4_CPtr frame_cap, seL4_Word vpage,
  ***********************************************************************/
 int
 sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
-    printf("sos_page_unmap entered\n");
+    dprintf(3, "sos_page_unmap entered\n");
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
@@ -293,7 +296,7 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
     if(as == NULL ||
             (as->as_pd_caps == NULL || as->as_pd_caps[x] == NULL) ||
             (as->as_pd_regs == NULL || as->as_pd_regs[x] == NULL)) {
-        printf("sos_page_unmap err 1\n");
+        dprintf(3, "sos_page_unmap err 1\n");
         return EINVAL;
     }
 
@@ -301,7 +304,7 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
     int err;
     err = seL4_ARM_Page_Unmap(as->as_pd_caps[x][y]);
     if (err) {
-        printf("sos_page_unmap err 2\n");
+        dprintf(3, "sos_page_unmap err 2\n");
         return EFAULT;
     }
     cspace_delete_cap(cur_cspace, as->as_pd_caps[x][y]);
@@ -314,7 +317,7 @@ sos_page_unmap(addrspace_t *as, seL4_Word vaddr){
  ***********************************************************************/
 void
 sos_page_free(addrspace_t *as, seL4_Word vaddr) {
-    //printf("sos_page_free\n");
+    //dprintf(3, "sos_page_free\n");
     seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
@@ -362,7 +365,7 @@ sos_page_free(addrspace_t *as, seL4_Word vaddr) {
 
 bool
 sos_page_is_inuse(addrspace_t *as, seL4_Word vaddr) {
-    printf("sos_page_is_inuse, vaddr = 0x%08x\n", vaddr);
+    dprintf(3, "sos_page_is_inuse, vaddr = 0x%08x\n", vaddr);
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         return false;
     }
@@ -374,9 +377,9 @@ sos_page_is_inuse(addrspace_t *as, seL4_Word vaddr) {
 
 bool
 sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
-    printf("sos_page_is_swapped is called\n");
+    dprintf(3, "sos_page_is_swapped is called\n");
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
-        printf("sos_page_is_swapped Invalid inputs\n");
+        dprintf(3, "sos_page_is_swapped Invalid inputs\n");
         return false;
     }
 
@@ -384,7 +387,7 @@ sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
     if(as->as_pd_regs[x] == NULL){
-    printf("1sos_page_is_swapped\n");
+    dprintf(3, "1sos_page_is_swapped\n");
 
     }
     return (as->as_pd_regs[x] != NULL && (as->as_pd_regs[x][y] & PTE_SWAPPED));
@@ -392,7 +395,7 @@ sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr) {
 
 bool
 sos_page_is_locked(addrspace_t *as, seL4_Word vaddr) {
-    printf("sos_page_is_locked called, vaddr = 0x%08x\n", vaddr);
+    dprintf(3, "sos_page_is_locked called, vaddr = 0x%08x\n", vaddr);
     if (as == NULL || as->as_pd_caps == NULL || as->as_pd_regs == NULL) {
         return false;
     }

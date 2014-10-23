@@ -62,23 +62,23 @@ map_page(seL4_CPtr frame_cap, seL4_ARM_PageDirectory pd, seL4_Word vaddr,
     /* Attempt the mapping */
     err = seL4_ARM_Page_Map(frame_cap, pd, vaddr, rights, attr);
     if(err == seL4_FailedLookup){
-        printf("map_page, failed lookup\n");
+        dprintf(3, "map_page, failed lookup\n");
         /* Assume the error was because we have no page table */
         err = _map_page_table(pd, vaddr);
         if(err){
-            printf("map_page, unknown err at table\n");
+            dprintf(3, "map_page, unknown err at table\n");
         }
         if(!err){
             /* Try the mapping again */
             err = seL4_ARM_Page_Map(frame_cap, pd, vaddr, rights, attr);
             if(err){
-                printf("map_page, unknown err at 2 map\n");
+                dprintf(3, "map_page, unknown err at 2 map\n");
             }
         }
     }
 
     if(err){
-        printf("map_page, unknown at map, err = %d\n",err);
+        dprintf(3, "map_page, unknown at map, err = %d\n",err);
     }
     return err;
 }

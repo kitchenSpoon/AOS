@@ -18,6 +18,9 @@
 #include "dev/clock.h"
 #include "proc/proc.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 static int _nfs_dev_eachopen(struct vnode *file, int flags);
 static int _nfs_dev_eachclose(struct vnode *file, uint32_t flags);
 static int _nfs_dev_lastclose(struct vnode *file);
@@ -52,7 +55,7 @@ _init_helper(struct vnode *vn, fhandle_t *fh, fattr_t *fattr) {
     assert(vn != NULL);
     assert(vn->vn_ops != NULL);
     assert(fh != NULL);
-    printf("_init_helper called, proc = %d\n", proc_get_id());
+    dprintf(3, "_init_helper called, proc = %d\n", proc_get_id());
     struct nfs_data *data = malloc(sizeof(struct nfs_data));
     if (data == NULL) {
         return ENOMEM;
@@ -144,7 +147,7 @@ _nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fa
     }
 
     set_cur_proc(cont->pid);
-    printf("nfs_dev_create handler called, proc = %d\n", proc_get_id());
+    dprintf(3, "nfs_dev_create handler called, proc = %d\n", proc_get_id());
     if(status == NFS_OK){
         int err = 0;
 
@@ -172,7 +175,7 @@ _nfs_dev_create_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fa
 static void
 nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fattr_t *fattr){
     int err;
-    printf("nfs_dev_lookup_handler called\n");
+    dprintf(3, "nfs_dev_lookup_handler called\n");
 
     nfs_init_state_t *cont = (nfs_init_state_t*)token;
     assert(cont != NULL);
@@ -196,7 +199,7 @@ nfs_dev_lookup_handler(uintptr_t token, enum nfs_stat status, fhandle_t *fh, fat
 
 void
 nfs_dev_init(struct vnode* vn, nfs_dev_init_cb_t callback, void *token) {
-    printf("nfs_dev_init called, proc = %d", proc_get_id());
+    dprintf(3, "nfs_dev_init called, proc = %d", proc_get_id());
     nfs_init_state_t *cont = malloc(sizeof(nfs_init_state_t));
     if (cont == NULL) {
         callback(token, ENOMEM);
@@ -228,7 +231,7 @@ _nfs_dev_eachopen(struct vnode *file, int flags){
 }
 
 static int _nfs_dev_eachclose(struct vnode *file, uint32_t flags){
-    printf("nfs_close, proc = %d\n", proc_get_id());
+    dprintf(3, "nfs_close, proc = %d\n", proc_get_id());
     return 0;
 }
 
@@ -259,7 +262,7 @@ static void _nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_
 
 static void _nfs_dev_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
                               vop_write_cb_t callback, void *token){
-    printf("_nfs_dev_write offset = %d, proc = %d\n", offset, proc_get_id());
+    dprintf(3, "_nfs_dev_write offset = %d, proc = %d\n", offset, proc_get_id());
     nfs_write_state *cont = malloc(sizeof(nfs_write_state));
     if (cont == NULL) {
         callback(token, ENOMEM, 0);
@@ -287,7 +290,7 @@ static void _nfs_dev_write_handler(uintptr_t token, enum nfs_stat status, fattr_
 
     if (starting_first_process || is_proc_alive(cont->pid)) {
         set_cur_proc(cont->pid);
-        printf("_nfs_dev_write_handler count = %d, proc = %d\n", count, proc_get_id());
+        dprintf(3, "_nfs_dev_write_handler count = %d, proc = %d\n", count, proc_get_id());
 
         struct nfs_data *data = (struct nfs_data*)cont->file->vn_data;
         assert(data != NULL);
@@ -325,7 +328,7 @@ static void _nfs_dev_read_end(void* token, int err);
 static void _nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
                               vop_read_cb_t callback, void *token){
     assert(file != NULL);
-    printf("_nfs_dev_read called, proc = %d\n", proc_get_id());
+    dprintf(3, "_nfs_dev_read called, proc = %d\n", proc_get_id());
     nfs_read_state *cont = malloc(sizeof(nfs_read_state));
     if (cont == NULL) {
         callback(token, ENOMEM, 0, false);
@@ -347,11 +350,11 @@ static void _nfs_dev_read(struct vnode *file, char* buf, size_t nbytes, size_t o
     }
     return;
 
-    //printf("_nfs_dev_read finish\n");
+    //dprintf(3, "_nfs_dev_read finish\n");
 }
 
 static void _nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t *fattr, int count, void* data){
-    //printf("count = %d\n", count);
+    //dprintf(3, "count = %d\n", count);
     int err;
     nfs_read_state *cont = (nfs_read_state*)token;
     assert(cont != NULL);
@@ -362,8 +365,8 @@ static void _nfs_dev_read_handler(uintptr_t token, enum nfs_stat status, fattr_t
     }
 
     set_cur_proc(cont->pid);
-    printf("_nfs_dev_read_handler called, proc = %d\n", proc_get_id());
-    //printf("nfs read status = %d\n", status);
+    dprintf(3, "_nfs_dev_read_handler called, proc = %d\n", proc_get_id());
+    //dprintf(3, "nfs read status = %d\n", status);
     if(status == NFS_OK){
         struct nfs_data *nfs_data = (struct nfs_data*)cont->file->vn_data;
         assert(nfs_data != NULL);
@@ -431,7 +434,7 @@ static void _nfs_dev_getdirent_done_copyout(void* token, int err);
 static void 
 _nfs_dev_getdirent(struct vnode *dir, char *buf, size_t nbyte, int pos,
                               vop_getdirent_cb_t callback, void *token){
-    printf("_nfs_dev_getdirent called, proc = %d\n", proc_get_id());
+    dprintf(3, "_nfs_dev_getdirent called, proc = %d\n", proc_get_id());
     nfs_getdirent_state_t *cont = malloc(sizeof(nfs_getdirent_state_t));
     if (cont == NULL) {
         callback(token, ENOMEM, 0);
@@ -569,7 +572,7 @@ static void _nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
                                 
 void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf,
         nfs_dev_stat_cb_t callback, void *token) {
-    printf("nfs_dev_getstat called, proc = %d\n", proc_get_id());
+    dprintf(3, "nfs_dev_getstat called, proc = %d\n", proc_get_id());
     assert(path != NULL);
     assert(buf != NULL);
     assert(callback != NULL);
@@ -595,7 +598,7 @@ void nfs_dev_getstat(char *path, size_t path_len, sos_stat_t *buf,
 
 static int 
 _nfs_dev_stat(struct vnode *file, sos_stat_t *buf, vop_stat_cb_t callback, void *token){
-    printf("_nfs_dev_stat called, proc = %d\n", proc_get_id());
+    dprintf(3, "_nfs_dev_stat called, proc = %d\n", proc_get_id());
     if(file == NULL) return EFAULT;
     if(file->vn_data == NULL) return EFAULT;
 
@@ -636,7 +639,7 @@ _nfs_dev_stat(struct vnode *file, sos_stat_t *buf, vop_stat_cb_t callback, void 
 
 static void 
 _nfs_dev_stat_copyout_cb(void *token, int err) {
-    printf("_nfs_dev_stat_copyout_cb\n");
+    dprintf(3, "_nfs_dev_stat_copyout_cb\n");
     nfs_stat_state_t *cont = (nfs_stat_state_t*)token;
     assert(cont != NULL);
 
@@ -661,7 +664,7 @@ _nfs_dev_getstat_lookup_cb(uintptr_t token, enum nfs_stat status,
         return;
     }
     set_cur_proc(cont->pid);
-    printf("_nfs_dev_getstat_lookup_cb called, proc = %d\n", proc_get_id());
+    dprintf(3, "_nfs_dev_getstat_lookup_cb called, proc = %d\n", proc_get_id());
 
     if(status != NFS_OK){
         _nfs_dev_getstat_lookup_end((void*)cont, EFAULT);

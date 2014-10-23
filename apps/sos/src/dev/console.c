@@ -13,6 +13,9 @@
 #include "vm/copyinout.h"
 #include "proc/proc.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 #define MAX_IO_BUF 0x1000
 #define MAX_SERIAL_SEND 100
 
@@ -51,7 +54,7 @@ struct _con_read_state{
 
 int
 con_init(struct vnode *con_vn) {
-    printf("con_init called\n");
+    dprintf(3, "con_init called\n");
     assert(con_vn != NULL);
 
     con_vn->vn_ops->vop_eachopen  = _con_eachopen;
@@ -92,9 +95,9 @@ con_init(struct vnode *con_vn) {
 
 static void
 _read_handler(struct serial * serial , char c){
-    printf("_con_read handler called by %d\n", proc_get_id());
+    dprintf(3, "_con_read handler called by %d\n", proc_get_id());
     //set_cur_proc(_con_read_state.cur_proc_pid);
-    //printf("_read_handler called, c = %d\n", (int)c);
+    //dprintf(3, "_read_handler called, c = %d\n", (int)c);
     if(console.buf_size < MAX_IO_BUF){
         console.buf[console.end++] = c;
         console.end %= MAX_IO_BUF;
@@ -119,25 +122,25 @@ _read_handler(struct serial * serial , char c){
 
 static int
 _con_eachopen(struct vnode *file, int flags){
-    printf("con_open called by %d\n", proc_get_id());
+    dprintf(3, "con_open called by %d\n", proc_get_id());
     int err;
 
     if(flags == O_RDWR || flags == O_RDONLY){
         if(!_con_read_state.opened_for_reading){
             err = serial_register_handler(console.serial, _read_handler);
             if(err){
-            printf("con_open _con_read cant register\n");
+            dprintf(3, "con_open _con_read cant register\n");
                 return EFAULT;
             }
             _con_read_state.cur_proc_pid = proc_get_id();
             _con_read_state.opened_for_reading = 1;
         } else {
-            printf("con_open _con_read opened for reading\n");
+            dprintf(3, "con_open _con_read opened for reading\n");
             return EFAULT;
         }
     }
 
-    printf("con_open succeed\n");
+    dprintf(3, "con_open succeed\n");
     return 0;
 }
 
@@ -147,7 +150,7 @@ _con_eachopen(struct vnode *file, int flags){
 
 static int
 _con_eachclose(struct vnode *file, uint32_t flags){
-    printf("_con_eachclose\n");
+    dprintf(3, "_con_eachclose\n");
     if(flags == O_RDWR || flags == O_RDONLY) {
         if(console.serial == NULL) {
             return EFAULT;
@@ -167,7 +170,7 @@ _con_eachclose(struct vnode *file, uint32_t flags){
 static int
 _con_lastclose(struct vnode *con_vn) {
     /* If any of these fails, that means we have a bug */
-    printf("_con_lastclose\n");
+    dprintf(3, "_con_lastclose\n");
     assert(con_vn->vn_ops != NULL);
     assert(con_vn->vn_opencount == 1);
 
@@ -187,7 +190,7 @@ static void
 _con_write(struct vnode *file, const char* buf, size_t nbytes, size_t offset,
           vop_write_cb_t callback, void *token)
 {
-    printf("conwrite\n");
+    dprintf(3, "conwrite\n");
     (void)offset;
     if (console.serial == NULL) {
         callback(token, EFAULT, 0);
@@ -227,26 +230,26 @@ static void
 _con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
          vop_read_cb_t callback, void *token)
 {
-    printf("_con_read called\n");
+    dprintf(3, "_con_read called\n");
     (void)offset;
     int err;
     (void)err;
-    printf("nbytes = %u, %d\n",nbytes,  nbytes);
+    dprintf(3, "nbytes = %u, %d\n",nbytes,  nbytes);
 
     if(console.buf_size > 0){
         size_t len = 0;
-        printf("console start = %d, nbytes = %u, console.buf_size = %u \n",console.start, nbytes, console.buf_size);
+        dprintf(3, "console start = %d, nbytes = %u, console.buf_size = %u \n",console.start, nbytes, console.buf_size);
 
         for(size_t cur = console.start; len < nbytes && len < console.buf_size; cur++, cur%=MAX_IO_BUF){
-            printf("\n%c\n",console.buf[cur]);
+            dprintf(3, "\n%c\n",console.buf[cur]);
             len++;
             if(console.buf[cur] == '\n') {
                 break;
             }
         }
 
-        printf("console read size = %d\n",len);
-        //printf("copying out %d bytes, buffer size = %u\n", len, console.buf_size);
+        dprintf(3, "console read size = %d\n",len);
+        //dprintf(3, "copying out %d bytes, buffer size = %u\n", len, console.buf_size);
 
 
         //Since we are using a circular buffer, we need to split our copy into two chunkcs
@@ -265,7 +268,7 @@ _con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         cont->callback = callback;
         cont->token = token;
 
-        printf("_con_read buf = %p\n",buf);
+        dprintf(3, "_con_read buf = %p\n",buf);
         //copy first half of circular buffer
         err = copyout((seL4_Word)buf, (seL4_Word)console.buf + console.start,
                 cont->first_half_size, _con_read_part2, (void*)cont);
@@ -274,7 +277,7 @@ _con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         }
         return;
     } else {
-        //printf("_con_read: blocked\n");
+        //dprintf(3, "_con_read: blocked\n");
         _con_read_state.file       = file;
         _con_read_state.buf        = buf;
         _con_read_state.is_blocked = 1;
@@ -285,7 +288,7 @@ _con_read(struct vnode *file, char* buf, size_t nbytes, size_t offset,
         return;
     }
 
-    //printf("_con_read out\n");
+    //dprintf(3, "_con_read out\n");
 }
 
 static void 
@@ -294,7 +297,7 @@ _con_read_part2(void* token, int err){
         if (err) {
             //console.start = cont->console_start_ori;
             _con_read_state.is_blocked = 0;
-            printf("console err \n");
+            dprintf(3, "console err \n");
             cont->callback(cont->token, EFAULT, 0, false);
             free(cont);
             return;
@@ -326,7 +329,7 @@ _con_read_end(void* token, int err){
         if (err) {
             //console.start = cont->console_start_ori;
             _con_read_state.is_blocked = 0;
-            printf("console err \n");
+            dprintf(3, "console err \n");
             cont->callback(cont->token, EFAULT, 0, false);
             return;
         }
@@ -338,7 +341,7 @@ _con_read_end(void* token, int err){
         console.buf_size -= cont->len;
 
         _con_read_state.is_blocked = 0;
-        printf("console read size = %d\n",cont->len);
+        dprintf(3, "console read size = %d\n",cont->len);
         cont->callback(cont->token, 0, cont->len, false);
         free(cont);
 }

@@ -17,6 +17,9 @@
 #include "vm/swap.h"
 #include "syscall/file.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 #define MAX_SERIAL_TRY  0x100
 #define MAX_IO_BUF      0x1000
 
@@ -57,9 +60,9 @@ static void serv_sys_open_copyin_cb(void *token, int err);
 static void serv_sys_open_end(void *token, int err, int fd);
 
 void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
-    printf("serv_sys_open called\n");
+    dprintf(3, "serv_sys_open called\n");
     cont_open_t *cont = malloc(sizeof(cont_open_t));
-    //printf("--serv_cont = %p, size = %u\n", cont, sizeof(cont_open_t));
+    //dprintf(3, "--serv_cont = %p, size = %u\n", cont, sizeof(cont_open_t));
     if (cont == NULL) {
         set_cur_proc(PROC_NULL);
         seL4_MessageInfo_t reply = seL4_MessageInfo_new(ENOMEM, 0, 0, 1);
@@ -82,7 +85,7 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
 
     cont->kbuf = malloc(MAX_NAME_LEN+1);
     if (cont->kbuf == NULL) {
-        printf("serv_sys_open: nomem for kbuf\n");
+        dprintf(3, "serv_sys_open: nomem for kbuf\n");
         serv_sys_open_end((void*)cont, ENOMEM, -1);
         return;
     }
@@ -91,7 +94,7 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
     err = copyin((seL4_Word)cont->kbuf, (seL4_Word)path, (size_t)nbyte,
             serv_sys_open_copyin_cb, (void*)cont);
     if (err) {
-        printf("serv_sys_open: err when copyin\n");
+        dprintf(3, "serv_sys_open: err when copyin\n");
         serv_sys_open_end((void*)cont, err, -1);
         return;
     }
@@ -117,12 +120,12 @@ serv_sys_open_copyin_cb(void *token, int err) {
 
 static void
 serv_sys_open_end(void *token, int err, int fd) {
-    printf("serv_sys_open_end called\n");
+    dprintf(3, "serv_sys_open_end called\n");
     cont_open_t *cont = (cont_open_t*)token;
     assert(cont != NULL);
 
     if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_open_end: proc is killed\n");
+        dprintf(3, "serv_sys_open_end: proc is killed\n");
         cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
@@ -133,7 +136,7 @@ serv_sys_open_end(void *token, int err, int fd) {
     }
 
     if(err){
-        printf("serv_sys_open err = %d\n", err);
+        dprintf(3, "serv_sys_open err = %d\n", err);
     }
 
     seL4_MessageInfo_t reply;
@@ -141,7 +144,7 @@ serv_sys_open_end(void *token, int err, int fd) {
     seL4_SetMR(0, (seL4_Word)fd);
     seL4_Send(cont->reply_cap, reply);
     cspace_free_slot(cur_cspace, cont->reply_cap);
-    printf("--serv_cont_end = %p\n", cont);
+    dprintf(3, "--serv_cont_end = %p\n", cont);
 
     free(cont);
 }
@@ -152,7 +155,7 @@ serv_sys_open_end(void *token, int err, int fd) {
 
 void serv_sys_close(seL4_CPtr reply_cap, int fd){
     int err = 0;
-    //printf("fd = %d\n", fd);
+    //dprintf(3, "fd = %d\n", fd);
     if (fd < 0 || fd >= PROCESS_MAX_FILES) {
         err = EINVAL;
     }
@@ -181,7 +184,7 @@ typedef struct {
 void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read);
 
 void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
-    //printf("serv read\n");
+    //dprintf(3, "serv read\n");
     int err;
     cont_read_t *cont = malloc(sizeof(cont_read_t));
     if (cont == NULL) {
@@ -227,16 +230,16 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
 
     VOP_READ(file->of_vnode, (char*)buf, MIN(nbyte, MAX_IO_BUF),
             file->of_offset, serv_sys_read_end, (void*)cont);
-    //printf("serv read finish\n");
+    //dprintf(3, "serv read finish\n");
 }
 
 void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
-    //printf("serv_read_end called\n");
-    //printf("serv_read_end size = %u\n", size);
+    //dprintf(3, "serv_read_end called\n");
+    //dprintf(3, "serv_read_end size = %u\n", size);
     cont_read_t *cont = (cont_read_t*)token;
 
     if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_read_end: proc is killed\n");
+        dprintf(3, "serv_sys_read_end: proc is killed\n");
         cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
@@ -248,7 +251,7 @@ void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
         cont->bytes_read += size;
     }
 
-    //printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
+    //dprintf(3, "serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
     if(err || !more_to_read || cont->bytes_read >= cont->bytes_wanted){
         /* Reply app*/
         set_cur_proc(PROC_NULL);
@@ -264,7 +267,7 @@ void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
                  MIN(cont->bytes_wanted - cont->bytes_read, MAX_IO_BUF),
                  cont->file->of_offset, serv_sys_read_end, (void*)cont);
     }
-    //printf("serv_read_end out\n");
+    //dprintf(3, "serv_read_end out\n");
 }
 
 /**********************************************************************
@@ -289,7 +292,7 @@ static void serv_sys_write_end(cont_write_t* cont, int err);
 
 void serv_sys_write(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte) {
 
-    printf("serv_sys_write called\n");
+    dprintf(3, "serv_sys_write called\n");
     int err;
 
     cont_write_t *cont = malloc(sizeof(cont_write_t));
@@ -345,7 +348,7 @@ serv_sys_write_get_kbuf(void *token, seL4_Word kvaddr) {
     cont_write_t *cont = (cont_write_t*)token;
     char *kbuf = (char*)kvaddr;
     if (kbuf == NULL) {
-        printf("serv_sys_write_get_kbuf: ENOMEM\n");
+        dprintf(3, "serv_sys_write_get_kbuf: ENOMEM\n");
         serv_sys_write_end(cont, ENOMEM);
         return;
     }
@@ -356,7 +359,7 @@ serv_sys_write_get_kbuf(void *token, seL4_Word kvaddr) {
 /* Is inteded to be called repeatedly in this layer if the write data is too large */
 static void
 serv_sys_write_copyin(void *token, int err, size_t size) {
-    printf("serv_sys_write_copyin called\n");
+    dprintf(3, "serv_sys_write_copyin called\n");
     cont_write_t *cont = (cont_write_t*)token;
     assert(cont != NULL);
 
@@ -367,18 +370,18 @@ serv_sys_write_copyin(void *token, int err, size_t size) {
 
     cont->file->of_offset += size;
     cont->byte_written       += size;
-    printf("of_offset = %u, byte_written = %u\n", (unsigned int)cont->file->of_offset, cont->byte_written);
+    dprintf(3, "of_offset = %u, byte_written = %u\n", (unsigned int)cont->file->of_offset, cont->byte_written);
     if (cont->byte_written < cont->nbyte) {
         seL4_Word vaddr;
         vaddr = (seL4_Word)cont->buf + cont->byte_written;
         cont->wanna_send = PAGE_SIZE - (vaddr - PAGE_ALIGN(vaddr));
         cont->wanna_send = MIN(cont->wanna_send, cont->nbyte - cont->byte_written);
-        printf("wanna_send = %u\n", cont->wanna_send);
+        dprintf(3, "wanna_send = %u\n", cont->wanna_send);
 
         err = copyin((seL4_Word)cont->kbuf, (seL4_Word)vaddr, cont->wanna_send,
                 serv_sys_write_do_write, (void*)cont);
         if (err) {
-            printf("serv_sys_write_copyin: fail when copyin\n");
+            dprintf(3, "serv_sys_write_copyin: fail when copyin\n");
             serv_sys_write_end(cont, EINVAL);
             return;
         }
@@ -386,12 +389,12 @@ serv_sys_write_copyin(void *token, int err, size_t size) {
         serv_sys_write_end(cont, 0);
         return;
     }
-    printf("serv_sys_write_copyin ended\n");
+    dprintf(3, "serv_sys_write_copyin ended\n");
 }
 
 static void
 serv_sys_write_do_write(void *token, int err) {
-    printf("serv_sys_do_write called\n");
+    dprintf(3, "serv_sys_do_write called\n");
     cont_write_t *cont = (cont_write_t*)token;
     assert(cont != NULL);
 
@@ -399,17 +402,17 @@ serv_sys_write_do_write(void *token, int err) {
         serv_sys_write_end(cont, err);
         return;
     }
-    printf("serv_sys_do_write prepare to write\n");
+    dprintf(3, "serv_sys_do_write prepare to write\n");
     VOP_WRITE(cont->file->of_vnode, cont->kbuf, cont->wanna_send, cont->file->of_offset,
             serv_sys_write_copyin, (void*)cont);
 }
 
 static
 void serv_sys_write_end(cont_write_t* cont, int err) {
-    printf("serv_write_end\n");
+    dprintf(3, "serv_write_end\n");
 
     if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_write_end: proc is killed\n");
+        dprintf(3, "serv_sys_write_end: proc is killed\n");
         if (cont->kbuf != NULL) {
             frame_free((seL4_Word)cont->kbuf);
         }
@@ -480,7 +483,7 @@ static void serv_sys_getdirent_end(void *token, int err, size_t size) {
     cont_getdirent_t *cont = (cont_getdirent_t*)token;
 
     if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_getdirent_end: proc is killed\n");
+        dprintf(3, "serv_sys_getdirent_end: proc is killed\n");
         cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;
@@ -514,7 +517,7 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
     /* Read doesn't check buffer if mapped like open & write,
      * just check if the memory is valid. It will map page when copyout */
     int err = 0;
-    printf("serv_sys_stat called\n");
+    dprintf(3, "serv_sys_stat called\n");
     cont_stat_t *cont = malloc(sizeof(cont_stat_t));
     if(cont == NULL){
         set_cur_proc(PROC_NULL);
@@ -558,28 +561,28 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
 
 static void
 serv_sys_stat_copyin_cb(void *token, int err) {
-    printf("serv_sys_stat_cb\n");
+    dprintf(3, "serv_sys_stat_cb\n");
     if (err) {
         serv_sys_stat_end(token, err);
         return;
     }
-    printf("serv_sys_stat_cb\n");
+    dprintf(3, "serv_sys_stat_cb\n");
     cont_stat_t *cont = (cont_stat_t*)token;
-    printf("serv_sys_stat_cb\n");
+    dprintf(3, "serv_sys_stat_cb\n");
 
     cont->kbuf[cont->path_len] = '\0';
-    printf("serv_sys_stat_cb\n");
+    dprintf(3, "serv_sys_stat_cb\n");
 
     vfs_stat(cont->kbuf, cont->path_len, cont->buf, serv_sys_stat_end, (void*)cont);
 }
 
 static void serv_sys_stat_end(void *token, int err){
-    printf("serv_sys_stat_end\n");
+    dprintf(3, "serv_sys_stat_end\n");
     cont_stat_t *cont = (cont_stat_t*)token;
     assert(cont != NULL);
 
     if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_stat_end: proc is killed\n");
+        dprintf(3, "serv_sys_stat_end: proc is killed\n");
         cspace_free_slot(cur_cspace, cont->reply_cap);
         free(cont);
         return;

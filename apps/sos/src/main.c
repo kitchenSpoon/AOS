@@ -38,7 +38,7 @@
 
 #include <autoconf.h>
 
-#define verbose 5
+#define verbose 0
 #include <sys/debug.h>
 #include <sys/panic.h>
 
@@ -86,7 +86,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     switch (syscall_number) {
     case SOS_SYSCALL_PRINT:
     {
-        printf("\n---sos print called---\n");
+        dprintf(3, "\n---sos print called---\n");
         size_t msg_len = num_args;
         char data[seL4_MsgMaxLength];
         for (size_t i=0; i<msg_len; i++) {
@@ -99,14 +99,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_SYSBRK:
     {
-        printf("\n---sos sbrk called---\n");
+        dprintf(3, "\n---sos sbrk called---\n");
         seL4_Word newbrk = (seL4_Word)seL4_GetMR(1);
         serv_sys_sbrk(reply_cap, newbrk);
         break;
     }
     case SOS_SYSCALL_OPEN:
     {
-        printf("\n---sos open called---\n");
+        dprintf(3, "\n---sos open called---\n");
         seL4_Word path = (seL4_Word)seL4_GetMR(1);
         size_t nbyte   = (size_t)seL4_GetMR(2);
         uint32_t flags = (uint32_t)seL4_GetMR(3);
@@ -115,14 +115,14 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_CLOSE:
     {
-        printf("\n---sos close called---\n");
+        dprintf(3, "\n---sos close called---\n");
         int fd = seL4_GetMR(1);
         serv_sys_close(reply_cap, fd);
         break;
     }
     case SOS_SYSCALL_READ:
     {
-        printf("\n---sos read called at %lu---\n", (long unsigned)time_stamp());
+        dprintf(3, "\n---sos read called at %lu---\n", (long unsigned)time_stamp());
         int fd        = (int)seL4_GetMR(1);
         seL4_Word buf = (seL4_Word)seL4_GetMR(2);
         size_t nbyte  = (size_t)seL4_GetMR(3);
@@ -132,7 +132,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_WRITE:
     {
-        printf("\n---sos write called at %lu---\n", (long unsigned)time_stamp());
+        dprintf(3, "\n---sos write called at %lu---\n", (long unsigned)time_stamp());
         int fd          = (int)seL4_GetMR(1);
         seL4_Word buf   = (seL4_Word)seL4_GetMR(2);
         size_t nbyte    = (size_t)seL4_GetMR(3);
@@ -151,7 +151,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_GETDIRENT:
     {
-        printf("\n---sos getdirent called at %lu---\n", (long unsigned)time_stamp());
+        dprintf(3, "\n---sos getdirent called at %lu---\n", (long unsigned)time_stamp());
         int pos          = (int)seL4_GetMR(1);
         char *name       = (char *)seL4_GetMR(2);
         size_t nbyte     = (size_t)seL4_GetMR(3);
@@ -168,7 +168,7 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_CREATE:
     {
-        printf("\n---sos proc create called at %lu---\n", (long unsigned)time_stamp());
+        dprintf(3, "\n---sos proc create called at %lu---\n", (long unsigned)time_stamp());
         char *path          = (char *)seL4_GetMR(1);
         size_t len          = (size_t)seL4_GetMR(2);
         serv_proc_create(path, len, _sos_ipc_ep_cap, reply_cap);
@@ -182,27 +182,27 @@ void handle_syscall(seL4_Word badge, int num_args) {
     }
     case SOS_SYSCALL_PROC_GET_ID:
     {
-        printf("\n---sos proc get id called at %lu---\n", (long unsigned)time_stamp());
+        dprintf(3, "\n---sos proc get id called at %lu---\n", (long unsigned)time_stamp());
         serv_proc_get_id(reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_WAIT:
     {
-        printf("\n---sos proc wait called at %lu---\n", (long unsigned)time_stamp());
+        dprintf(3, "\n---sos proc wait called at %lu---\n", (long unsigned)time_stamp());
         pid_t pid          = (pid_t)seL4_GetMR(1);
         serv_proc_wait(pid, reply_cap);
         break;
     }
     case SOS_SYSCALL_PROC_STATUS:
     {
-        printf("\n---sos proc status called at %lu---\n", (long unsigned)time_stamp());
+        dprintf(3, "\n---sos proc status called at %lu---\n", (long unsigned)time_stamp());
         seL4_Word buf          = (seL4_Word)seL4_GetMR(1);
         unsigned max           = (unsigned)seL4_GetMR(2);
         serv_proc_status(buf, max, reply_cap);
         break;
     }
     default:
-        printf("Unknown syscall %d\n", syscall_number);
+        dprintf(3, "Unknown syscall %d\n", syscall_number);
         /* we don't want to reply to an unknown syscall */
     }
 
@@ -221,20 +221,20 @@ void handle_pagefault(void) {
     /* Save the caller */
     reply_cap = cspace_save_reply_cap(cur_cspace);
     assert(reply_cap != CSPACE_NULL);
-    printf("handle_pagefault: reply_cap = %d\n", (int)reply_cap);
+    dprintf(3, "handle_pagefault: reply_cap = %d\n", (int)reply_cap);
     sos_VMFaultHandler(reply_cap, fault_addr, fsr, ifault);
 }
 
 void syscall_loop(seL4_CPtr ep) {
 
     while (1) {
-        //printf("looping\n");
+        //dprintf(3, "looping\n");
         seL4_Word badge;
         seL4_Word label;
         seL4_MessageInfo_t message;
 
         message = seL4_Wait(ep, &badge);
-        //printf("badge=0x%x\n", badge);
+        //dprintf(3, "badge=0x%x\n", badge);
         label = seL4_MessageInfo_get_label(message);
         if(badge & IRQ_EP_BADGE){
             /* Interrupt */
@@ -249,18 +249,18 @@ void syscall_loop(seL4_CPtr ep) {
             }
         }else if(label == seL4_VMFault){
             /* Page fault */
-            printf("user with pid = %d, 0x%08x is having a vmfault\n", badge & ~USER_EP_BADGE, badge);
+            dprintf(3, "user with pid = %d, 0x%08x is having a vmfault\n", badge & ~USER_EP_BADGE, badge);
             set_cur_proc(badge & ~USER_EP_BADGE);
             handle_pagefault();
 
         }else if(label == seL4_NoFault) {
             /* System call */
-            printf("user with pid = %d, 0x%08x is making a syscall\n", badge & ~USER_EP_BADGE, badge);
+            dprintf(3, "user with pid = %d, 0x%08x is making a syscall\n", badge & ~USER_EP_BADGE, badge);
             set_cur_proc(badge & ~USER_EP_BADGE);
             handle_syscall(badge, seL4_MessageInfo_get_length(message) - 1);
 
         }else{
-            printf("Rootserver got an unknown message\n");
+            dprintf(3, "Rootserver got an unknown message\n");
         }
     }
 }
@@ -412,7 +412,7 @@ ft_test_1(void* token, seL4_Word kvaddr) {
     (void)token;
     int err;
     assert(kvaddr);
-    printf("ft_test_1: kvaddr[%d] = 0x%08x\n", ftc1, kvaddr);
+    dprintf(3, "ft_test_1: kvaddr[%d] = 0x%08x\n", ftc1, kvaddr);
 
     ftc1++;
 
@@ -424,7 +424,7 @@ ft_test_1(void* token, seL4_Word kvaddr) {
         err = frame_alloc(0, NULL, PROC_NULL, true, ft_test_1, NULL);
         assert(!err);
     } else {
-        printf("ft_test_1: Done!!!\n");
+        dprintf(3, "ft_test_1: Done!!!\n");
     }
 }
 
@@ -432,7 +432,7 @@ static void
 ft_test_2(void* token, seL4_Word kvaddr) {
     (void)token;
     int err;
-    printf("ft_test_2: kvaddr[%d] = 0x%08x\n", ftc2, kvaddr);
+    dprintf(3, "ft_test_2: kvaddr[%d] = 0x%08x\n", ftc2, kvaddr);
     assert(kvaddr);
     ftc2++;
 
@@ -449,7 +449,7 @@ static void
 ft_test_3(void* token, seL4_Word kvaddr) {
     (void)token;
     int err;
-    printf("ft_test_3: kvaddr[%d] = 0x%08x\n", ftc3, kvaddr);
+    dprintf(3, "ft_test_3: kvaddr[%d] = 0x%08x\n", ftc3, kvaddr);
     assert(kvaddr);
 
     /* Test you can touch the page */
@@ -470,22 +470,22 @@ frametable_test(uint32_t test_mask) {
     //hitting kvaddr == 0,(which is invalid)
     srand(1);
     if (test_mask & TEST_1) {
-        printf("Starting test 1...\n");
-        printf("Allocate %d frames and touch them\n", TEST_N_FRAMES);
+        dprintf(3, "Starting test 1...\n");
+        dprintf(3, "Allocate %d frames and touch them\n", TEST_N_FRAMES);
         ftc1 = 0;
         err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_1, NULL);
         assert(!err);
     }
     if (test_mask & TEST_2) {
-        printf("Starting test 2...\n");
-        printf("Test that frame_alloc runs out of memory after a while\n");
+        dprintf(3, "Starting test 2...\n");
+        dprintf(3, "Test that frame_alloc runs out of memory after a while\n");
         ftc2 = 0;
         err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_2, NULL);
         assert(!err);
     }
     if (test_mask & TEST_3) {
-        printf("Starting test 3...\n");
-        printf("Test that you never run out of memory if you always free frames.\n");
+        dprintf(3, "Starting test 3...\n");
+        dprintf(3, "Test that you never run out of memory if you always free frames.\n");
         ftc3 = 0;
         err = frame_alloc(0,NULL,PROC_NULL,true,ft_test_3, NULL);
         assert(!err);
@@ -513,7 +513,7 @@ _filesystem_init(void) {
     err = nfs_dev_init_mntpoint_vnode(vn, &mnt_point);
     conditional_panic(err, "Failed to initialise mountpoint vnode\n");
 
-    printf("main mnt_poitn = %p\n", &mnt_point);
+    dprintf(3, "main mnt_poitn = %p\n", &mnt_point);
 
     vn->vn_opencount = 1;
 

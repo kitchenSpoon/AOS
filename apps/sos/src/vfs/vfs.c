@@ -6,6 +6,9 @@
 #include "dev/nfs_dev.h"
 #include "dev/console.h"
 
+#define verbose 0
+#include <sys/debug.h>
+
 /****************************************************************
  * VFS Open
  ***************************************************************/
@@ -21,7 +24,7 @@ static void _vfs_open_3_end_create(void* vfs_open_token, int err);
 static void _vfs_open_2_create_vnode(char *path, int openflags, vfs_open_cb_t callback, void *token);
 
 void vfs_open(char *path, int openflags, vfs_open_cb_t callback, void *token) {
-    printf("vfs_open called\n");
+    dprintf(3, "vfs_open called\n");
     int err;
 
     struct vnode *vn;
@@ -42,7 +45,7 @@ void vfs_open(char *path, int openflags, vfs_open_cb_t callback, void *token) {
 
 static void
 _vfs_open_2_create_vnode(char *path, int openflags, vfs_open_cb_t callback, void *token) {
-    printf("vfs_open_2 called\n");
+    dprintf(3, "vfs_open_2 called\n");
     int err;
 
     struct vnode *vn = malloc(sizeof(struct vnode));
@@ -100,7 +103,7 @@ _vfs_open_2_create_vnode(char *path, int openflags, vfs_open_cb_t callback, void
 
 static void
 _vfs_open_3_end_create(void* vfs_open_token, int err) {
-    printf("_vfs_open_3_end_create called\n");
+    dprintf(3, "_vfs_open_3_end_create called\n");
     //assert(vfs_open_token != NULL);
 
     cont_vfs_open_t *cont = (cont_vfs_open_t*)vfs_open_token;
@@ -151,7 +154,7 @@ void vfs_close(struct vnode *vn, uint32_t flags) {
 static void _vfs_stat_end(void *token, int err);
 
 void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callback, void *token){
-    printf("vfs_stat called\n");
+    dprintf(3, "vfs_stat called\n");
     int err = 0;
 
     cont_vfs_stat_t *cont = malloc(sizeof(cont_vfs_stat_t));
@@ -164,33 +167,27 @@ void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callba
 
     struct vnode *vn = vfs_vnt_lookup(path);
     if (vn != NULL) {
-    printf("Going to call nfs_dev_getstat 1\n");
+    dprintf(3, "Going to call nfs_dev_getstat 1\n");
         err = VOP_STAT(vn, buf, _vfs_stat_end, (void*)cont);
         if(err){
             _vfs_stat_end((void*)cont, err);
         }
         return;
     }
-    printf("Going to call nfs_dev_getstat 2\n");
+    dprintf(3, "Going to call nfs_dev_getstat 2\n");
     nfs_dev_getstat(path, path_len, buf, _vfs_stat_end, (void*)cont);
 }
 
 static void 
 _vfs_stat_end(void *token, int err) {
-    printf("_vfs_stat_end called\n");
+    dprintf(3, "_vfs_stat_end called\n");
     cont_vfs_stat_t *cont = (cont_vfs_stat_t*)token;
-    printf("_vfs_stat_end called 2\n");
     //assert(cont != NULL);
     
-    printf("_vfs_stat_end called 3\n");
     if(cont->token == NULL || cont->callback == NULL){
-        printf("_vfs_stat_end called 3.25\n");
     }
-    printf("_vfs_stat_end called 3.5\n");
     cont->callback(cont->token, err);
-    printf("_vfs_stat_end called 4\n");
     free(cont);
-    printf("_vfs_stat_end called 5\n");
 }
 
 /****************************************************************
@@ -201,17 +198,17 @@ struct vnode* vfs_vnt_lookup(const char *path) {
     if (path == NULL) {
         return NULL;
     }
-    //printf("vfs_vnt_lookup path = %s\n", path);
-    //printf("vnode_table_head = %p\n", vnode_table_head);
+    //dprintf(3, "vfs_vnt_lookup path = %s\n", path);
+    //dprintf(3, "vnode_table_head = %p\n", vnode_table_head);
     struct vnode_table_entry *vte = vnode_table_head;
     while (vte != NULL) {
-        //printf("vte->vte_vn->vn_name = %s\n", vte->vte_vn->vn_name);
+        //dprintf(3, "vte->vte_vn->vn_name = %s\n", vte->vte_vn->vn_name);
         if (strcmp(path, vte->vte_vn->vn_name) == 0) {
             break;
         }
         vte = vte->next;
     }
-    //printf("vfs_vnt_lookup %s\n", vte == NULL ? "failed" : "succeed");
+    //dprintf(3, "vfs_vnt_lookup %s\n", vte == NULL ? "failed" : "succeed");
     return (vte == NULL) ? NULL : vte->vte_vn;
 }
 

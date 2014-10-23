@@ -11,6 +11,7 @@
 
 #define SWAP_FILE_NAME  "swap"
 
+/* These are call back types for the corresponding functions */
 typedef void (*swap_out_cb_t)(void *token, int err);
 typedef void (*swap_in_cb_t)(void *token, int err);
 
@@ -32,6 +33,9 @@ int swap_in(addrspace_t *as, seL4_CapRights rights, seL4_Word vaddr,
  */
 void swap_out(seL4_Word kvaddr, swap_out_cb_t callback, void *token);
 
-void free_swapout_page(int slot);
+/*
+ * Free the slot in the swap file
+ */
+void swap_free_slot(int slot);
 
 #endif /* _LIBOS_SWAP_H */

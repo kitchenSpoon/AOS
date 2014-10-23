@@ -30,7 +30,7 @@ struct region {
     region_t *next;         // link to the next region
 };
 
-/* sel4's pagetable link list nodes */
+/* sel4's pagetable link list node */
 typedef struct sel4_pt_node sel4_pt_node_t;
 struct sel4_pt_node {
     seL4_ARM_PageTable pt;
@@ -50,10 +50,11 @@ struct addrspace {
     sel4_pt_node_t* as_pt_head;
 } addrspace_t;
 
-/*
+/***********************************************************************
+ *
  * Functions in addrspace.c
  *
- */
+ **********************************************************************/
 
 /* Find and return the region that this address is in */
 region_t* region_probe(struct addrspace* as, seL4_Word addr);
@@ -92,34 +93,38 @@ int as_define_stack(addrspace_t *as, seL4_Word stack_top, int size);
  */
 int as_define_heap(addrspace_t *as);
 
+/* SOS's handler for sys_brk system call */
+seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr);
+
 /*
  * check if the given user buffer is a valid memory range
- * @param permission can be NULL
+ * Note: permission can be NULL, in that case no permission is returned
  */
 bool as_is_valid_memory(addrspace_t *as, seL4_Word vaddr, size_t size,
                                 uint32_t* permission);
 
-/*
+/***********************************************************************
+ *
  * Functions in pagetable.c:
  *
- */
+ ***********************************************************************/
+
+/* Callback type for their corresponding functions */
+typedef void (*sos_page_map_cb_t)(void *token, int err);
 
 /*
  * Map a page in into the shadow Pagetable
- * @param as - The addrspace we will perform the mapping
- * @param app_sel4_pd - the sel4 page directory of the user level app
- * @param vaddr - the user level virtual address that need to be mapped
- *
- * @Returns 0 if succesful
+ * This is an asynchronous function and will return by calling the call back
+ * function
+ * Returns 0 if succesfully register callback
  */
-typedef void (*sos_page_map_cb_t)(void *token, int err);
 int sos_page_map(int pid, addrspace_t *as, seL4_Word vaddr, uint32_t permissions,
-        sos_page_map_cb_t callback, void* token, bool noswap);
+                 sos_page_map_cb_t callback, void* token, bool noswap);
 
 /*
  * Unmap a page in the pagetable.
- * Note that this does not actually free the page, it only
- * unmap the page from sel4 and free the frame_cap
+ * Note that this does not actually free the page in user pagetable, it only
+ * unmaps the page from sel4 and free the frame_cap
  * Returns 0 if successful
  */
 int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);
@@ -130,21 +135,17 @@ int sos_page_unmap(addrspace_t *as, seL4_Word vaddr);
  */
 void sos_page_free(addrspace_t *as, seL4_Word vaddr);
 
-/* Check if page at address VADDR is swapped */
-bool sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr);
-
-/* Check if page at address VADDR is mapped */
+/*
+ * sos_page_is_inuse    - Check if page at address VADDR currently in use
+ * sos_page_is_swapped  - Check if page at address VADDR is swapped
+ * sos_page_is_locked   - Check if the underlying frame is locked
+ * sos_get_kvaddr       - Get the SOS's vaddr from the given application's ADDR in AS
+ * sos_get_kframe_cap   - Get the kframe_cap from the given ADDR in AS
+ */
 bool sos_page_is_inuse(addrspace_t *as, seL4_Word vaddr);
-
+bool sos_page_is_swapped(addrspace_t *as, seL4_Word vaddr);
 bool sos_page_is_locked(addrspace_t *as, seL4_Word vaddr);
-
-/* Get the kframe_cap from the given ADDR in AS */
-int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap);
-
-/* Get the SOS's vaddr from the given application's ADDR in AS */
 int sos_get_kvaddr(addrspace_t *as, seL4_Word vaddr, seL4_Word *kvaddr);
-
-/* SOS's handler for sys_brk system call */
-seL4_Word sos_sys_brk(addrspace_t *as, seL4_Word vaddr);
+int sos_get_kframe_cap(addrspace_t *as, seL4_Word vaddr, seL4_CPtr *kframe_cap);
 
 #endif /* _LIBOS_ADDRSPACE_H_ */

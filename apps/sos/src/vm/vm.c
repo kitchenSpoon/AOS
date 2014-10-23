@@ -21,60 +21,6 @@
 
 #define RW_BIT    (1<<11)
 
-typedef struct {
-    seL4_CPtr reply_cap;
-    addrspace_t *as;
-    seL4_Word vaddr;
-    bool is_code;
-    region_t* reg;
-    pid_t pid;
-} VMF_cont_t;
-
-static void
-sos_VMFaultHandler_reply(void* token, int err){
-    printf("sos_vmf_reply called\n");
-
-    VMF_cont_t *cont= (VMF_cont_t*)token;
-    if(err){
-        printf("sos_vmf received an err\n");
-    }
-    if (!is_proc_alive(cont->pid)) {
-        cspace_free_slot(cur_cspace, cont->reply_cap);
-        free(cont);
-        return;
-    }
-
-    /* Flush the i-cache if this is an instruction fault */
-    //if (cont->is_code) {
-    if (!err) {
-        seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
-        int x = PT_L1_INDEX(vpage);
-        int y = PT_L2_INDEX(vpage);
-
-        seL4_Word kvaddr = (cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
-        seL4_CPtr kframe_cap;
-
-        err = frame_get_cap(kvaddr, &kframe_cap);
-        assert(!err); // This kvaddr is ready to use, there should be no error
-        seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
-    }
-    //}
-    /* If there is an err here, it is not the process's fault
-     * It is either the kernel running out of memory or swapping doesn't work
-     */
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
-    seL4_Send(cont->reply_cap, reply);
-    cspace_free_slot(cur_cspace, cont->reply_cap);
-    free(cont);
-    set_cur_proc(PROC_NULL);
-}
-
-static void
-sos_VMFaultHandler_swap_in_end(void* token, int err){
-    printf("sos_vmf_swap_in_end\n");
-    sos_VMFaultHandler_reply(token, err);
-}
-
 static bool
 _check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t **reg_ret) {
     if (fault_addr == 0) {
@@ -110,51 +56,43 @@ _check_segfault(addrspace_t *as, seL4_Word fault_addr, seL4_Word fsr, region_t *
 }
 
 static int
-_set_page_reference(VMF_cont_t *cont) {
+_set_page_reference(addrspace_t *as, seL4_Word vaddr, uint32_t rights) {
 
     int err;
 
     seL4_CPtr kframe_cap, frame_cap;
 
-    seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
+    seL4_Word vpage = PAGE_ALIGN(vaddr);
     int x = PT_L1_INDEX(vpage);
     int y = PT_L2_INDEX(vpage);
 
-    if (cont->as->as_pd_regs[x] == NULL) {
+    if (as->as_pd_regs[x] == NULL) {
         return EINVAL;
     }
 
-    seL4_Word kvaddr = (cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
-    printf("mapping back into kvaddr -> 0x%08x, vaddr = 0x%08x\n", kvaddr, cont->vaddr);
-
-    //printf("---test_data---\n");
-    //char *kvaddr_str = (char*)kvaddr;
-    //for (int i=0; i<PAGE_SIZE; i++) {
-    //    printf("%c", kvaddr_str[i]);
-    //}
-    //printf("\n---test_data end---\n");
-
+    seL4_Word kvaddr = (as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+    printf("mapping back into kvaddr -> 0x%08x, vaddr = 0x%08x\n", kvaddr, vaddr);
 
     err = frame_get_cap(kvaddr, &kframe_cap);
-    assert(!err); // This kvaddr is ready to use, there should be no error
+    //assert(!err); // This kvaddr is ready to use, there should be no error
 
     /* Copy the frame cap as we need to map it into 2 address spaces */
-    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, cont->reg->rights);
+    frame_cap = cspace_copy_cap(cur_cspace, cur_cspace, kframe_cap, rights);
     if (frame_cap == CSPACE_NULL) {
         printf("vmf: failed copying frame cap\n");
         return EFAULT;
     }
 
-    err = seL4_ARM_Page_Map(frame_cap, cont->as->as_sel4_pd, vpage,
-            cont->reg->rights, seL4_ARM_Default_VMAttributes);
+    err = seL4_ARM_Page_Map(frame_cap, as->as_sel4_pd, vpage,
+            rights, seL4_ARM_Default_VMAttributes);
     if(err == seL4_FailedLookup){
         printf("vmf: failed mapping application frame to sel4\n");
         return EFAULT;
     }
 
-    cont->as->as_pd_caps[x][y] = frame_cap;
+    as->as_pd_caps[x][y] = frame_cap;
 
-    err = set_frame_referenced(kvaddr);
+    err = frame_set_referenced(kvaddr);
     if(err){
         printf("vmf: setting frame referenced error\n");
         return err;
@@ -162,6 +100,21 @@ _set_page_reference(VMF_cont_t *cont) {
 
     return 0;
 }
+
+/**********************************************************************
+ * VMFault handler code
+ *********************************************************************/
+
+typedef struct {
+    seL4_CPtr reply_cap;
+    addrspace_t *as;
+    seL4_Word vaddr;
+    bool is_code;
+    region_t* reg;
+    pid_t pid;
+} VMF_cont_t;
+
+static void _sos_VMFaultHandler_reply(void* token, int err);
 
 void
 sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, bool is_code){
@@ -221,37 +174,77 @@ sos_VMFaultHandler(seL4_CPtr reply_cap, seL4_Word fault_addr, seL4_Word fsr, boo
             printf("vmf tries to swapin\n");
             /* This page is swapped out, we need to swap it back in */
             err = swap_in(cont->as, cont->reg->rights, cont->vaddr,
-                      cont->is_code, sos_VMFaultHandler_swap_in_end, cont);
+                      cont->is_code, _sos_VMFaultHandler_reply, cont);
             if (err) {
-                sos_VMFaultHandler_reply((void*)cont, err);
+                _sos_VMFaultHandler_reply((void*)cont, err);
                 return;
             }
             return;
         } else {
             if (sos_page_is_locked(as, fault_addr)) {
                 printf("vmf page is locked\n");
-                sos_VMFaultHandler_reply((void*)cont, EFAULT);
+                _sos_VMFaultHandler_reply((void*)cont, EFAULT);
                 return;
             }
 
             printf("vmf second chance mapping page back in\n");
-            err = _set_page_reference(cont);
-            sos_VMFaultHandler_reply((void*)cont, err);
+            err = _set_page_reference(cont->as, cont->vaddr, cont->reg->rights);
+            _sos_VMFaultHandler_reply((void*)cont, err);
             return;
         }
     } else {
         /* This page has never been mapped, so do that and return */
         printf("vmf tries to map a page\n");
         inc_proc_size_proc(cur_proc());
-        err = sos_page_map(proc_get_id(), as, fault_addr, reg->rights, sos_VMFaultHandler_reply, (void*)cont, false);
+        err = sos_page_map(proc_get_id(), as, fault_addr, reg->rights, _sos_VMFaultHandler_reply, (void*)cont, false);
         if(err){
             dec_proc_size_proc(cur_proc());
-            sos_VMFaultHandler_reply((void*)cont, err);
+            _sos_VMFaultHandler_reply((void*)cont, err);
         }
         return;
     }
     /* Otherwise, this is not handled */
     printf("vmf error at the end\n");
-    sos_VMFaultHandler_reply((void*)cont, EFAULT);
+    _sos_VMFaultHandler_reply((void*)cont, EFAULT);
     return;
 }
+
+static void
+_sos_VMFaultHandler_reply(void* token, int err){
+    printf("sos_vmf_reply called\n");
+
+    VMF_cont_t *cont= (VMF_cont_t*)token;
+    if(err){
+        printf("sos_vmf received an err\n");
+    }
+    if (!is_proc_alive(cont->pid)) {
+        cspace_free_slot(cur_cspace, cont->reply_cap);
+        free(cont);
+        return;
+    }
+
+    /* Flush the i-cache. Ideally, this should only be done when faulting on text segment */
+    //if (cont->is_code) {
+    if (!err) {
+        seL4_Word vpage = PAGE_ALIGN(cont->vaddr);
+        int x = PT_L1_INDEX(vpage);
+        int y = PT_L2_INDEX(vpage);
+
+        seL4_Word kvaddr = (cont->as->as_pd_regs[x][y] & PTE_KVADDR_MASK);
+        seL4_CPtr kframe_cap;
+
+        err = frame_get_cap(kvaddr, &kframe_cap);
+        //assert(!err); // This kvaddr is ready to use, there should be no error
+        seL4_ARM_Page_Unify_Instruction(kframe_cap, 0, PAGESIZE);
+    }
+    //}
+    /* If there is an err here, it is not the process's fault
+     * It is either the kernel running out of memory or swapping doesn't work
+     */
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(0, 0, 0, 0);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+    free(cont);
+    set_cur_proc(PROC_NULL);
+}
+

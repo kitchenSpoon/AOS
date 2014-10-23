@@ -7,6 +7,12 @@
 #include "vm/addrspace.h"
 #include "proc/proc.h"
 
+/***********************************************************************
+ *
+ * Functions in frametable.c
+ *
+ ***********************************************************************/
+
 /*
  * Initialise frame table. Reserve memory and initialise values for frame table
  *
@@ -14,12 +20,10 @@
  */
 int frame_init(void);
 
-
 /*
  * Check if there is still free frame in the frametable
  */
 bool frame_has_free(void);
-
 
 /*
  * Callback for frame_alloc
@@ -50,12 +54,6 @@ int frame_free(seL4_Word vaddr);
 int frame_get_cap(seL4_Word vaddr, seL4_CPtr *frame_cap);
 
 /*
- * Handle VM fault for SOS
- * This will be the one who reply to the client
- */
-void sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr, bool is_code);
-
-/*
  * Lock/Unlock a frame
  */
 int frame_lock_frame(seL4_Word vaddr);
@@ -67,9 +65,19 @@ pid_t frame_get_pid(seL4_Word kvaddr);
 
 seL4_Word frame_get_vaddr(seL4_Word kvaddr);
 
-int set_frame_referenced(seL4_Word kvaddr);
+int frame_set_referenced(seL4_Word kvaddr);
 bool is_frame_referenced(seL4_Word kvaddr);
 
-seL4_Word get_magic_kvaddr(void);
+/***********************************************************************
+ *
+ * Function(s) in vm.c
+ *
+ ***********************************************************************/
+
+/*
+ * Handle VM fault for SOS
+ * This will be the one who reply to the client
+ */
+void sos_VMFaultHandler(seL4_CPtr reply, seL4_Word fault_addr, seL4_Word fsr, bool is_code);
 
 #endif /* _LIBOS_VM_H_ */

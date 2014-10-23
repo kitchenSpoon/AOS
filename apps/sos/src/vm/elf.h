@@ -18,12 +18,15 @@
 #define PTE_SWAP_OFFSET         (2)
 #define PTE_SWAP_MASK           (0xfffffffc)
 #define PTE_KVADDR_MASK         (0xfffff000)
-/*
- * Functions in elf.c
- *    elf_load - load an ELF user program executable into the current
- *               address space. (i.e. the only one address space )
- */
+
+
+/* Callback type for elf_load */
 typedef void (*elf_load_cb_t)(void *token, int err, seL4_Word elf_entry);
-void elf_load(pid_t pid, addrspace_t *as, char* elf_file, process_t* proc, elf_load_cb_t callback, void* token);
+
+/*
+ * Load an ELF user program executable into the current address space
+ */
+void elf_load(pid_t pid, addrspace_t *as, char* elf_file, process_t* proc,
+              elf_load_cb_t callback, void* token);
 
 #endif /* _LIBOS_ELF_H_ */

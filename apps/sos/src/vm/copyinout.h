@@ -1,6 +1,10 @@
 #ifndef _SOS_COPYINOUT_H_
 #define _SOS_COPYINOUT_H_
 
+/* Callback types for copyin and copyout */
+typedef void (*copyin_cb_t)(void* token, int err);
+typedef void (*copyout_cb_t)(void* token, int err);
+
 /*
  * Copy memory from user virtual memory address to kernel's given address
  * @precond user data need to be valid
@@ -9,7 +13,6 @@
  * @param buf - the user buffer address
  * @param nbyte - the size of user buffer memory need to be copied in
  */
-typedef void (*copyin_cb_t)(void* token, int err);
 int copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, void *token);
 
 /*
@@ -20,7 +23,6 @@ int copyin(seL4_Word kbuf, seL4_Word buf, size_t nbyte, copyin_cb_t callback, vo
  * @param kbuf - the kernel buffer address
  * @param nbyte - the size of kernel buffer memory need to be copied in
  */
-typedef void (*copyout_cb_t)(void* token, int err);
 int copyout(seL4_Word buf, seL4_Word kbuf, size_t nbyte, copyout_cb_t callback, void *token);
 
 #endif /* _SOS_COPYINOUT_H_ */

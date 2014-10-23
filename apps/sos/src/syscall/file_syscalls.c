@@ -20,6 +20,10 @@
 #define MAX_SERIAL_TRY  0x100
 #define MAX_IO_BUF      0x1000
 
+/**********************************************************************
+ * Server Print
+ **********************************************************************/
+
 void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
     struct serial* serial = serial_init(); //serial_init does the cacheing
 
@@ -37,6 +41,10 @@ void serv_sys_print(seL4_CPtr reply_cap, char* message, size_t len) {
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
+/**********************************************************************
+ * Server File Open
+ **********************************************************************/
+
 typedef struct {
     seL4_CPtr reply_cap;
     char *kbuf;
@@ -45,54 +53,8 @@ typedef struct {
     pid_t pid;
 } cont_open_t;
 
-static void
-serv_sys_open_end(void *token, int err, int fd) {
-    printf("serv_sys_open_end called\n");
-    cont_open_t *cont = (cont_open_t*)token;
-    assert(cont != NULL);
-
-    if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_open_end: proc is killed\n");
-        cspace_free_slot(cur_cspace, cont->reply_cap);
-        free(cont);
-        return;
-    }
-    set_cur_proc(PROC_NULL);
-    if (cont->kbuf == NULL) {
-        free(cont->kbuf);
-    }
-
-    if(err){
-        printf("serv_sys_open err = %d\n", err);
-    }
-
-    seL4_MessageInfo_t reply;
-    reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)fd);
-    seL4_Send(cont->reply_cap, reply);
-    cspace_free_slot(cur_cspace, cont->reply_cap);
-    printf("--serv_cont_end = %p\n", cont);
-
-    free(cont);
-}
-
-static void
-serv_sys_open_copyin_cb(void *token, int err) {
-    if (err) {
-        serv_sys_open_end(token, err, -1);
-        return;
-    }
-
-    cont_open_t *cont = (cont_open_t*)token;
-    cont->kbuf[cont->nbyte] = '\0';
-
-    if (strcmp(cont->kbuf, SWAP_FILE_NAME) == 0) {
-        serv_sys_open_end((void*)cont, EINVAL, -1);
-        return;
-    }
-
-    file_open(cont->kbuf, (int)cont->flags, serv_sys_open_end, (void*)cont);
-}
+static void serv_sys_open_copyin_cb(void *token, int err);
+static void serv_sys_open_end(void *token, int err, int fd);
 
 void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t flags){
     printf("serv_sys_open called\n");
@@ -135,6 +97,59 @@ void serv_sys_open(seL4_CPtr reply_cap, seL4_Word path, size_t nbyte, uint32_t f
     }
 }
 
+static void
+serv_sys_open_copyin_cb(void *token, int err) {
+    if (err) {
+        serv_sys_open_end(token, err, -1);
+        return;
+    }
+
+    cont_open_t *cont = (cont_open_t*)token;
+    cont->kbuf[cont->nbyte] = '\0';
+
+    if (strcmp(cont->kbuf, SWAP_FILE_NAME) == 0) {
+        serv_sys_open_end((void*)cont, EINVAL, -1);
+        return;
+    }
+
+    file_open(cont->kbuf, (int)cont->flags, serv_sys_open_end, (void*)cont);
+}
+
+static void
+serv_sys_open_end(void *token, int err, int fd) {
+    printf("serv_sys_open_end called\n");
+    cont_open_t *cont = (cont_open_t*)token;
+    assert(cont != NULL);
+
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_open_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
+        free(cont);
+        return;
+    }
+    set_cur_proc(PROC_NULL);
+    if (cont->kbuf == NULL) {
+        free(cont->kbuf);
+    }
+
+    if(err){
+        printf("serv_sys_open err = %d\n", err);
+    }
+
+    seL4_MessageInfo_t reply;
+    reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)fd);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+    printf("--serv_cont_end = %p\n", cont);
+
+    free(cont);
+}
+
+/**********************************************************************
+ * Server File Close
+ **********************************************************************/
+
 void serv_sys_close(seL4_CPtr reply_cap, int fd){
     int err = 0;
     //printf("fd = %d\n", fd);
@@ -150,6 +165,10 @@ void serv_sys_close(seL4_CPtr reply_cap, int fd){
     cspace_free_slot(cur_cspace, reply_cap);
 }
 
+/**********************************************************************
+ * Server File Read
+ **********************************************************************/
+
 typedef struct {
     seL4_CPtr reply_cap;
     struct openfile *file;
@@ -159,42 +178,7 @@ typedef struct {
     pid_t pid;
 } cont_read_t;
 
-void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
-    //printf("serv_read_end called\n");
-    //printf("serv_read_end size = %u\n", size);
-    cont_read_t *cont = (cont_read_t*)token;
-
-    if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_read_end: proc is killed\n");
-        cspace_free_slot(cur_cspace, cont->reply_cap);
-        free(cont);
-        return;
-    }
-
-    /* Update file offset */
-    if(!err){
-        cont->file->of_offset += size;
-        cont->bytes_read += size;
-    }
-
-    //printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
-    if(err || !more_to_read || cont->bytes_read >= cont->bytes_wanted){
-        /* Reply app*/
-        set_cur_proc(PROC_NULL);
-        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-        seL4_SetMR(0, (seL4_Word)cont->bytes_read);
-        seL4_Send(cont->reply_cap, reply);
-        cspace_free_slot(cur_cspace, cont->reply_cap);
-
-        free(cont);
-    } else {
-        /* Theres more stuff to read */
-        VOP_READ(cont->file->of_vnode, cont->buf + cont->bytes_read,
-                 MIN(cont->bytes_wanted - cont->bytes_read, MAX_IO_BUF),
-                 cont->file->of_offset, serv_sys_read_end, (void*)cont);
-    }
-    //printf("serv_read_end out\n");
-}
+void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read);
 
 void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
     //printf("serv read\n");
@@ -245,6 +229,47 @@ void serv_sys_read(seL4_CPtr reply_cap, int fd, seL4_Word buf, size_t nbyte){
             file->of_offset, serv_sys_read_end, (void*)cont);
     //printf("serv read finish\n");
 }
+
+void serv_sys_read_end(void *token, int err, size_t size, bool more_to_read){
+    //printf("serv_read_end called\n");
+    //printf("serv_read_end size = %u\n", size);
+    cont_read_t *cont = (cont_read_t*)token;
+
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_read_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
+        free(cont);
+        return;
+    }
+
+    /* Update file offset */
+    if(!err){
+        cont->file->of_offset += size;
+        cont->bytes_read += size;
+    }
+
+    //printf("serv_read_end bytes_read = %u, bytes_wanted = %u\n", cont->bytes_read, cont->bytes_wanted);
+    if(err || !more_to_read || cont->bytes_read >= cont->bytes_wanted){
+        /* Reply app*/
+        set_cur_proc(PROC_NULL);
+        seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+        seL4_SetMR(0, (seL4_Word)cont->bytes_read);
+        seL4_Send(cont->reply_cap, reply);
+        cspace_free_slot(cur_cspace, cont->reply_cap);
+
+        free(cont);
+    } else {
+        /* Theres more stuff to read */
+        VOP_READ(cont->file->of_vnode, cont->buf + cont->bytes_read,
+                 MIN(cont->bytes_wanted - cont->bytes_read, MAX_IO_BUF),
+                 cont->file->of_offset, serv_sys_read_end, (void*)cont);
+    }
+    //printf("serv_read_end out\n");
+}
+
+/**********************************************************************
+ * Server File Write
+ **********************************************************************/
 
 typedef struct {
     seL4_CPtr reply_cap;
@@ -386,7 +411,7 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
     if (!is_proc_alive(cont->pid)) {
         printf("serv_sys_write_end: proc is killed\n");
         if (cont->kbuf != NULL) {
-            frame_free(cont->kbuf);
+            frame_free((seL4_Word)cont->kbuf);
         }
 
         cspace_free_slot(cur_cspace, cont->reply_cap);
@@ -408,29 +433,16 @@ void serv_sys_write_end(cont_write_t* cont, int err) {
     free(cont);
 }
 
+/**********************************************************************
+ * Server Getdirent
+ **********************************************************************/
+
 typedef struct {
     seL4_CPtr reply_cap;
     pid_t pid;
 } cont_getdirent_t;
 
-static void serv_sys_getdirent_end(void *token, int err, size_t size) {
-    cont_getdirent_t *cont = (cont_getdirent_t*)token;
-
-    if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_getdirent_end: proc is killed\n");
-        cspace_free_slot(cur_cspace, cont->reply_cap);
-        free(cont);
-        return;
-    }
-
-    set_cur_proc(PROC_NULL);
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
-    seL4_SetMR(0, (seL4_Word)size);
-    seL4_Send(cont->reply_cap, reply);
-    cspace_free_slot(cur_cspace, cont->reply_cap);
-
-    free(cont);
-}
+static void serv_sys_getdirent_end(void *token, int err, size_t size);
 
 void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
     uint32_t permissions = 0;
@@ -464,6 +476,29 @@ void serv_sys_getdirent(seL4_CPtr reply_cap, int pos, char* name, size_t nbyte){
     VOP_GETDIRENT(vn, name, nbyte, pos, serv_sys_getdirent_end, (void*)cont);
 }
 
+static void serv_sys_getdirent_end(void *token, int err, size_t size) {
+    cont_getdirent_t *cont = (cont_getdirent_t*)token;
+
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_getdirent_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
+        free(cont);
+        return;
+    }
+
+    set_cur_proc(PROC_NULL);
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 1);
+    seL4_SetMR(0, (seL4_Word)size);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+
+    free(cont);
+}
+
+/**********************************************************************
+ * Server File Stat
+ **********************************************************************/
+
 typedef struct {
     seL4_CPtr reply_cap;
     char *kbuf;
@@ -472,49 +507,8 @@ typedef struct {
     pid_t pid;
 } cont_stat_t;
 
-static void serv_sys_stat_end(void *token, int err){
-    printf("serv_sys_stat_end\n");
-    cont_stat_t *cont = (cont_stat_t*)token;
-    assert(cont != NULL);
-
-    if (!is_proc_alive(cont->pid)) {
-        printf("serv_sys_stat_end: proc is killed\n");
-        cspace_free_slot(cur_cspace, cont->reply_cap);
-        free(cont);
-        return;
-    }
-    set_cur_proc(PROC_NULL);
-
-    if (cont->kbuf != NULL) {
-        free(cont->kbuf);
-    }
-
-    //set_cur_proc(PROC_NULL);
-
-    /* reply sosh*/
-    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
-    seL4_Send(cont->reply_cap, reply);
-    cspace_free_slot(cur_cspace, cont->reply_cap);
-
-    free(cont);
-}
-
-static void
-serv_sys_stat_copyin_cb(void *token, int err) {
-    printf("serv_sys_stat_cb\n");
-    if (err) {
-        serv_sys_stat_end(token, err);
-        return;
-    }
-    printf("serv_sys_stat_cb\n");
-    cont_stat_t *cont = (cont_stat_t*)token;
-    printf("serv_sys_stat_cb\n");
-
-    cont->kbuf[cont->path_len] = '\0';
-    printf("serv_sys_stat_cb\n");
-
-    vfs_stat(cont->kbuf, cont->path_len, cont->buf, serv_sys_stat_end, (void*)cont);
-}
+static void serv_sys_stat_copyin_cb(void *token, int err);
+static void serv_sys_stat_end(void *token, int err);
 
 void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t *buf){
     /* Read doesn't check buffer if mapped like open & write,
@@ -560,4 +554,48 @@ void serv_sys_stat(seL4_CPtr reply_cap, char *path, size_t path_len, sos_stat_t 
         serv_sys_stat_end((void*)cont, err);
         return;
     }
+}
+
+static void
+serv_sys_stat_copyin_cb(void *token, int err) {
+    printf("serv_sys_stat_cb\n");
+    if (err) {
+        serv_sys_stat_end(token, err);
+        return;
+    }
+    printf("serv_sys_stat_cb\n");
+    cont_stat_t *cont = (cont_stat_t*)token;
+    printf("serv_sys_stat_cb\n");
+
+    cont->kbuf[cont->path_len] = '\0';
+    printf("serv_sys_stat_cb\n");
+
+    vfs_stat(cont->kbuf, cont->path_len, cont->buf, serv_sys_stat_end, (void*)cont);
+}
+
+static void serv_sys_stat_end(void *token, int err){
+    printf("serv_sys_stat_end\n");
+    cont_stat_t *cont = (cont_stat_t*)token;
+    assert(cont != NULL);
+
+    if (!is_proc_alive(cont->pid)) {
+        printf("serv_sys_stat_end: proc is killed\n");
+        cspace_free_slot(cur_cspace, cont->reply_cap);
+        free(cont);
+        return;
+    }
+    set_cur_proc(PROC_NULL);
+
+    if (cont->kbuf != NULL) {
+        free(cont->kbuf);
+    }
+
+    //set_cur_proc(PROC_NULL);
+
+    /* reply sosh*/
+    seL4_MessageInfo_t reply = seL4_MessageInfo_new(err, 0, 0, 0);
+    seL4_Send(cont->reply_cap, reply);
+    cspace_free_slot(cur_cspace, cont->reply_cap);
+
+    free(cont);
 }

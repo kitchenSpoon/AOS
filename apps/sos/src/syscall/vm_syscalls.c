@@ -4,6 +4,10 @@
 #include "syscall/syscall.h"
 #include "vm/addrspace.h"
 
+/**********************************************************************
+ * Server System SBRK
+ **********************************************************************/
+
 void serv_sys_sbrk(seL4_CPtr reply_cap, seL4_Word newbrk) {
     seL4_MessageInfo_t reply;
 

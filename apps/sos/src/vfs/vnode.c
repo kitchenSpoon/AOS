@@ -4,10 +4,18 @@
 #include "vfs/vfs.h"
 #include "vfs/vnode.h"
 
+/****************************************************************
+ * Vnode Increase Open Count
+ ***************************************************************/
+
 void vnode_incopen(struct vnode *vn) {
     assert(vn != NULL);
     vn->vn_opencount++;
 }
+
+/****************************************************************
+ * Vnode Decrease Open Count
+ ***************************************************************/
 
 void vnode_decopen(struct vnode *vn) {
     assert(vn != NULL);

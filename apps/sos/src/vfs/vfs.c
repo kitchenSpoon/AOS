@@ -6,6 +6,10 @@
 #include "dev/nfs_dev.h"
 #include "dev/console.h"
 
+/****************************************************************
+ * VFS Open
+ ***************************************************************/
+
 typedef struct {
     vfs_open_cb_t callback;
     void *token;
@@ -13,40 +17,31 @@ typedef struct {
     int openflags;
 } cont_vfs_open_t;
 
-static void
-vfs_open_3_end_create(void* vfs_open_token, int err) {
-    printf("vfs_open_3_end_create called\n");
-    assert(vfs_open_token != NULL);
+static void _vfs_open_3_end_create(void* vfs_open_token, int err);
+static void _vfs_open_2_create_vnode(char *path, int openflags, vfs_open_cb_t callback, void *token);
 
-    cont_vfs_open_t *cont = (cont_vfs_open_t*)vfs_open_token;
+void vfs_open(char *path, int openflags, vfs_open_cb_t callback, void *token) {
+    printf("vfs_open called\n");
+    int err;
 
-    if (err || VOP_EACHOPEN(cont->vn, cont->openflags)) {
-        free(cont->vn->vn_name);
-        free(cont->vn->vn_ops);
-        free(cont->vn);
-        cont->callback(cont->token, err, NULL);
-        free(cont);
+    struct vnode *vn;
+    vn = vfs_vnt_lookup(path);
+    if (vn != NULL) {
+        err = VOP_EACHOPEN(vn, openflags);
+        if (err) {
+            vn = NULL;
+        } else {
+            VOP_INCOPEN(vn);
+        }
+        callback((void*)token, err, vn);
         return;
     }
 
-    err = vfs_vnt_insert(cont->vn);
-    if (err) {
-        VOP_LASTCLOSE(cont->vn);
-        free(cont->vn->vn_name);
-        free(cont->vn->vn_ops);
-        free(cont->vn);
-        cont->callback(cont->token, err, NULL);
-        free(cont);
-        return;
-    }
-
-    cont->vn->vn_opencount = 1;
-    cont->callback(cont->token, 0, cont->vn);
-    free(cont);
+    _vfs_open_2_create_vnode(path, openflags, callback, token);
 }
 
 static void
-vfs_open_2_create_vnode(char *path, int openflags, vfs_open_cb_t callback, void *token) {
+_vfs_open_2_create_vnode(char *path, int openflags, vfs_open_cb_t callback, void *token) {
     printf("vfs_open_2 called\n");
     int err;
 
@@ -96,59 +91,64 @@ vfs_open_2_create_vnode(char *path, int openflags, vfs_open_cb_t callback, void 
             free(vn);
             vn = NULL;
         }
-        vfs_open_3_end_create((void*)cont, 0);
+        _vfs_open_3_end_create((void*)cont, 0);
         return;
     }
 
-    nfs_dev_init(vn, vfs_open_3_end_create, (void*)cont);
+    nfs_dev_init(vn, _vfs_open_3_end_create, (void*)cont);
 }
 
-void vfs_open(char *path, int openflags, vfs_open_cb_t callback, void *token) {
-    printf("vfs_open called\n");
-    int err;
+static void
+_vfs_open_3_end_create(void* vfs_open_token, int err) {
+    printf("_vfs_open_3_end_create called\n");
+    //assert(vfs_open_token != NULL);
 
-    struct vnode *vn;
-    vn = vfs_vnt_lookup(path);
-    if (vn != NULL) {
-        err = VOP_EACHOPEN(vn, openflags);
-        if (err) {
-            vn = NULL;
-        } else {
-            VOP_INCOPEN(vn);
-        }
-        callback((void*)token, err, vn);
+    cont_vfs_open_t *cont = (cont_vfs_open_t*)vfs_open_token;
+
+    if (err || VOP_EACHOPEN(cont->vn, cont->openflags)) {
+        free(cont->vn->vn_name);
+        free(cont->vn->vn_ops);
+        free(cont->vn);
+        cont->callback(cont->token, err, NULL);
+        free(cont);
         return;
     }
 
-    vfs_open_2_create_vnode(path, openflags, callback, token);
+    err = vfs_vnt_insert(cont->vn);
+    if (err) {
+        VOP_LASTCLOSE(cont->vn);
+        free(cont->vn->vn_name);
+        free(cont->vn->vn_ops);
+        free(cont->vn);
+        cont->callback(cont->token, err, NULL);
+        free(cont);
+        return;
+    }
+
+    cont->vn->vn_opencount = 1;
+    cont->callback(cont->token, 0, cont->vn);
+    free(cont);
 }
+
+/****************************************************************
+ * VFS Close
+ ***************************************************************/
 
 void vfs_close(struct vnode *vn, uint32_t flags) {
     VOP_EACHCLOSE(vn, flags);
     VOP_DECOPEN(vn);
 }
 
-typedef struct {
+/****************************************************************
+ * VFS Stat
+ ***************************************************************/
+ 
+ typedef struct {
     vfs_stat_cb_t callback;
     void *token;
 } cont_vfs_stat_t;
 
-static void vfs_stat_end(void *token, int err) {
-    printf("vfs_stat_end called\n");
-    cont_vfs_stat_t *cont = (cont_vfs_stat_t*)token;
-    printf("vfs_stat_end called 2\n");
-    assert(cont != NULL);
-    
-    printf("vfs_stat_end called 3\n");
-    if(cont->token == NULL || cont->callback == NULL){
-        printf("vfs_stat_end called 3.25\n");
-    }
-    printf("vfs_stat_end called 3.5\n");
-    cont->callback(cont->token, err);
-    printf("vfs_stat_end called 4\n");
-    free(cont);
-    printf("vfs_stat_end called 5\n");
-}
+static void _vfs_stat_end(void *token, int err);
 
 void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callback, void *token){
     printf("vfs_stat called\n");
@@ -165,15 +165,37 @@ void vfs_stat(char* path, size_t path_len, sos_stat_t *buf, vfs_stat_cb_t callba
     struct vnode *vn = vfs_vnt_lookup(path);
     if (vn != NULL) {
     printf("Going to call nfs_dev_getstat 1\n");
-        err = VOP_STAT(vn, buf, vfs_stat_end, (void*)cont);
+        err = VOP_STAT(vn, buf, _vfs_stat_end, (void*)cont);
         if(err){
-            vfs_stat_end((void*)cont, err);
+            _vfs_stat_end((void*)cont, err);
         }
         return;
     }
     printf("Going to call nfs_dev_getstat 2\n");
-    nfs_dev_getstat(path, path_len, buf, vfs_stat_end, (void*)cont);
+    nfs_dev_getstat(path, path_len, buf, _vfs_stat_end, (void*)cont);
 }
+
+static void 
+_vfs_stat_end(void *token, int err) {
+    printf("_vfs_stat_end called\n");
+    cont_vfs_stat_t *cont = (cont_vfs_stat_t*)token;
+    printf("_vfs_stat_end called 2\n");
+    //assert(cont != NULL);
+    
+    printf("_vfs_stat_end called 3\n");
+    if(cont->token == NULL || cont->callback == NULL){
+        printf("_vfs_stat_end called 3.25\n");
+    }
+    printf("_vfs_stat_end called 3.5\n");
+    cont->callback(cont->token, err);
+    printf("_vfs_stat_end called 4\n");
+    free(cont);
+    printf("_vfs_stat_end called 5\n");
+}
+
+/****************************************************************
+ * VFS Vnode table functions
+ ***************************************************************/
 
 struct vnode* vfs_vnt_lookup(const char *path) {
     if (path == NULL) {

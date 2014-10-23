@@ -10,6 +10,10 @@
 #include "syscall/file.h"
 #include "dev/console.h"
 
+/**********************************************************************
+ * File Open
+ **********************************************************************/
+
 /*** openfile functions ***/
 
 typedef struct {
@@ -17,6 +21,32 @@ typedef struct {
     void *token;
     int flags;
 } cont_file_open_t;
+
+static void file_open_end(void *token, int err, struct vnode *vn);
+
+void
+file_open(char *filename, int flags, file_open_cb_t callback, void *token)
+{
+    printf("file_open called\n");
+    int accmode = flags & O_ACCMODE;
+    if (!(accmode==O_RDONLY ||
+          accmode==O_WRONLY ||
+          accmode==O_RDWR)) {
+        callback(token, EINVAL, -1);
+        return;
+    }
+
+    cont_file_open_t *cont = malloc(sizeof(cont_file_open_t));
+    if (cont == NULL) {
+        callback(token, ENOMEM, -1);
+        return;
+    }
+    cont->callback = callback;
+    cont->token    = token;
+    cont->flags    = flags;
+
+    vfs_open(filename, flags, file_open_end, (void*)cont);
+}
 
 static void file_open_end(void *token, int err, struct vnode *vn) {
     printf("file_open_end called\n");
@@ -75,29 +105,9 @@ static void file_open_end(void *token, int err, struct vnode *vn) {
     free(cont);
 }
 
-void
-file_open(char *filename, int flags, file_open_cb_t callback, void *token)
-{
-    printf("file_open called\n");
-    int accmode = flags & O_ACCMODE;
-    if (!(accmode==O_RDONLY ||
-          accmode==O_WRONLY ||
-          accmode==O_RDWR)) {
-        callback(token, EINVAL, -1);
-        return;
-    }
-
-    cont_file_open_t *cont = malloc(sizeof(cont_file_open_t));
-    if (cont == NULL) {
-        callback(token, ENOMEM, -1);
-        return;
-    }
-    cont->callback = callback;
-    cont->token    = token;
-    cont->flags    = flags;
-
-    vfs_open(filename, flags, file_open_end, (void*)cont);
-}
+/**********************************************************************
+ * File Close
+ **********************************************************************/
 
 /*
  * file_doclose
@@ -151,6 +161,10 @@ file_close(int fd)
 
     return 0;
 }
+
+/**********************************************************************
+ * Filetable Utility Functions
+ **********************************************************************/
 
 /*** filetable functions ***/
 typedef struct {

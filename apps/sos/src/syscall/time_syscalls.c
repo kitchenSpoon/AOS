@@ -11,6 +11,10 @@
 #define TIMESTAMP_LOW_MASK      (0x00000000ffffffffULL)
 #define TIMESTAMP_HIGH_MASK     (0xffffffff00000000ULL)
 
+/**********************************************************************
+ * TimeStamp
+ **********************************************************************/
+
 struct sleep_state{
     seL4_CPtr reply_cap;
     pid_t pid;
@@ -29,6 +33,26 @@ serv_sys_timestamp(seL4_CPtr reply_cap) {
     seL4_Send(reply_cap, reply);
 
     cspace_free_slot(cur_cspace, reply_cap);
+}
+
+/**********************************************************************
+ * Sleep
+ **********************************************************************/
+
+static int _sys_sleep(seL4_CPtr reply_cap, const int msec);
+
+void
+serv_sys_sleep(seL4_CPtr reply_cap, const int msec) {
+    int err;
+    seL4_MessageInfo_t reply;
+
+    err = _sys_sleep(reply_cap, msec);
+    if (err) {
+        set_cur_proc(PROC_NULL);
+        reply = seL4_MessageInfo_new(err, 0, 0, 0);
+        seL4_Send(reply_cap, reply);
+        cspace_free_slot(cur_cspace, reply_cap);
+    }
 }
 
 static void
@@ -64,16 +88,4 @@ _sys_sleep(seL4_CPtr reply_cap, const int msec) {
     return 0;
 }
 
-void
-serv_sys_sleep(seL4_CPtr reply_cap, const int msec) {
-    int err;
-    seL4_MessageInfo_t reply;
 
-    err = _sys_sleep(reply_cap, msec);
-    if (err) {
-        set_cur_proc(PROC_NULL);
-        reply = seL4_MessageInfo_new(err, 0, 0, 0);
-        seL4_Send(reply_cap, reply);
-        cspace_free_slot(cur_cspace, reply_cap);
-    }
-}

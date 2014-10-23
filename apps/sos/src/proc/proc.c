@@ -26,6 +26,10 @@ static int next_free_pslot[MAX_PROC];
 static int next_free_pid[MAX_PROC];
 static proc_wait_node_t _wait_queue = NULL;
 
+/**********************************************************************
+ * Process wait related utility functions
+ **********************************************************************/
+
 struct proc_wait_node {
     proc_wait_cb_t callback;
     void *token;
@@ -48,10 +52,129 @@ _wait_node_create(proc_wait_cb_t callback, void *token) {
 
 static proc_wait_node_t
 _wait_node_add(proc_wait_node_t head, proc_wait_node_t node) {
-    assert(node != NULL);
+    //assert(node != NULL);
     node->next = head;
     return head = node;
 }
+
+/**********************************************************************
+ * Process ID related structs and functions
+ **********************************************************************/
+
+static pid_t
+_cal_next_free_pid(pid_t pid, int slot){
+    pid = ((pid+1) % RANGE_PER_SLOT) + (RANGE_PER_SLOT*slot);
+    return pid;
+}
+
+static void
+_free_proc_slot(pid_t pid){
+    int slot = (int)(pid/RANGE_PER_SLOT);
+    processes[slot] = NULL;
+    next_free_pslot[slot] = first_free_pslot;
+    first_free_pslot = slot;
+}
+
+void proc_list_init(void){
+    first_free_pslot = 0;
+    for(int i = 0; i < MAX_PROC; i++){
+        processes[i] = NULL;
+        next_free_pslot[i] = i+1;
+        next_free_pid[i] = (int)RANGE_PER_SLOT * i;
+        printf("nextfreepid[%d] = %d\n",i,next_free_pid[i]);
+    }
+
+    //set the last processes to point to a invalid next_free slot
+    next_free_pslot[MAX_PROC-1] = -1;
+}
+
+process_t *proc_getproc(pid_t pid) {
+    printf("Get proc pid = %d\n", pid);
+    if (pid == PROC_NULL) {
+        return NULL;
+    }
+
+    int slot = pid/RANGE_PER_SLOT;
+    if(processes[slot] != NULL && processes[slot]->pid == pid){
+        return processes[slot];
+    } else {
+        return NULL;
+    }
+}
+
+pid_t proc_get_id(){
+    return (_cur_proc == NULL) ? PROC_NULL : _cur_proc->pid;
+}
+
+/****************************************************************
+ * Process size related structs and functions
+ ***************************************************************/
+ 
+void inc_proc_size_proc(process_t* proc){
+    if(proc != NULL){
+        proc->size++;
+    }
+}
+
+void inc_proc_size(pid_t pid){
+    process_t *proc = proc_getproc(pid);
+    if (proc != NULL) {
+        proc->size++;
+    }
+}
+
+void dec_proc_size_proc(process_t* proc){
+    if(proc != NULL){
+        printf("decr_proc_size_proc pid = %d\n",proc->pid);
+        proc->size--;
+    }
+}
+
+void dec_proc_size(pid_t pid){
+    process_t *proc = proc_getproc(pid);
+    if (proc != NULL) {
+        proc->size--;
+    }
+}
+
+/****************************************************************
+ * General Process functions
+ ***************************************************************/
+
+bool is_proc_alive(pid_t pid) {
+    printf("is proc alive? pid = %d\n", pid);
+    process_t *proc = proc_getproc(pid);
+    return (proc != NULL);
+}
+
+void set_cur_proc(pid_t pid) {
+    printf("set_cur_proc pid = %d\n", pid);
+    _cur_proc = proc_getproc(pid);
+    if(_cur_proc == NULL){
+        printf("cur proc is NULL = %d\n",pid);
+    }
+}
+
+process_t* cur_proc(void) {
+    if (_cur_proc == NULL) {
+        printf("cur_proc: Someone is getting a NULL proc\n");
+    }
+    return _cur_proc;
+}
+
+addrspace_t* proc_getas(void) {
+    printf("proc_getas called by proc = %d\n", proc_get_id());
+    return (_cur_proc == NULL) ? NULL : (_cur_proc->as);
+}
+
+cspace_t* proc_getcroot(void) {
+    printf("proc_getcroot called by proc = %d\n", proc_get_id());
+    return (_cur_proc == NULL) ? 0 : (_cur_proc->croot);
+}
+
+/****************************************************************
+ * Process destroy utility functions
+ ***************************************************************/
 
 static void
 _free_proc_data(process_t *proc) {
@@ -109,105 +232,9 @@ _free_proc_data(process_t *proc) {
     }
 }
 
-static pid_t
-_cal_next_free_pid(pid_t pid, int slot){
-    pid = ((pid+1) % RANGE_PER_SLOT) + (RANGE_PER_SLOT*slot);
-    return pid;
-}
-
-static void
-_free_proc_slot(pid_t pid){
-    int slot = (int)(pid/RANGE_PER_SLOT);
-    processes[slot] = NULL;
-    next_free_pslot[slot] = first_free_pslot;
-    first_free_pslot = slot;
-}
-
-void proc_list_init(void){
-    first_free_pslot = 0;
-    for(int i = 0; i < MAX_PROC; i++){
-        processes[i] = NULL;
-        next_free_pslot[i] = i+1;
-        next_free_pid[i] = (int)RANGE_PER_SLOT * i;
-        printf("nextfreepid[%d] = %d\n",i,next_free_pid[i]);
-    }
-
-    //set the last processes to point to a invalid next_free slot
-    next_free_pslot[MAX_PROC-1] = -1;
-}
-
-process_t *proc_getproc(pid_t pid) {
-    printf("Get proc pid = %d\n", pid);
-    if (pid == PROC_NULL) {
-        return NULL;
-    }
-
-    int slot = pid/RANGE_PER_SLOT;
-    if(processes[slot] != NULL && processes[slot]->pid == pid){
-        return processes[slot];
-    } else {
-        return NULL;
-    }
-}
-
-void inc_proc_size_proc(process_t* proc){
-    if(proc != NULL){
-        proc->size++;
-    }
-}
-
-void inc_proc_size(pid_t pid){
-    //printf("incr_proc_size pid = %d\n",pid);
-    process_t *proc = proc_getproc(pid);
-    if (proc != NULL) {
-        proc->size++;
-    }
-}
-
-void dec_proc_size_proc(process_t* proc){
-    if(proc != NULL){
-        printf("decr_proc_size_proc pid = %d\n",proc->pid);
-        proc->size--;
-    }
-}
-
-void dec_proc_size(pid_t pid){
-    process_t *proc = proc_getproc(pid);
-    if (proc != NULL) {
-        proc->size--;
-    }
-}
-
-bool is_proc_alive(pid_t pid) {
-    printf("is proc alive? pid = %d\n", pid);
-    process_t *proc = proc_getproc(pid);
-    return (proc != NULL);
-}
-
-void set_cur_proc(pid_t pid) {
-    printf("set_cur_proc pid = %d\n", pid);
-    _cur_proc = proc_getproc(pid);
-    if(_cur_proc == NULL){
-        printf("cur proc is NULL = %d\n",pid);
-    }
-}
-
-process_t* cur_proc(void) {
-    if (_cur_proc == NULL) {
-        printf("cur_proc: Someone is getting a NULL proc\n");
-    }
-    return _cur_proc;
-}
-
-addrspace_t* proc_getas(void) {
-    printf("proc_getas called by proc = %d\n", proc_get_id());
-    return (_cur_proc == NULL) ? NULL : (_cur_proc->as);
-}
-
-cspace_t* proc_getcroot(void) {
-    printf("proc_getcroot called by proc = %d\n", proc_get_id());
-    return (_cur_proc == NULL) ? 0 : (_cur_proc->croot);
-}
+/****************************************************************
+ * Process Create
+ ***************************************************************/
 
 typedef struct{
     seL4_Word elf_entry;
@@ -216,126 +243,10 @@ typedef struct{
     void* token;
 } process_create_cont_t;
 
-static void
-proc_create_end(void* token, int err){
-    printf("start process create end\n");
-    process_create_cont_t* cont = (process_create_cont_t*)token;
-    assert(cont != NULL);
-
-    if (err) {
-        if (cont->proc != NULL) {
-            _free_proc_slot(cont->proc->pid);
-            _free_proc_data(cont->proc);
-            free(cont->proc);
-        }
-        cont->callback(cont->token, err, -1);
-        free(cont);
-        return;
-    }
-
-    cont->proc->p_initialised = true;
-    cont->callback(cont->token, err, cont->proc->pid);
-    free(cont);
-}
-
-static void
-proc_create_part4(void* token, int err) {
-    printf("start process create part4\n");
-    process_create_cont_t* cont = (process_create_cont_t*)token;
-
-    if (err) {
-        printf("failed initialising filetable\n");
-        proc_create_end((void*)cont, err);
-        return;
-    }
-
-    printf("sos_process_create_part3, filetable initing done...\n");
-    /* Start the new process */
-    printf("start it\n");
-    seL4_UserContext context;
-
-    memset(&context, 0, sizeof(context));
-    context.pc = cont->elf_entry;
-    context.sp = PROCESS_STACK_TOP;
-    seL4_TCB_WriteRegisters(cont->proc->tcb_cap, 1, 0, 2, &context);
-
-    proc_create_end((void*)cont, 0);
-}
-
-static void
-proc_create_part3(void* token, int err, seL4_Word elf_entry){
-    printf("start process create part3\n");
-    process_create_cont_t* cont = (process_create_cont_t*)token;
-
-    if(err){
-        printf("sos_process_create_part3, Failed to load elf image\n");
-        proc_create_end(token, err);
-        return;
-    }
-
-    cont->elf_entry = elf_entry;
-
-    /* set up the stack & the heap */
-    as_define_stack(cont->proc->as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
-    if(cont->proc->as->as_stack == NULL){
-        printf("sos_process_create_part3, Stack failed to be defined\n");
-        proc_create_end((void*)cont, EFAULT);
-        return;
-    }
-    as_define_heap(cont->proc->as);
-    if(cont->proc->as->as_heap == NULL){
-        printf("sos_process_create_part3, Heap failed to be defined\n");
-        proc_create_end((void*)cont, EFAULT);
-        return;
-    }
-
-    //TODO: this might cause this page to be overwrite? Currently it won't
-    //because process doesn't have mmap The fix is simply creating a region for
-    //it and map the page in using sos_page_map and create a callback for it
-    //as_define_region();
-    /* Map in the IPC buffer for the thread */
-    printf("sos_process_create_part3, mapping ipc buf...\n");
-    err = map_page(cont->proc->ipc_buffer_cap, cont->proc->vroot,
-                   PROCESS_IPC_BUFFER,
-                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
-    if(err){
-        printf("sos_process_create_part3, Unable to map IPC buffer for user app\n");
-        proc_create_end((void*)cont, EFAULT);
-        return;
-    }
-    inc_proc_size_proc(cont->proc);
-
-    /* Initialise filetable for this process */
-    printf("sos_process_create_part3, filetable initing...\n");
-    cont->proc->p_filetable = malloc(sizeof(struct filetable));
-    if (cont->proc->p_filetable == NULL) {
-        printf("sos_process_create_part3, No memory for filetable\n");
-        proc_create_end((void*)cont, ENOMEM);
-        return;
-    }
-    err = filetable_init(cont->proc->p_filetable, proc_create_part4, (void*)cont);
-    if(err){
-        printf("sos_process_create_part3, Unable to initialise filetable for user app\n");
-        proc_create_end((void*)cont, err);
-        return;
-    }
-}
-
-static void
-proc_create_part2(void* token, addrspace_t *as){
-    printf("start process create part2\n");
-    if(as == NULL){
-        printf("sos_process_create_part2, Failed to initialise address space\n");
-        proc_create_end(token, EFAULT);
-        return;
-    }
-
-    process_create_cont_t* cont = (process_create_cont_t*)token;
-    cont->proc->as = as;
-
-    /* load the elf image */
-    elf_load(cont->proc->pid, cont->proc->as, cont->proc->name, cont->proc, proc_create_part3, token);
-}
+static void _proc_create_part2(void *token, addrspace_t *as);
+static void _proc_create_part3(void *token, int err, seL4_Word elf_entry);
+static void _proc_create_part4(void *token, int err);
+static void _proc_create_end(void* token, int err);
 
 void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t callback, void* token) {
     printf("process_create\n");
@@ -345,8 +256,6 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     seL4_CPtr user_ep_cap;
 
     /* These required for loading program sections */
-    unsigned long elf_size;
-
     printf("creating process cont\n");
     process_create_cont_t *cont = malloc(sizeof(process_create_cont_t));
     if (cont == NULL) {
@@ -362,7 +271,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     process_t* new_proc = malloc(sizeof(process_t));
     if(new_proc == NULL){
         printf("No memory to create new process\n");
-        proc_create_end((void*)cont, ENOMEM);
+        _proc_create_end((void*)cont, ENOMEM);
         return;
     }
 
@@ -388,7 +297,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     if(first_free_pslot == -1){
         // Can't find a free process slot
         printf("sos_process_create, No free slot for new active process\n");
-        proc_create_end((void*)cont, EFAULT);
+        _proc_create_end((void*)cont, EFAULT);
         return;
     }
     int i = first_free_pslot;
@@ -397,26 +306,11 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     next_free_pid[i] = _cal_next_free_pid(next_free_pid[i], i);
     first_free_pslot = next_free_pslot[i];
     next_free_pslot[i] = -1;
-    //for(int i = 0; i < MAX_PROC; i++){
-    //    if(processes[i]->proc == NULL){
-    //        processes[i]->proc = new_proc;
-    //        new_proc->pid = next_free_pid[i];
-    //        next_free_pid[i] = _cal_next_free_pid(next_free_pid[i], i);
-    //        first_free_pslot = processes[i]->next_free;
-    //        break;
-    //    }
-    //}
-    //if(new_proc->pid == -1){
-    //    // Can't find free process slot
-    //    printf("sos_process_create, No free slot for new active process\n");
-    //    proc_create_end((void*)cont, EFAULT);
-    //    return;
-    //}
 
     new_proc->name = malloc(len+1);
     if (new_proc->name == NULL) {
         printf("sos_process_create, No memory for name\n");
-        proc_create_end((void*)cont, ENOMEM);
+        _proc_create_end((void*)cont, ENOMEM);
         return;
     }
     new_proc->name_len          = len;
@@ -427,7 +321,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->vroot_addr = ut_alloc(seL4_PageDirBits);
     if(!new_proc->vroot_addr){
         printf("sos_process_create, No memory for new Page Directory\n");
-        proc_create_end((void*)cont, ENOMEM);
+        _proc_create_end((void*)cont, ENOMEM);
         return;
     }
 
@@ -438,7 +332,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
                                 &new_proc->vroot);
     if(err){
         printf("sos_process_create, Failed to allocate page directory cap for client\n");
-        proc_create_end((void*)cont, EFAULT);
+        _proc_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -446,7 +340,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->croot = cspace_create(1);
     if(new_proc->croot == NULL){
         printf("sos_process_create, Failed to create CSpace\n");
-        proc_create_end((void*)cont, EFAULT);
+        _proc_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -454,7 +348,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
     new_proc->ipc_buffer_addr = ut_alloc(seL4_PageBits);
     if(!new_proc->ipc_buffer_addr){
         printf("sos_process_create, No memory for ipc buffer\n");
-        proc_create_end((void*)cont, ENOMEM);
+        _proc_create_end((void*)cont, ENOMEM);
         return;
     }
     err =  cspace_ut_retype_addr(new_proc->ipc_buffer_addr,
@@ -464,7 +358,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
                                  &new_proc->ipc_buffer_cap);
     if(err){
         printf("sos_process_create, Unable to allocate page for IPC buffer\n");
-        proc_create_end((void*)cont, EFAULT);
+        _proc_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -477,15 +371,15 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
                                   seL4_AllRights,
                                   seL4_CapData_Badge_new(USER_EP_BADGE | new_proc->pid));
 
-    /* should be the first slot in the space, hack I know */
-    assert(user_ep_cap == 1);
-    assert(user_ep_cap == USER_EP_CAP);
+    /* should be the first slot in the space*/
+    //assert(user_ep_cap == 1);
+    //assert(user_ep_cap == USER_EP_CAP);
 
     /* Create a new TCB object */
     new_proc->tcb_addr = ut_alloc(seL4_TCBBits);
     if(!new_proc->tcb_addr){
         printf("sos_process_create, No memory for new TCB\n");
-        proc_create_end((void*)cont, ENOMEM);
+        _proc_create_end((void*)cont, ENOMEM);
         return;
     }
     err =  cspace_ut_retype_addr(new_proc->tcb_addr,
@@ -495,7 +389,7 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
                                  &new_proc->tcb_cap);
     if(err){
         printf("sos_process_create, Failed to create TCB\n");
-        proc_create_end((void*)cont, EFAULT);
+        _proc_create_end((void*)cont, EFAULT);
         return;
     }
 
@@ -506,16 +400,141 @@ void proc_create(char* path, size_t len, seL4_CPtr fault_ep, proc_create_cb_t ca
                              new_proc->ipc_buffer_cap);
     if(err){
         printf("sos_process_create, Unable to configure new TCB\n");
-        proc_create_end((void*)cont, EFAULT);
+        _proc_create_end((void*)cont, EFAULT);
         return;
     }
 
     printf("\nStarting \"%s\"...\n", path);
 
     /* initialise address space */
-    as_create(new_proc->vroot, proc_create_part2, (void*)cont);
+    as_create(new_proc->vroot, _proc_create_part2, (void*)cont);
 }
 
+static void
+_proc_create_part2(void* token, addrspace_t *as){
+    printf("start process create part2\n");
+    if(as == NULL){
+        printf("sos_process_create_part2, Failed to initialise address space\n");
+        _proc_create_end(token, EFAULT);
+        return;
+    }
+
+    process_create_cont_t* cont = (process_create_cont_t*)token;
+    cont->proc->as = as;
+
+    /* load the elf image */
+    elf_load(cont->proc->pid, cont->proc->as, cont->proc->name, cont->proc, _proc_create_part3, token);
+}
+
+static void
+_proc_create_part3(void* token, int err, seL4_Word elf_entry){
+    printf("start process create part3\n");
+    process_create_cont_t* cont = (process_create_cont_t*)token;
+
+    if(err){
+        printf("sos_process_create_part3, Failed to load elf image\n");
+        _proc_create_end(token, err);
+        return;
+    }
+
+    cont->elf_entry = elf_entry;
+
+    /* set up the stack & the heap */
+    as_define_stack(cont->proc->as, PROCESS_STACK_TOP, PROCESS_STACK_SIZE);
+    if(cont->proc->as->as_stack == NULL){
+        printf("sos_process_create_part3, Stack failed to be defined\n");
+        _proc_create_end((void*)cont, EFAULT);
+        return;
+    }
+    as_define_heap(cont->proc->as);
+    if(cont->proc->as->as_heap == NULL){
+        printf("sos_process_create_part3, Heap failed to be defined\n");
+        _proc_create_end((void*)cont, EFAULT);
+        return;
+    }
+
+    //This might cause this page to be overwrite? Currently it won't
+    //because process doesn't have mmap The fix is simply creating a region for
+    //it and map the page in using sos_page_map and create a callback for it
+    //as_define_region();
+    /* Map in the IPC buffer for the thread */
+    printf("sos_process_create_part3, mapping ipc buf...\n");
+    err = map_page(cont->proc->ipc_buffer_cap, cont->proc->vroot,
+                   PROCESS_IPC_BUFFER,
+                   seL4_AllRights, seL4_ARM_Default_VMAttributes);
+    if(err){
+        printf("sos_process_create_part3, Unable to map IPC buffer for user app\n");
+        _proc_create_end((void*)cont, EFAULT);
+        return;
+    }
+    inc_proc_size_proc(cont->proc);
+
+    /* Initialise filetable for this process */
+    printf("sos_process_create_part3, filetable initing...\n");
+    cont->proc->p_filetable = malloc(sizeof(struct filetable));
+    if (cont->proc->p_filetable == NULL) {
+        printf("sos_process_create_part3, No memory for filetable\n");
+        _proc_create_end((void*)cont, ENOMEM);
+        return;
+    }
+    err = filetable_init(cont->proc->p_filetable, _proc_create_part4, (void*)cont);
+    if(err){
+        printf("sos_process_create_part3, Unable to initialise filetable for user app\n");
+        _proc_create_end((void*)cont, err);
+        return;
+    }
+}
+
+static void
+_proc_create_part4(void* token, int err) {
+    printf("start process create part4\n");
+    process_create_cont_t* cont = (process_create_cont_t*)token;
+
+    if (err) {
+        printf("failed initialising filetable\n");
+        _proc_create_end((void*)cont, err);
+        return;
+    }
+
+    printf("sos_process_create_part3, filetable initing done...\n");
+    /* Start the new process */
+    printf("start it\n");
+    seL4_UserContext context;
+
+    memset(&context, 0, sizeof(context));
+    context.pc = cont->elf_entry;
+    context.sp = PROCESS_STACK_TOP;
+    seL4_TCB_WriteRegisters(cont->proc->tcb_cap, 1, 0, 2, &context);
+
+    _proc_create_end((void*)cont, 0);
+}
+
+static void
+_proc_create_end(void* token, int err){
+    printf("start process create end\n");
+    process_create_cont_t* cont = (process_create_cont_t*)token;
+    //assert(cont != NULL);
+
+    if (err) {
+        if (cont->proc != NULL) {
+            _free_proc_slot(cont->proc->pid);
+            _free_proc_data(cont->proc);
+            free(cont->proc);
+        }
+        cont->callback(cont->token, err, -1);
+        free(cont);
+        return;
+    }
+
+    cont->proc->p_initialised = true;
+    cont->callback(cont->token, err, cont->proc->pid);
+    free(cont);
+}
+
+
+/****************************************************************
+ *  Process Destroy
+ ***************************************************************/
 
 int proc_destroy(pid_t pid) {
     printf("proc_destroyed called, pid = %d, proc = %d\n", pid, proc_get_id());
@@ -564,9 +583,9 @@ int proc_destroy(pid_t pid) {
     return 0;
 }
 
-pid_t proc_get_id(){
-    return (_cur_proc == NULL) ? PROC_NULL : _cur_proc->pid;
-}
+/****************************************************************
+ * Process Wait
+ ***************************************************************/
 
 int proc_wait(pid_t pid, proc_wait_cb_t callback, void *token){
     printf("proc_wait called, proc %d waiting for pid %d\n", proc_get_id(), pid);
